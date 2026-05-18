@@ -51,8 +51,6 @@ export default function SystemAdminPortal() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isSeeding, setIsSeeding] = useState(false);
   
-  // Stabilize the query. Note: orderBy with null values (pending timestamps) 
-  // can sometimes behave unexpectedly in local cache, but this is the standard way.
   const churchesQuery = useMemo(() => {
     return query(collection(db, "churches"), orderBy("registeredAt", "desc"));
   }, [db]);
@@ -70,7 +68,7 @@ export default function SystemAdminPortal() {
     const churchesRef = collection(db, "churches");
     
     try {
-      // Check for existence to avoid duplicates during demo seeding
+      // Check for existence to avoid duplicates
       const q = query(churchesRef, where("name", "==", "Grace Community Sanctuary"));
       const snap = await getDocs(q);
       
@@ -88,10 +86,9 @@ export default function SystemAdminPortal() {
         registeredAt: serverTimestamp()
       };
 
-      // We initiate the write and handle the catch block for permissions
       addDoc(churchesRef, demoData)
         .then(() => {
-          toast({ title: "Ministry Seeded!", description: "Grace Community Sanctuary has been added to the directory." });
+          toast({ title: "Ministry Seeded!", description: "Grace Community Sanctuary has been added." });
         })
         .catch(async (error) => {
           const permissionError = new FirestorePermissionError({
@@ -112,7 +109,7 @@ export default function SystemAdminPortal() {
     const churchDoc = doc(db, "churches", churchId);
     updateDoc(churchDoc, { status: newStatus })
       .then(() => {
-        toast({ title: `Church status updated to ${newStatus}` });
+        toast({ title: `Status updated to ${newStatus}` });
       })
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
@@ -143,26 +140,22 @@ export default function SystemAdminPortal() {
     { label: "Active Subscriptions", value: churches?.filter(c => c.status === "Approved").length || 0, icon: ShieldCheck, color: "text-green-500" },
   ];
 
-  // Robust timestamp formatter to handle pending states and object variations
   const formatTimestamp = (ts: any) => {
-    if (!ts) return 'Processing...';
+    if (!ts) return 'Just now';
     
-    // Check if it's a Firestore Timestamp object
     if (ts instanceof Timestamp) {
       return ts.toDate().toLocaleDateString();
     }
     
-    // Check if it has the seconds property (sometimes happens in serialized states)
     if (ts && typeof ts.seconds === 'number') {
       return new Date(ts.seconds * 1000).toLocaleDateString();
     }
 
-    // Fallback for native Date objects or other formats
     if (ts instanceof Date) {
       return ts.toLocaleDateString();
     }
 
-    return 'Just now';
+    return 'Pending...';
   };
 
   return (
@@ -184,9 +177,6 @@ export default function SystemAdminPortal() {
           >
             {isSeeding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
             Seed Grace Community
-          </Button>
-          <Button variant="outline" onClick={() => window.location.reload()} className="glass border-white/10">
-            <RefreshCcw className="mr-2 h-4 w-4" /> Refresh
           </Button>
           <Button variant="outline" onClick={() => router.push("/dashboard")} className="glass border-white/10">
             Back to Dashboard
