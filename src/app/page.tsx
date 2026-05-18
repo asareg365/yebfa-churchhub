@@ -46,7 +46,7 @@ export default function LandingPage() {
             <Link href="/login">
               <Button variant="ghost" className="text-sm">Login</Button>
             </Link>
-            <Link href="/login">
+            <Link href="/login?tab=signup">
               <Button className="bg-primary text-primary-foreground">Get Started</Button>
             </Link>
           </nav>
@@ -66,14 +66,16 @@ export default function LandingPage() {
             Enterprise-grade multi-tenant platform featuring AI-powered pastoral insights, automated communication, and secure data isolation.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4 pt-4">
-            <Link href="/login">
+            <Link href="/login?tab=signup">
               <Button size="lg" className="h-14 px-10 text-lg bg-primary text-primary-foreground hover:bg-primary/90 rounded-2xl shadow-xl shadow-primary/20">
-                Enter Dashboard <ArrowRight className="ml-2" />
+                Get Started <ArrowRight className="ml-2" />
               </Button>
             </Link>
-            <Button size="lg" variant="outline" className="h-14 px-10 text-lg glass border-white/10 hover:bg-white/5 rounded-2xl">
-              Demo
-            </Button>
+            <Link href="/login">
+              <Button size="lg" variant="outline" className="h-14 px-10 text-lg glass border-white/10 hover:bg-white/5 rounded-2xl">
+                Demo
+              </Button>
+            </Link>
           </div>
         </section>
 
@@ -137,7 +139,7 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <Link href="/login" className="block w-full">
+                <Link href="/login?tab=signup" className="block w-full">
                   <Button className={`w-full h-12 rounded-2xl font-bold ${plan.accent ? 'bg-primary text-primary-foreground' : 'bg-white/10 text-white hover:bg-white/20'}`}>
                     Choose {plan.name}
                   </Button>

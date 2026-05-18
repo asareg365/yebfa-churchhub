@@ -1,15 +1,16 @@
 
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signInWithPopup, 
   GoogleAuthProvider 
 } from "firebase/auth";
-import { useAuth } from "@/firebase";
+import { useAuth, useFirestore } from "@/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,12 +20,16 @@ import { Sparkles, Loader2, Church, Mail, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 
-export default function LoginPage() {
+function LoginContent() {
+  const searchParams = useSearchParams();
+  const defaultTab = searchParams.get("tab") === "signup" ? "signup" : "login";
+  
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [churchName, setChurchName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const auth = useAuth();
+  const db = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -50,10 +55,23 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      // In a real multi-tenant app, we would also create a 'tenant' document here
-      await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      
+      // Create a registration record for the church
+      await addDoc(collection(db, "churches"), {
+        name: churchName,
+        adminEmail: email,
+        adminUid: userCredential.user.uid,
+        status: "Pending",
+        plan: "Starter",
+        registeredAt: serverTimestamp()
+      });
+
       router.push("/dashboard");
-      toast({ title: "Ministry account created!", description: `Welcome to the Hub, ${churchName}` });
+      toast({ 
+        title: "Ministry account created!", 
+        description: `Welcome to the Hub, ${churchName}. Your account is pending verification.` 
+      });
     } catch (error: any) {
       toast({ 
         title: "Registration failed", 
@@ -94,7 +112,7 @@ export default function LoginPage() {
       </div>
 
       <Card className="w-full max-w-md glass border-white/10 shadow-2xl animate-in zoom-in-95 duration-500">
-        <Tabs defaultValue="login" className="w-full">
+        <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2 bg-white/5 p-1 rounded-t-xl rounded-b-none">
             <TabsTrigger value="login">Login</TabsTrigger>
             <TabsTrigger value="signup">Register Ministry</TabsTrigger>
@@ -218,5 +236,13 @@ export default function LoginPage() {
         Advanced encryption and data isolation active.
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>}>
+      <LoginContent />
+    </Suspense>
   );
 }

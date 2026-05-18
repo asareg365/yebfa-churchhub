@@ -52,6 +52,19 @@
         "registrations": { "type": "number" }
       },
       "required": ["title", "date"]
+    },
+    "Church": {
+      "title": "Church",
+      "description": "A registered church on the platform.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "adminEmail": { "type": "string" },
+        "plan": { "type": "string", "enum": ["Starter", "Growth", "Premium"] },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Suspended"] },
+        "registeredAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "adminEmail", "plan", "status"]
     }
   },
   "auth": {
@@ -73,6 +86,10 @@
     "/events/{eventId}": {
       "schema": "Event",
       "description": "Collection of church events."
+    },
+    "/churches/{churchId}": {
+      "schema": "Church",
+      "description": "Collection of all registered churches."
     }
   }
 }

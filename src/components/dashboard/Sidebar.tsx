@@ -13,7 +13,8 @@ import {
   Settings, 
   LogOut,
   Sparkles,
-  UserCheck
+  UserCheck,
+  ShieldAlert
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/firebase";
@@ -46,7 +47,7 @@ export function Sidebar() {
   };
 
   return (
-    <div className="fixed left-4 top-4 bottom-4 w-64 glass rounded-3xl z-50 flex flex-col p-6 border border-white/5 shadow-2xl overflow-hidden">
+    <div className="fixed left-4 top-4 bottom-4 w-72 glass rounded-3xl z-50 flex flex-col p-6 border border-white/5 shadow-2xl overflow-hidden">
       <div className="mb-8 px-2">
         <h1 className="font-headline text-lg font-bold text-primary flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/30">
@@ -56,7 +57,7 @@ export function Sidebar() {
         </h1>
       </div>
 
-      <nav className="flex-1 space-y-1">
+      <nav className="flex-1 space-y-1 overflow-y-auto pr-2 custom-scrollbar">
         {menuItems.map((item) => {
           const isActive = pathname === item.href;
           return (
@@ -75,6 +76,18 @@ export function Sidebar() {
             </Link>
           );
         })}
+        
+        {/* System Admin Link */}
+        <Link
+          href="/admin"
+          className={cn(
+            "group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 mt-4 border border-dashed border-primary/20 hover:border-primary/50",
+            pathname === "/admin" ? "bg-white/10 text-primary" : "text-muted-foreground"
+          )}
+        >
+          <ShieldAlert className="w-5 h-5 text-primary" />
+          <span className="text-sm font-bold">Admin Portal</span>
+        </Link>
       </nav>
 
       <div className="pt-6 border-t border-white/5">
