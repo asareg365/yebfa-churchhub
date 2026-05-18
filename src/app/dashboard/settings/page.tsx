@@ -1,15 +1,41 @@
 
 "use client";
 
-import { Settings, User, Bell, Shield, Cloud, CreditCard, Save } from "lucide-react";
+import { Settings, User, Bell, Shield, Cloud, CreditCard, Save, Check, Info, Smartphone } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 export default function SettingsPage() {
+  const plans = [
+    {
+      name: "Starter",
+      price: "200",
+      description: "Essential tools for small congregations.",
+      features: ["Up to 200 members", "Attendance tracking", "Basic reports", "Email support"],
+      current: false
+    },
+    {
+      name: "Growth",
+      price: "500",
+      description: "Advanced features for growing ministries.",
+      features: ["Up to 1,000 members", "Finance management", "AI Insights Lite", "Priority support"],
+      current: true
+    },
+    {
+      name: "Premium",
+      price: "1,200",
+      description: "Full suite for enterprise organizations.",
+      features: ["Unlimited members", "Full AI Suite", "Bulk SMS engine", "Dedicated manager"],
+      current: false
+    }
+  ];
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex justify-between items-center">
@@ -48,11 +74,11 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Phone Number</Label>
-                  <Input placeholder="+1..." defaultValue="+1 (555) 000-1122" className="bg-white/5 border-white/10" />
+                  <Input placeholder="+233..." defaultValue="+233 24 847 2474" className="bg-white/5 border-white/10" />
                 </div>
                 <div className="space-y-2">
                   <Label>Timezone</Label>
-                  <Input defaultValue="UTC-5 (EST)" className="bg-white/5 border-white/10" />
+                  <Input defaultValue="GMT+0 (Accra)" className="bg-white/5 border-white/10" />
                 </div>
               </div>
             </CardContent>
@@ -89,6 +115,52 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="billing" className="space-y-6">
+          <Alert className="glass-primary border-primary/30 py-6">
+            <Smartphone className="h-5 w-5 text-primary" />
+            <AlertTitle className="text-primary font-bold ml-2">Payment Instructions</AlertTitle>
+            <AlertDescription className="mt-2 text-foreground/90 ml-2">
+              To activate or renew your plan, please MoMo the plan cost to 
+              <span className="font-bold text-primary mx-1">0248472474</span>. 
+              Use your <span className="font-bold underline">Church Name</span> as the reference. 
+              Once paid, our team will approve your access within 1 hour.
+            </AlertDescription>
+          </Alert>
+
+          <div className="grid gap-6 md:grid-cols-3">
+            {plans.map((plan) => (
+              <Card key={plan.name} className={plan.current ? "glass border-primary/50 ring-1 ring-primary/20" : "glass"}>
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-xl">{plan.name}</CardTitle>
+                      <CardDescription className="mt-1">{plan.description}</CardDescription>
+                    </div>
+                    {plan.current && <Badge className="bg-primary text-primary-foreground">Current Plan</Badge>}
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-bold">GH₵{plan.price}</span>
+                    <span className="text-muted-foreground">/month</span>
+                  </div>
+                  <ul className="space-y-3">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex items-center gap-2 text-sm">
+                        <Check className="h-4 w-4 text-accent" />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Button className="w-full" variant={plan.current ? "outline" : "default"}>
+                    {plan.current ? "Renew Plan" : `Upgrade to ${plan.name}`}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </TabsContent>
 
         <TabsContent value="security">
