@@ -1,0 +1,77 @@
+
+{
+  "entities": {
+    "Member": {
+      "title": "Member",
+      "description": "A member of the church congregation.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "gender": { "type": "string", "enum": ["Male", "Female", "Other"] },
+        "department": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Inactive", "Probation"] },
+        "joined": { "type": "string", "format": "date" },
+        "photo": { "type": "string" }
+      },
+      "required": ["name", "department", "status"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "A record of service attendance.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "count": { "type": "number" },
+        "serviceName": { "type": "string" }
+      },
+      "required": ["date", "count"]
+    },
+    "Finance": {
+      "title": "Finance",
+      "description": "A financial transaction record.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["Tithe", "Offering", "Donation", "Expenditure"] },
+        "method": { "type": "string" }
+      },
+      "required": ["date", "amount", "type"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "A church event or activity.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "location": { "type": "string" },
+        "type": { "type": "string" },
+        "registrations": { "type": "number" }
+      },
+      "required": ["title", "date"]
+    }
+  },
+  "auth": {
+    "providers": ["google.com", "password"]
+  },
+  "firestore": {
+    "/members/{memberId}": {
+      "schema": "Member",
+      "description": "Collection of church members."
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "Attendance",
+      "description": "Collection of attendance records."
+    },
+    "/finances/{financeId}": {
+      "schema": "Finance",
+      "description": "Collection of financial records."
+    },
+    "/events/{eventId}": {
+      "schema": "Event",
+      "description": "Collection of church events."
+    }
+  }
+}
