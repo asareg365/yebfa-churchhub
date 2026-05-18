@@ -1,11 +1,34 @@
-
 "use client";
 
 import Link from "next/link";
-import { Sparkles, Shield, Users, Zap, ArrowRight } from "lucide-react";
+import { Sparkles, Shield, Users, Zap, ArrowRight, Check, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function LandingPage() {
+  const plans = [
+    {
+      name: "Starter",
+      price: "200",
+      description: "Essential tools for small congregations.",
+      features: ["Up to 200 members", "Attendance tracking", "Basic reports", "Email support"],
+      accent: false
+    },
+    {
+      name: "Growth",
+      price: "500",
+      description: "Advanced features for growing ministries.",
+      features: ["Up to 1,000 members", "Finance management", "AI Insights Lite", "Priority support"],
+      accent: true
+    },
+    {
+      name: "Premium",
+      price: "1,200",
+      description: "Full suite for enterprise organizations.",
+      features: ["Unlimited members", "Full AI Suite", "Bulk SMS engine", "Dedicated manager"],
+      accent: false
+    }
+  ];
+
   return (
     <div className="flex flex-col min-h-screen">
       <header className="fixed top-0 w-full z-50 glass border-b border-white/5 py-4 px-8">
@@ -54,6 +77,10 @@ export default function LandingPage() {
         </section>
 
         <section id="features" className="px-8 max-w-7xl mx-auto py-20">
+          <div className="text-center mb-16 space-y-4">
+            <h2 className="text-3xl font-bold font-headline tracking-tighter">Core Capabilities</h2>
+            <p className="text-muted-foreground">Everything you need to manage a thriving modern congregation.</p>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="glass p-8 rounded-3xl space-y-4 hover:border-primary/50 transition-colors">
               <div className="h-12 w-12 rounded-2xl bg-primary/20 flex items-center justify-center text-primary">
@@ -75,6 +102,62 @@ export default function LandingPage() {
               </div>
               <h3 className="text-xl font-bold font-headline">Community First</h3>
               <p className="text-muted-foreground">Automated birthday SMS, QR check-ins, and sophisticated member management.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="pricing" className="px-8 max-w-7xl mx-auto py-20">
+          <div className="text-center mb-16 space-y-4">
+            <h2 className="text-3xl font-bold font-headline tracking-tighter">Simple Transparent Pricing</h2>
+            <p className="text-muted-foreground">Choose the plan that fits your ministry's current stage.</p>
+          </div>
+
+          <div className="grid gap-8 md:grid-cols-3 mb-16">
+            {plans.map((plan) => (
+              <div 
+                key={plan.name} 
+                className={`glass p-8 rounded-3xl space-y-6 flex flex-col ${plan.accent ? 'border-primary/50 ring-1 ring-primary/20 scale-105 bg-primary/5' : ''}`}
+              >
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-bold">{plan.name}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{plan.description}</p>
+                </div>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-4xl font-bold text-white">GH₵{plan.price}</span>
+                  <span className="text-muted-foreground text-sm">/month</span>
+                </div>
+                <ul className="space-y-4 flex-1">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex items-center gap-3 text-sm">
+                      <div className="h-5 w-5 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
+                        <Check className="h-3 w-3 text-accent" />
+                      </div>
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Link href="/dashboard" className="block w-full">
+                  <Button className={`w-full h-12 rounded-2xl font-bold ${plan.accent ? 'bg-primary text-primary-foreground' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                    Choose {plan.name}
+                  </Button>
+                </Link>
+              </div>
+            ))}
+          </div>
+
+          <div className="glass p-8 rounded-3xl max-w-4xl mx-auto border-primary/20 bg-primary/5">
+            <div className="flex flex-col md:flex-row items-center gap-8">
+              <div className="h-16 w-16 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0 text-primary">
+                <Smartphone className="h-10 w-10" />
+              </div>
+              <div className="space-y-2">
+                <h4 className="text-xl font-bold">How to Pay</h4>
+                <p className="text-muted-foreground text-sm">
+                  To activate your ministry account, please send the plan cost via MoMo to <span className="text-primary font-bold">0248472474</span>. 
+                  Use your <span className="underline decoration-primary">Church Name</span> as the transaction reference. 
+                  Approvals are typically processed within 1 hour.
+                </p>
+              </div>
             </div>
           </div>
         </section>
