@@ -72,7 +72,7 @@ export default function LandingPage() {
               </Button>
             </Link>
             <Button size="lg" variant="outline" className="h-14 px-10 text-lg glass border-white/10 hover:bg-white/5 rounded-2xl">
-              Watch Demo
+              Demo
             </Button>
           </div>
         </section>
