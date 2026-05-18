@@ -18,6 +18,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sparkles, Loader2, Church, Mail, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 import Link from "next/link";
 
 function LoginContent() {
@@ -53,32 +55,45 @@ function LoginContent() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!churchName || !email || !password) return;
     setIsLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       
-      // Create a registration record for the church
-      await addDoc(collection(db, "churches"), {
+      const churchData = {
         name: churchName,
         adminEmail: email,
         adminUid: userCredential.user.uid,
         status: "Pending",
         plan: "Starter",
         registeredAt: serverTimestamp()
-      });
+      };
 
-      router.push("/dashboard");
-      toast({ 
-        title: "Ministry account created!", 
-        description: `Welcome to the Hub, ${churchName}. Your account is pending verification.` 
-      });
+      // Create a registration record for the church
+      const churchesRef = collection(db, "churches");
+      addDoc(churchesRef, churchData)
+        .then(() => {
+          toast({ 
+            title: "Ministry account created!", 
+            description: `Welcome to the Hub, ${churchName}. Your account is pending verification.` 
+          });
+          router.push("/dashboard");
+        })
+        .catch(async (error) => {
+          const permissionError = new FirestorePermissionError({
+            path: churchesRef.path,
+            operation: 'create',
+            requestResourceData: churchData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
+
     } catch (error: any) {
       toast({ 
         title: "Registration failed", 
         description: error.message, 
         variant: "destructive" 
       });
-    } finally {
       setIsLoading(false);
     }
   };

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   ShieldCheck, 
@@ -13,7 +13,7 @@ import {
   Loader2,
   Building2,
   Clock,
-  ArrowUpDown
+  RefreshCcw
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,9 +34,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { useCollection, useFirestore, useUser } from "@/firebase";
-import { collection, doc, updateDoc, query, orderBy } from "firebase/firestore";
+import { collection, doc, updateDoc, query, orderBy, Timestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 
@@ -47,8 +49,11 @@ export default function SystemAdminPortal() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   
-  const churchesRef = collection(db, "churches");
-  const churchesQuery = query(churchesRef, orderBy("registeredAt", "desc"));
+  // Stabilize the query to avoid infinite re-renders
+  const churchesQuery = useMemo(() => {
+    return query(collection(db, "churches"), orderBy("registeredAt", "desc"));
+  }, [db]);
+
   const { data: churches, loading: collectionLoading } = useCollection(churchesQuery);
 
   useEffect(() => {
@@ -65,14 +70,20 @@ export default function SystemAdminPortal() {
     );
   }
 
-  const handleUpdateStatus = async (churchId: string, newStatus: string) => {
+  const handleUpdateStatus = (churchId: string, newStatus: string) => {
     const churchDoc = doc(db, "churches", churchId);
-    try {
-      await updateDoc(churchDoc, { status: newStatus });
-      toast({ title: `Church ${newStatus.toLowerCase()} successfully` });
-    } catch (error) {
-      toast({ title: "Failed to update status", variant: "destructive" });
-    }
+    updateDoc(churchDoc, { status: newStatus })
+      .then(() => {
+        toast({ title: `Church ${newStatus.toLowerCase()} successfully` });
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: churchDoc.path,
+          operation: 'update',
+          requestResourceData: { status: newStatus },
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
   };
 
   const filteredChurches = (churches || []).filter(c => 
@@ -86,6 +97,13 @@ export default function SystemAdminPortal() {
     { label: "Active Subscriptions", value: churches?.filter(c => c.status === "Approved").length || 0, icon: ShieldCheck, color: "text-green-500" },
   ];
 
+  const formatTimestamp = (ts: any) => {
+    if (!ts) return 'Pending...';
+    if (ts instanceof Timestamp) return ts.toDate().toLocaleDateString();
+    if (ts.toDate) return ts.toDate().toLocaleDateString();
+    return 'N/A';
+  };
+
   return (
     <div className="min-h-screen bg-background p-8 space-y-8 animate-in fade-in duration-700">
       <div className="flex justify-between items-center">
@@ -96,9 +114,14 @@ export default function SystemAdminPortal() {
           </h2>
           <p className="text-muted-foreground text-lg">Manage ministry registrations and approve service activations.</p>
         </div>
-        <Button variant="outline" onClick={() => router.push("/dashboard")} className="glass border-white/10">
-          Back to Dashboard
-        </Button>
+        <div className="flex gap-4">
+          <Button variant="outline" onClick={() => window.location.reload()} className="glass border-white/10">
+            <RefreshCcw className="mr-2 h-4 w-4" /> Refresh
+          </Button>
+          <Button variant="outline" onClick={() => router.push("/dashboard")} className="glass border-white/10">
+            Back to Dashboard
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
@@ -167,7 +190,7 @@ export default function SystemAdminPortal() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {church.registeredAt?.toDate ? church.registeredAt.toDate().toLocaleDateString() : 'N/A'}
+                      {formatTimestamp(church.registeredAt)}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
