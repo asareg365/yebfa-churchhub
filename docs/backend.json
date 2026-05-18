@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Member": {
@@ -58,6 +59,7 @@
       "type": "object",
       "properties": {
         "name": { "type": "string" },
+        "slug": { "type": "string", "description": "Unique tenant ID for the church login." },
         "adminEmail": { "type": "string" },
         "adminEmails": { 
           "type": "array", 
@@ -73,7 +75,7 @@
         "status": { "type": "string", "enum": ["Pending", "Approved", "Suspended"] },
         "registeredAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["name", "adminEmail", "plan", "status"]
+      "required": ["name", "slug", "adminEmail", "plan", "status"]
     }
   },
   "auth": {

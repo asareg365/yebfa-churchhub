@@ -18,7 +18,8 @@ import {
   UserPlus,
   Trash2,
   Mail,
-  Plus
+  Plus,
+  Hash
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -87,6 +88,7 @@ export default function SystemAdminPortal() {
   
   const [newChurch, setNewChurch] = useState({
     name: "",
+    slug: "",
     adminEmail: "",
     plan: "Starter",
     status: "Pending",
@@ -110,17 +112,18 @@ export default function SystemAdminPortal() {
     const churchesRef = collection(db, "churches");
     
     try {
-      const q = query(churchesRef, where("name", "==", "Grace Community Sanctuary"));
+      const q = query(churchesRef, where("slug", "==", "grace-sanctuary"));
       const snap = await getDocs(q);
       
       if (!snap.empty) {
-        toast({ title: "Ministry already exists", description: "Grace Community Sanctuary is already in the directory." });
+        toast({ title: "Ministry exists", description: "Demo church already in directory." });
         setIsSeeding(false);
         return;
       }
 
       const demoData = {
         name: "Grace Community Sanctuary",
+        slug: "grace-sanctuary",
         adminEmail: "admin@gracecommunity.org",
         adminEmails: ["admin@gracecommunity.org", ...SUPER_ADMINS],
         enabledModules: ["members", "attendance", "finances", "events", "communication", "insights", "reports"],
@@ -131,7 +134,7 @@ export default function SystemAdminPortal() {
 
       addDoc(churchesRef, demoData)
         .then(() => {
-          toast({ title: "Ministry Seeded!", description: "Grace Community Sanctuary has been added." });
+          toast({ title: "Ministry Seeded!", description: "Grace Community Sanctuary is live." });
         })
         .catch(async (error) => {
           const permissionError = new FirestorePermissionError({
@@ -148,17 +151,23 @@ export default function SystemAdminPortal() {
     }
   };
 
+  const generateSlug = (name: string) => {
+    return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  };
+
   const handleAddChurch = async () => {
     if (!newChurch.name || !newChurch.adminEmail) {
-      toast({ title: "Missing fields", description: "Please provide a name and admin email.", variant: "destructive" });
+      toast({ title: "Missing fields", description: "Name and email are required.", variant: "destructive" });
       return;
     }
 
     setIsAddingChurch(true);
     const churchesRef = collection(db, "churches");
     
+    const slug = newChurch.slug || generateSlug(newChurch.name);
     const churchData = {
       ...newChurch,
+      slug: slug,
       adminEmails: [newChurch.adminEmail],
       registeredAt: serverTimestamp()
     };
@@ -166,8 +175,8 @@ export default function SystemAdminPortal() {
     addDoc(churchesRef, churchData)
       .then(() => {
         setIsAddDialogOpen(false);
-        setNewChurch({ name: "", adminEmail: "", plan: "Starter", status: "Pending", enabledModules: ["members", "attendance"] });
-        toast({ title: "Ministry Registered", description: `${newChurch.name} has been added to the system.` });
+        setNewChurch({ name: "", slug: "", adminEmail: "", plan: "Starter", status: "Pending", enabledModules: ["members", "attendance"] });
+        toast({ title: "Ministry Registered", description: `Slug: ${slug}` });
       })
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
@@ -203,6 +212,7 @@ export default function SystemAdminPortal() {
     const churchDoc = doc(db, "churches", editingChurch.id);
     const updateData = {
       name: editingChurch.name,
+      slug: editingChurch.slug,
       plan: editingChurch.plan,
       status: editingChurch.status,
       enabledModules: editingChurch.enabledModules || []
@@ -289,7 +299,8 @@ export default function SystemAdminPortal() {
 
   const filteredChurches = (churches || []).filter(c => 
     c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.adminEmail?.toLowerCase().includes(searchTerm.toLowerCase())
+    c.adminEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.slug?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const formatTimestamp = (ts: any) => {
@@ -308,7 +319,7 @@ export default function SystemAdminPortal() {
             <ShieldCheck className="h-10 w-10 text-primary" />
             System Admin Portal
           </h2>
-          <p className="text-muted-foreground text-lg">Manage ministry registrations, authorized users, and approvals.</p>
+          <p className="text-muted-foreground text-lg">Manage organizational tenants, slugs, and system module access.</p>
         </div>
         <div className="flex gap-4">
           <Button 
@@ -336,13 +347,13 @@ export default function SystemAdminPortal() {
       <Card className="glass border-white/10">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-7">
           <div>
-            <CardTitle className="text-xl">Ministry Directory</CardTitle>
-            <CardDescription>Configure church details and manage tenant administrators.</CardDescription>
+            <CardTitle className="text-xl">Tenant Directory</CardTitle>
+            <CardDescription>Configure ministry identification slugs and manage system administrators.</CardDescription>
           </div>
           <div className="relative w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Search by name or email..." 
+              placeholder="Search by name or slug..." 
               className="pl-10 bg-white/5 border-white/10 rounded-xl"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -356,11 +367,10 @@ export default function SystemAdminPortal() {
             <Table>
               <TableHeader className="bg-white/5">
                 <TableRow className="border-white/5">
-                  <TableHead>Church Name</TableHead>
+                  <TableHead>Ministry Name</TableHead>
+                  <TableHead>Tenant ID (Slug)</TableHead>
                   <TableHead>Primary Admin</TableHead>
-                  <TableHead>Plan</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Registered</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -368,12 +378,12 @@ export default function SystemAdminPortal() {
                 {filteredChurches.map((church) => (
                   <TableRow key={church.id} className="border-white/5 hover:bg-white/5 transition-colors">
                     <TableCell className="font-bold">{church.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{church.adminEmail}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className="bg-primary/10 text-primary border-0">
-                        {church.plan || "Starter"}
-                      </Badge>
+                      <code className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-bold">
+                        {church.slug}
+                      </code>
                     </TableCell>
+                    <TableCell className="text-muted-foreground">{church.adminEmail}</TableCell>
                     <TableCell>
                       <Badge className={cn(
                         "capitalize",
@@ -383,9 +393,6 @@ export default function SystemAdminPortal() {
                       )}>
                         {church.status}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatTimestamp(church.registeredAt)}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -406,13 +413,7 @@ export default function SystemAdminPortal() {
                             className="text-green-500 focus:text-green-500"
                             onClick={() => handleUpdateStatus(church.id, "Approved")}
                           >
-                            <CheckCircle2 className="mr-2 h-4 w-4" /> Approve & Activate
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => handleUpdateStatus(church.id, "Suspended")}
-                          >
-                            <XCircle className="mr-2 h-4 w-4" /> Suspend Account
+                            <CheckCircle2 className="mr-2 h-4 w-4" /> Approve Tenant
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -429,8 +430,8 @@ export default function SystemAdminPortal() {
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="glass max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Register New Ministry</DialogTitle>
-            <DialogDescription>Manually add a new organization to the hub.</DialogDescription>
+            <DialogTitle>Onboard New Organization</DialogTitle>
+            <DialogDescription>Assign a permanent name and Tenant ID to the new church.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -438,53 +439,34 @@ export default function SystemAdminPortal() {
               <Input 
                 placeholder="e.g. Hope Sanctuary"
                 value={newChurch.name} 
-                onChange={(e) => setNewChurch({...newChurch, name: e.target.value})} 
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setNewChurch({...newChurch, name: val, slug: generateSlug(val)});
+                }} 
                 className="bg-white/5"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Tenant ID (Permanent Slug)</Label>
+              <div className="relative">
+                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  value={newChurch.slug} 
+                  onChange={(e) => setNewChurch({...newChurch, slug: generateSlug(e.target.value)})}
+                  placeholder="hope-sanctuary"
+                  className="pl-10 bg-white/5 font-mono"
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Primary Admin Email</Label>
               <Input 
                 type="email"
-                placeholder="admin@hopesanctuary.org"
+                placeholder="admin@email.org"
                 value={newChurch.adminEmail} 
                 onChange={(e) => setNewChurch({...newChurch, adminEmail: e.target.value})} 
                 className="bg-white/5"
               />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Service Plan</Label>
-                <Select 
-                  value={newChurch.plan} 
-                  onValueChange={(v) => setNewChurch({...newChurch, plan: v})}
-                >
-                  <SelectTrigger className="bg-white/5">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="glass">
-                    <SelectItem value="Starter">Starter</SelectItem>
-                    <SelectItem value="Growth">Growth</SelectItem>
-                    <SelectItem value="Premium">Premium</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Initial Status</Label>
-                <Select 
-                  value={newChurch.status} 
-                  onValueChange={(v) => setNewChurch({...newChurch, status: v})}
-                >
-                  <SelectTrigger className="bg-white/5">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="glass">
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="Approved">Approved</SelectItem>
-                    <SelectItem value="Suspended">Suspended</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
 
             <div className="space-y-3 pt-4 border-t border-white/5">
@@ -509,7 +491,7 @@ export default function SystemAdminPortal() {
             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleAddChurch} disabled={isAddingChurch}>
               {isAddingChurch && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Register Ministry
+              Register Organization
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -519,8 +501,7 @@ export default function SystemAdminPortal() {
       <Dialog open={!!editingChurch} onOpenChange={(open) => !open && setEditingChurch(null)}>
         <DialogContent className="glass max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Ministry Details</DialogTitle>
-            <DialogDescription>Update the core identification and status of this organization.</DialogDescription>
+            <DialogTitle>Edit Organization Configuration</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -531,39 +512,13 @@ export default function SystemAdminPortal() {
                 className="bg-white/5"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Service Plan</Label>
-                <Select 
-                  value={editingChurch?.plan || "Starter"} 
-                  onValueChange={(v) => setEditingChurch({...editingChurch, plan: v})}
-                >
-                  <SelectTrigger className="bg-white/5">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="glass">
-                    <SelectItem value="Starter">Starter</SelectItem>
-                    <SelectItem value="Growth">Growth</SelectItem>
-                    <SelectItem value="Premium">Premium</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Account Status</Label>
-                <Select 
-                  value={editingChurch?.status || "Pending"} 
-                  onValueChange={(v) => setEditingChurch({...editingChurch, status: v})}
-                >
-                  <SelectTrigger className="bg-white/5">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="glass">
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="Approved">Approved</SelectItem>
-                    <SelectItem value="Suspended">Suspended</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-2">
+              <Label>Tenant ID (Slug)</Label>
+              <Input 
+                value={editingChurch?.slug || ""} 
+                onChange={(e) => setEditingChurch({...editingChurch, slug: generateSlug(e.target.value)})} 
+                className="bg-white/5 font-mono"
+              />
             </div>
 
             <div className="space-y-3 pt-4 border-t border-white/5">
@@ -596,7 +551,7 @@ export default function SystemAdminPortal() {
         <DialogContent className="glass max-w-md">
           <DialogHeader>
             <DialogTitle>Authorized Administrators</DialogTitle>
-            <DialogDescription>Manage who has access to the dashboard for {managingUsers?.name}.</DialogDescription>
+            <DialogDescription>Manage organizational access for {managingUsers?.name}.</DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             <div className="flex gap-2">
@@ -615,7 +570,7 @@ export default function SystemAdminPortal() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Current Admins</Label>
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Active Admins</Label>
               <div className="rounded-xl border border-white/5 overflow-hidden">
                 {managingUsers?.adminEmails?.length > 0 ? (
                   managingUsers.adminEmails.map((email: string) => (

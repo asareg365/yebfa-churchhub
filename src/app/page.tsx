@@ -1,11 +1,23 @@
 
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { Sparkles, Shield, Users, Zap, ArrowRight, Check, Smartphone } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Sparkles, Shield, Users, Zap, ArrowRight, Check, Smartphone, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function LandingPage() {
+  const [tenantSlug, setTenantSlug] = useState("");
+  const router = useRouter();
+
+  const handleFindMinistry = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tenantSlug) return;
+    router.push(`/login?tenant=${tenantSlug.toLowerCase().trim()}`);
+  };
+
   const plans = [
     {
       name: "Starter",
@@ -62,18 +74,32 @@ export default function LandingPage() {
           <h1 className="text-5xl md:text-7xl font-headline font-bold text-white tracking-tighter leading-tight max-w-4xl mx-auto">
             EMPOWER YOUR <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">MINISTRY</span> WITH INTELLIGENCE
           </h1>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Enterprise-grade multi-tenant platform featuring AI-powered pastoral insights, automated communication, and secure data isolation.
-          </p>
+          
+          <div className="max-w-md mx-auto pt-4">
+            <form onSubmit={handleFindMinistry} className="relative group">
+              <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                <Search className="h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+              </div>
+              <Input 
+                placeholder="Enter your Ministry Slug (e.g. grace-sanctuary)" 
+                className="h-14 pl-12 pr-32 bg-white/5 border-white/10 rounded-2xl text-lg focus:ring-primary/50"
+                value={tenantSlug}
+                onChange={(e) => setTenantSlug(e.target.value)}
+              />
+              <Button 
+                type="submit"
+                className="absolute right-2 top-2 h-10 px-4 bg-primary hover:bg-primary/80 rounded-xl"
+              >
+                Find Ministry
+              </Button>
+            </form>
+            <p className="mt-2 text-xs text-muted-foreground">Don't have a slug? Enter the ID provided during registration.</p>
+          </div>
+
           <div className="flex flex-col sm:flex-row justify-center gap-4 pt-4">
             <Link href="/login?tab=signup">
               <Button size="lg" className="h-14 px-10 text-lg bg-primary text-primary-foreground hover:bg-primary/90 rounded-2xl shadow-xl shadow-primary/20">
-                Get Started <ArrowRight className="ml-2" />
-              </Button>
-            </Link>
-            <Link href="/login">
-              <Button size="lg" variant="outline" className="h-14 px-10 text-lg glass border-white/10 hover:bg-white/5 rounded-2xl">
-                Demo
+                Register New Ministry <ArrowRight className="ml-2" />
               </Button>
             </Link>
           </div>
