@@ -17,8 +17,10 @@ import {
   ShieldAlert
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/firebase";
+import { useAuth, useUser } from "@/firebase";
 import { signOut } from "firebase/auth";
+
+const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
@@ -36,6 +38,9 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const auth = useAuth();
+  const { user } = useUser();
+
+  const isSuperAdmin = user?.email && SUPER_ADMINS.includes(user.email);
 
   const handleLogout = async () => {
     try {
@@ -77,17 +82,19 @@ export function Sidebar() {
           );
         })}
         
-        {/* System Admin Link */}
-        <Link
-          href="/admin"
-          className={cn(
-            "group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 mt-4 border border-dashed border-primary/20 hover:border-primary/50",
-            pathname === "/admin" ? "bg-white/10 text-primary" : "text-muted-foreground"
-          )}
-        >
-          <ShieldAlert className="w-5 h-5 text-primary" />
-          <span className="text-sm font-bold">Admin Portal</span>
-        </Link>
+        {/* System Admin Link - Only visible to super admins */}
+        {isSuperAdmin && (
+          <Link
+            href="/admin"
+            className={cn(
+              "group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 mt-4 border border-dashed border-primary/20 hover:border-primary/50",
+              pathname === "/admin" ? "bg-white/10 text-primary" : "text-muted-foreground"
+            )}
+          >
+            <ShieldAlert className="w-5 h-5 text-primary" />
+            <span className="text-sm font-bold">Admin Portal</span>
+          </Link>
+        )}
       </nav>
 
       <div className="pt-6 border-t border-white/5">

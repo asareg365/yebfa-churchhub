@@ -1,7 +1,8 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { 
   ShieldCheck, 
   Users, 
@@ -32,19 +33,37 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { useCollection, useFirestore } from "@/firebase";
+import { useCollection, useFirestore, useUser } from "@/firebase";
 import { collection, doc, updateDoc, query, orderBy } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
+const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+
 export default function SystemAdminPortal() {
+  const { user, loading: userLoading } = useUser();
   const db = useFirestore();
+  const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   
   const churchesRef = collection(db, "churches");
   const churchesQuery = query(churchesRef, orderBy("registeredAt", "desc"));
-  const { data: churches, loading } = useCollection(churchesQuery);
+  const { data: churches, loading: collectionLoading } = useCollection(churchesQuery);
+
+  useEffect(() => {
+    if (!userLoading && (!user || !SUPER_ADMINS.includes(user.email || ""))) {
+      router.push("/dashboard");
+    }
+  }, [user, userLoading, router]);
+
+  if (userLoading || !user || !SUPER_ADMINS.includes(user.email || "")) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const handleUpdateStatus = async (churchId: string, newStatus: string) => {
     const churchDoc = doc(db, "churches", churchId);
@@ -77,7 +96,7 @@ export default function SystemAdminPortal() {
           </h2>
           <p className="text-muted-foreground text-lg">Manage ministry registrations and approve service activations.</p>
         </div>
-        <Button variant="outline" onClick={() => window.history.back()} className="glass border-white/10">
+        <Button variant="outline" onClick={() => router.push("/dashboard")} className="glass border-white/10">
           Back to Dashboard
         </Button>
       </div>
@@ -113,7 +132,7 @@ export default function SystemAdminPortal() {
           </div>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {collectionLoading ? (
             <div className="p-20 flex justify-center"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>
           ) : (
             <Table>
