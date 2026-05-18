@@ -19,7 +19,8 @@ import {
   Trash2,
   Mail,
   Plus,
-  Hash
+  Hash,
+  LogOut
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,8 +52,9 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useCollection, useFirestore, useUser } from "@/firebase";
+import { useCollection, useFirestore, useUser, useAuth } from "@/firebase";
 import { collection, doc, updateDoc, query, orderBy, Timestamp, addDoc, serverTimestamp, getDocs, where, arrayUnion, arrayRemove } from "firebase/firestore";
+import { signOut } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { errorEmitter } from "@/firebase/error-emitter";
@@ -72,6 +74,7 @@ const MODULES = [
 
 export default function SystemAdminPortal() {
   const { user, loading: userLoading } = useUser();
+  const auth = useAuth();
   const db = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
@@ -112,6 +115,16 @@ export default function SystemAdminPortal() {
       }
     }
   }, [user, userLoading, router]);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      router.push("/admin/login");
+      toast({ title: "Logged out", description: "Administrator session securely ended." });
+    } catch (error: any) {
+      toast({ title: "Logout failed", description: error.message, variant: "destructive" });
+    }
+  };
 
   const handleSeedDemo = async () => {
     setIsSeeding(true);
@@ -309,14 +322,6 @@ export default function SystemAdminPortal() {
     c.slug?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const formatTimestamp = (ts: any) => {
-    if (!ts) return 'Just now';
-    if (ts instanceof Timestamp) return ts.toDate().toLocaleDateString();
-    if (ts && typeof ts.seconds === 'number') return new Date(ts.seconds * 1000).toLocaleDateString();
-    if (ts instanceof Date) return ts.toLocaleDateString();
-    return 'Processing...';
-  };
-
   return (
     <div className="min-h-screen bg-background p-8 space-y-8 animate-in fade-in duration-700">
       <div className="flex justify-between items-center">
@@ -344,8 +349,9 @@ export default function SystemAdminPortal() {
             {isSeeding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
             Seed Grace Community
           </Button>
-          <Button variant="outline" onClick={() => router.push("/")} className="glass border-white/10">
-            Back to Home
+          <Button variant="outline" onClick={handleLogout} className="glass border-white/10 text-destructive hover:bg-destructive/10">
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
           </Button>
         </div>
       </div>
