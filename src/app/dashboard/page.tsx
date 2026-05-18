@@ -1,3 +1,4 @@
+
 "use client";
 
 import { 
@@ -9,9 +10,11 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Activity,
-  DollarSign
+  DollarSign,
+  Loader2,
+  Gift
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_CHURCH, MOCK_ATTENDANCE } from "@/app/lib/mock-data";
 import {
@@ -23,15 +26,42 @@ import {
   Area
 } from "recharts";
 import { cn } from "@/lib/utils";
-
-const stats = [
-  { label: "Total Members", value: MOCK_CHURCH.stats.totalMembers, icon: Users, trend: "+12%", trendUp: true },
-  { label: "Upcoming Birthdays", value: MOCK_CHURCH.stats.upcomingBirthdays, icon: Cake, trend: "Today", trendUp: true },
-  { label: "Events This Month", value: MOCK_CHURCH.stats.activeEvents, icon: Calendar, trend: "-2", trendUp: false },
-  { label: "Attendance Rate", value: `${MOCK_CHURCH.stats.attendanceRate}%`, icon: TrendingUp, trend: "+5%", trendUp: true },
-];
+import { useCollection, useFirestore } from "@/firebase";
+import { collection, query, orderBy, limit } from "firebase/firestore";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useMemo } from "react";
 
 export default function DashboardPage() {
+  const db = useFirestore();
+  const { data: members, loading: membersLoading } = useCollection(collection(db, "members"));
+  const { data: attendance, loading: attendanceLoading } = useCollection(
+    query(collection(db, "attendance"), orderBy("date", "desc"), limit(10))
+  );
+
+  const stats = [
+    { label: "Total Members", value: members?.length || 0, icon: Users, trend: "+12%", trendUp: true },
+    { label: "Upcoming Birthdays", value: members?.filter(m => {
+      if (!m.dateOfBirth) return false;
+      const birthDate = new Date(m.dateOfBirth);
+      return birthDate.getMonth() === new Date().getMonth();
+    }).length || 0, icon: Cake, trend: "This Month", trendUp: true },
+    { label: "Events This Month", value: 8, icon: Calendar, trend: "-2", trendUp: false },
+    { label: "Attendance Rate", value: "85%", icon: TrendingUp, trend: "+5%", trendUp: true },
+  ];
+
+  const birthdayMembers = useMemo(() => {
+    if (!members) return [];
+    return members.filter(m => {
+      if (!m.dateOfBirth) return false;
+      const birthDate = new Date(m.dateOfBirth);
+      return birthDate.getMonth() === new Date().getMonth();
+    }).sort((a, b) => {
+      const dayA = new Date(a.dateOfBirth).getDate();
+      const dayB = new Date(b.dateOfBirth).getDate();
+      return dayA - dayB;
+    });
+  }, [members]);
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex justify-between items-end">
@@ -77,6 +107,10 @@ export default function DashboardPage() {
             <DollarSign className="w-4 h-4 mr-2" />
             Financial Health
           </TabsTrigger>
+          <TabsTrigger value="birthdays" className="rounded-xl px-6">
+            <Cake className="w-4 h-4 mr-2" />
+            Birthdays
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="trends" className="animate-in fade-in-50 duration-500">
@@ -89,7 +123,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={MOCK_ATTENDANCE}>
+                <AreaChart data={attendance?.length ? [...attendance].reverse() : MOCK_ATTENDANCE}>
                   <defs>
                     <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
@@ -122,7 +156,7 @@ export default function DashboardPage() {
                 <div className="space-y-6">
                   <div className="flex justify-between items-center p-6 rounded-3xl bg-white/5 border border-white/5">
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Total Tithes</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Total Balance</p>
                       <p className="text-3xl font-bold text-accent">GH₵45,200.00</p>
                     </div>
                     <div className="h-14 w-14 rounded-full border-4 border-accent/20 border-t-accent animate-spin-slow"></div>
@@ -168,6 +202,46 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="birthdays" className="animate-in fade-in-50 duration-500">
+          <Card className="glass min-h-[400px]">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Gift className="w-5 h-5 text-primary" />
+                Celebrants This Month
+              </CardTitle>
+              <CardDescription>Members celebrating their special day in {new Date().toLocaleString('default', { month: 'long' })}.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {membersLoading ? (
+                <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+              ) : birthdayMembers.length > 0 ? (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {birthdayMembers.map((member) => (
+                    <div key={member.id} className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-primary/30 transition-all">
+                      <Avatar className="h-12 w-12 border border-primary/20">
+                        <AvatarImage src={member.photo} />
+                        <AvatarFallback>{member.name?.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-bold text-foreground">{member.name}</p>
+                        <p className="text-sm text-primary flex items-center gap-1 font-medium">
+                          <Cake className="w-3 h-3" />
+                          {new Date(member.dateOfBirth).toLocaleDateString('default', { month: 'long', day: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center p-20 text-center opacity-40">
+                  <Gift className="w-16 h-16 mb-4" />
+                  <p>No birthdays recorded for this month.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

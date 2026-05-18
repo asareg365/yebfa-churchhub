@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, Search, Filter, Download, MoreVertical, QrCode, Mail, Phone, Loader2, Users as UsersIcon } from "lucide-react";
+import { Plus, Search, Filter, Download, MoreVertical, QrCode, Mail, Phone, Loader2, Users as UsersIcon, Cake } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -53,7 +53,8 @@ export default function MembersPage() {
     name: "",
     department: "Music",
     status: "Active" as const,
-    gender: "Male" as const
+    gender: "Male" as const,
+    dateOfBirth: ""
   });
 
   const handleAddMember = () => {
@@ -69,7 +70,7 @@ export default function MembersPage() {
     addDoc(membersRef, memberData)
       .then(() => {
         setIsAddDialogOpen(false);
-        setNewMember({ name: "", department: "Music", status: "Active", gender: "Male" });
+        setNewMember({ name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "" });
         toast({ title: "Member added successfully" });
       })
       .catch(async (serverError) => {
@@ -152,6 +153,15 @@ export default function MembersPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Date of Birth</Label>
+                  <Input 
+                    type="date"
+                    value={newMember.dateOfBirth} 
+                    onChange={(e) => setNewMember({...newMember, dateOfBirth: e.target.value})}
+                    className="bg-white/5"
+                  />
                 </div>
               </div>
               <DialogFooter>

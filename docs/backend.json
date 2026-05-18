@@ -11,6 +11,7 @@
         "department": { "type": "string" },
         "status": { "type": "string", "enum": ["Active", "Inactive", "Probation"] },
         "joined": { "type": "string", "format": "date" },
+        "dateOfBirth": { "type": "string", "format": "date" },
         "photo": { "type": "string" }
       },
       "required": ["name", "department", "status"]
