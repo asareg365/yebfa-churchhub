@@ -13,8 +13,11 @@ import {
   Loader2,
   Building2,
   Clock,
-  RefreshCcw,
-  PlusCircle
+  PlusCircle,
+  Pencil,
+  UserPlus,
+  Trash2,
+  Mail
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,11 +34,22 @@ import {
   DropdownMenu, 
   DropdownMenuContent, 
   DropdownMenuItem, 
-  DropdownMenuTrigger 
+  DropdownMenuTrigger,
+  DropdownMenuSeparator 
 } from "@/components/ui/dropdown-menu";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription,
+  DialogFooter
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCollection, useFirestore, useUser } from "@/firebase";
-import { collection, doc, updateDoc, query, orderBy, Timestamp, addDoc, serverTimestamp, getDocs, where } from "firebase/firestore";
+import { collection, doc, updateDoc, query, orderBy, Timestamp, addDoc, serverTimestamp, getDocs, where, arrayUnion, arrayRemove } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { errorEmitter } from "@/firebase/error-emitter";
@@ -48,9 +62,15 @@ export default function SystemAdminPortal() {
   const db = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
+  
   const [searchTerm, setSearchTerm] = useState("");
   const [isSeeding, setIsSeeding] = useState(false);
   
+  // Dialog States
+  const [editingChurch, setEditingChurch] = useState<any>(null);
+  const [managingUsers, setManagingUsers] = useState<any>(null);
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+
   const churchesQuery = useMemo(() => {
     return query(collection(db, "churches"), orderBy("registeredAt", "desc"));
   }, [db]);
@@ -68,7 +88,6 @@ export default function SystemAdminPortal() {
     const churchesRef = collection(db, "churches");
     
     try {
-      // Check for existence to avoid duplicates
       const q = query(churchesRef, where("name", "==", "Grace Community Sanctuary"));
       const snap = await getDocs(q);
       
@@ -81,6 +100,7 @@ export default function SystemAdminPortal() {
       const demoData = {
         name: "Grace Community Sanctuary",
         adminEmail: "admin@gracecommunity.org",
+        adminEmails: ["admin@gracecommunity.org"],
         status: "Pending",
         plan: "Premium",
         registeredAt: serverTimestamp()
@@ -121,6 +141,79 @@ export default function SystemAdminPortal() {
       });
   };
 
+  const handleSaveChurchDetails = () => {
+    if (!editingChurch) return;
+    const churchDoc = doc(db, "churches", editingChurch.id);
+    const updateData = {
+      name: editingChurch.name,
+      plan: editingChurch.plan,
+      status: editingChurch.status,
+    };
+
+    updateDoc(churchDoc, updateData)
+      .then(() => {
+        setEditingChurch(null);
+        toast({ title: "Ministry details updated" });
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: churchDoc.path,
+          operation: 'update',
+          requestResourceData: updateData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
+  };
+
+  const handleAddAdmin = () => {
+    if (!managingUsers || !newAdminEmail || !newAdminEmail.includes('@')) return;
+    const churchDoc = doc(db, "churches", managingUsers.id);
+    
+    updateDoc(churchDoc, {
+      adminEmails: arrayUnion(newAdminEmail)
+    })
+    .then(() => {
+      setNewAdminEmail("");
+      // Update local state for the dialog
+      setManagingUsers({
+        ...managingUsers,
+        adminEmails: [...(managingUsers.adminEmails || []), newAdminEmail]
+      });
+      toast({ title: "Admin user added" });
+    })
+    .catch(async (error) => {
+      const permissionError = new FirestorePermissionError({
+        path: churchDoc.path,
+        operation: 'update',
+        requestResourceData: { adminEmails: newAdminEmail },
+      });
+      errorEmitter.emit('permission-error', permissionError);
+    });
+  };
+
+  const handleRemoveAdmin = (email: string) => {
+    if (!managingUsers) return;
+    const churchDoc = doc(db, "churches", managingUsers.id);
+    
+    updateDoc(churchDoc, {
+      adminEmails: arrayRemove(email)
+    })
+    .then(() => {
+      setManagingUsers({
+        ...managingUsers,
+        adminEmails: (managingUsers.adminEmails || []).filter((e: string) => e !== email)
+      });
+      toast({ title: "Admin user removed" });
+    })
+    .catch(async (error) => {
+      const permissionError = new FirestorePermissionError({
+        path: churchDoc.path,
+        operation: 'update',
+      });
+      errorEmitter.emit('permission-error', permissionError);
+    });
+  };
+
   if (userLoading || !user || !SUPER_ADMINS.includes(user.email || "")) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -134,28 +227,12 @@ export default function SystemAdminPortal() {
     c.adminEmail?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const stats = [
-    { label: "Total Churches", value: churches?.length || 0, icon: Building2, color: "text-primary" },
-    { label: "Pending Approval", value: churches?.filter(c => c.status === "Pending").length || 0, icon: Clock, color: "text-accent" },
-    { label: "Active Subscriptions", value: churches?.filter(c => c.status === "Approved").length || 0, icon: ShieldCheck, color: "text-green-500" },
-  ];
-
   const formatTimestamp = (ts: any) => {
     if (!ts) return 'Just now';
-    
-    if (ts instanceof Timestamp) {
-      return ts.toDate().toLocaleDateString();
-    }
-    
-    if (ts && typeof ts.seconds === 'number') {
-      return new Date(ts.seconds * 1000).toLocaleDateString();
-    }
-
-    if (ts instanceof Date) {
-      return ts.toLocaleDateString();
-    }
-
-    return 'Pending...';
+    if (ts instanceof Timestamp) return ts.toDate().toLocaleDateString();
+    if (ts && typeof ts.seconds === 'number') return new Date(ts.seconds * 1000).toLocaleDateString();
+    if (ts instanceof Date) return ts.toLocaleDateString();
+    return 'Processing...';
   };
 
   return (
@@ -166,7 +243,7 @@ export default function SystemAdminPortal() {
             <ShieldCheck className="h-10 w-10 text-primary" />
             System Admin Portal
           </h2>
-          <p className="text-muted-foreground text-lg">Manage ministry registrations and approve service activations.</p>
+          <p className="text-muted-foreground text-lg">Manage ministry registrations, authorized users, and approvals.</p>
         </div>
         <div className="flex gap-4">
           <Button 
@@ -184,25 +261,11 @@ export default function SystemAdminPortal() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="glass">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-bold text-muted-foreground uppercase">{stat.label}</CardTitle>
-              <stat.icon className={cn("h-5 w-5", stat.color)} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{stat.value}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
       <Card className="glass border-white/10">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-7">
           <div>
             <CardTitle className="text-xl">Ministry Directory</CardTitle>
-            <CardDescription>Review and manage all organizations on the Hub.</CardDescription>
+            <CardDescription>Configure church details and manage tenant administrators.</CardDescription>
           </div>
           <div className="relative w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -222,7 +285,7 @@ export default function SystemAdminPortal() {
               <TableHeader className="bg-white/5">
                 <TableRow className="border-white/5">
                   <TableHead>Church Name</TableHead>
-                  <TableHead>Admin Email</TableHead>
+                  <TableHead>Primary Admin</TableHead>
                   <TableHead>Plan</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Registered</TableHead>
@@ -260,6 +323,13 @@ export default function SystemAdminPortal() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="glass">
+                          <DropdownMenuItem onClick={() => setEditingChurch(church)}>
+                            <Pencil className="mr-2 h-4 w-4" /> Edit Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setManagingUsers(church)}>
+                            <UserPlus className="mr-2 h-4 w-4" /> Manage Admins
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator className="bg-white/5" />
                           <DropdownMenuItem 
                             className="text-green-500 focus:text-green-500"
                             onClick={() => handleUpdateStatus(church.id, "Approved")}
@@ -277,18 +347,125 @@ export default function SystemAdminPortal() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {filteredChurches.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-20 text-muted-foreground">
-                      No ministries found in the directory.
-                    </TableCell>
-                  </TableRow>
-                )}
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Church Dialog */}
+      <Dialog open={!!editingChurch} onOpenChange={(open) => !open && setEditingChurch(null)}>
+        <DialogContent className="glass max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Ministry Details</DialogTitle>
+            <DialogDescription>Update the core identification and status of this organization.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Ministry Name</Label>
+              <Input 
+                value={editingChurch?.name || ""} 
+                onChange={(e) => setEditingChurch({...editingChurch, name: e.target.value})} 
+                className="bg-white/5"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Service Plan</Label>
+                <Select 
+                  value={editingChurch?.plan || "Starter"} 
+                  onValueChange={(v) => setEditingChurch({...editingChurch, plan: v})}
+                >
+                  <SelectTrigger className="bg-white/5">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="glass">
+                    <SelectItem value="Starter">Starter</SelectItem>
+                    <SelectItem value="Growth">Growth</SelectItem>
+                    <SelectItem value="Premium">Premium</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Account Status</Label>
+                <Select 
+                  value={editingChurch?.status || "Pending"} 
+                  onValueChange={(v) => setEditingChurch({...editingChurch, status: v})}
+                >
+                  <SelectTrigger className="bg-white/5">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="glass">
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="Approved">Approved</SelectItem>
+                    <SelectItem value="Suspended">Suspended</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingChurch(null)}>Cancel</Button>
+            <Button onClick={handleSaveChurchDetails}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Admins Dialog */}
+      <Dialog open={!!managingUsers} onOpenChange={(open) => !open && setManagingUsers(null)}>
+        <DialogContent className="glass max-w-md">
+          <DialogHeader>
+            <DialogTitle>Authorized Administrators</DialogTitle>
+            <DialogDescription>Manage who has access to the dashboard for {managingUsers?.name}.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="admin@email.com" 
+                  value={newAdminEmail}
+                  onChange={(e) => setNewAdminEmail(e.target.value)}
+                  className="pl-10 bg-white/5"
+                />
+              </div>
+              <Button onClick={handleAddAdmin} disabled={!newAdminEmail}>
+                <PlusCircle className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Current Admins</Label>
+              <div className="rounded-xl border border-white/5 overflow-hidden">
+                {managingUsers?.adminEmails?.length > 0 ? (
+                  managingUsers.adminEmails.map((email: string) => (
+                    <div key={email} className="flex items-center justify-between p-3 bg-white/5 border-b border-white/5 last:border-0">
+                      <span className="text-sm font-medium">{email}</span>
+                      {email !== managingUsers.adminEmail && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                          onClick={() => handleRemoveAdmin(email)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    Only the primary admin has access.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button className="w-full" onClick={() => setManagingUsers(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

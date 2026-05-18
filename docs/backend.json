@@ -60,6 +60,11 @@
       "properties": {
         "name": { "type": "string" },
         "adminEmail": { "type": "string" },
+        "adminEmails": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "List of authorized administrator emails for this tenant."
+        },
         "plan": { "type": "string", "enum": ["Starter", "Growth", "Premium"] },
         "status": { "type": "string", "enum": ["Pending", "Approved", "Suspended"] },
         "registeredAt": { "type": "string", "format": "date-time" }
