@@ -14,7 +14,6 @@ import {
   LogOut,
   Sparkles,
   UserCheck,
-  ShieldAlert,
   Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,8 +21,6 @@ import { useAuth, useUser, useCollection, useFirestore } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { collection, query, where, limit } from "firebase/firestore";
 import { useMemo } from "react";
-
-const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 
 const ALL_MENU_ITEMS = [
   { id: "dashboard", icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
@@ -45,6 +42,7 @@ export function Sidebar() {
   const { user } = useUser();
 
   const isSuperAdmin = useMemo(() => {
+    const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
     return user?.email && SUPER_ADMINS.includes(user.email);
   }, [user?.email]);
 
@@ -61,7 +59,7 @@ export function Sidebar() {
   const currentChurch = churches?.[0];
 
   const filteredMenuItems = useMemo(() => {
-    // Super Admins always see everything immediately
+    // Super Admins always see everything in the dashboard
     if (isSuperAdmin) return ALL_MENU_ITEMS;
     
     // If still loading church info for regular user, wait
@@ -118,19 +116,6 @@ export function Sidebar() {
               </Link>
             );
           })
-        )}
-        
-        {isSuperAdmin && (
-          <Link
-            href="/admin"
-            className={cn(
-              "group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 mt-4 border border-dashed border-primary/20 hover:border-primary/50",
-              pathname === "/admin" ? "bg-white/10 text-primary" : "text-muted-foreground"
-            )}
-          >
-            <ShieldAlert className="w-5 h-5 text-primary" />
-            <span className="text-sm font-bold">Admin Portal</span>
-          </Link>
         )}
       </nav>
 
