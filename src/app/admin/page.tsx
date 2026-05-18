@@ -102,8 +102,14 @@ export default function SystemAdminPortal() {
   const { data: churches, loading: collectionLoading } = useCollection(churchesQuery);
 
   useEffect(() => {
-    if (!userLoading && (!user || !SUPER_ADMINS.includes(user.email || ""))) {
-      router.push("/dashboard");
+    if (!userLoading) {
+      if (!user) {
+        // Redirect to login if not authenticated
+        router.push("/login?redirect=/admin");
+      } else if (!SUPER_ADMINS.includes(user.email || "")) {
+        // Redirect to dashboard if not a super admin
+        router.push("/dashboard");
+      }
     }
   }, [user, userLoading, router]);
 
@@ -289,7 +295,7 @@ export default function SystemAdminPortal() {
     });
   };
 
-  if (userLoading || !user || !SUPER_ADMINS.includes(user.email || "")) {
+  if (userLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="w-10 h-10 animate-spin text-primary" />
@@ -338,8 +344,8 @@ export default function SystemAdminPortal() {
             {isSeeding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
             Seed Grace Community
           </Button>
-          <Button variant="outline" onClick={() => router.push("/dashboard")} className="glass border-white/10">
-            Back to Dashboard
+          <Button variant="outline" onClick={() => router.push("/")} className="glass border-white/10">
+            Back to Home
           </Button>
         </div>
       </div>
