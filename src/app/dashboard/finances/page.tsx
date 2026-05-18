@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CreditCard, ArrowUpRight, DollarSign, FileText, Loader2, Plus } from "lucide-react";
+import { CreditCard, ArrowUpRight, DollarSign, FileText, Loader2, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -13,18 +13,38 @@ import {
   DialogTrigger,
   DialogFooter
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCollection, useFirestore } from "@/firebase";
-import { collection, addDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, orderBy, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 export default function FinancesPage() {
   const db = useFirestore();
   const { toast } = useToast();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   
   const financesRef = collection(db, "finances");
   const financesQuery = query(financesRef, orderBy("date", "desc"));
@@ -37,20 +57,79 @@ export default function FinancesPage() {
     method: "Bank Transfer"
   });
 
-  const handleAddTransaction = async () => {
+  const [editingTransaction, setEditingTransaction] = useState<any>(null);
+  const [transactionToDelete, setTransactionToDelete] = useState<any>(null);
+
+  const handleAddTransaction = () => {
     if (newTransaction.amount <= 0) return;
-    try {
-      addDoc(financesRef, {
-        ...newTransaction,
-        amount: Number(newTransaction.amount),
-        createdAt: serverTimestamp()
+    
+    const transactionData = {
+      ...newTransaction,
+      amount: Number(newTransaction.amount),
+      createdAt: serverTimestamp()
+    };
+
+    addDoc(financesRef, transactionData)
+      .then(() => {
+        setIsAddDialogOpen(false);
+        setNewTransaction({ date: new Date().toISOString().split('T')[0], amount: 0, type: "Tithe", method: "Bank Transfer" });
+        toast({ title: "Transaction recorded" });
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: financesRef.path,
+          operation: 'create',
+          requestResourceData: transactionData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
       });
-      setIsDialogOpen(false);
-      setNewTransaction({ date: new Date().toISOString().split('T')[0], amount: 0, type: "Tithe", method: "Bank Transfer" });
-      toast({ title: "Transaction recorded" });
-    } catch (e) {
-      toast({ title: "Error recording transaction", variant: "destructive" });
-    }
+  };
+
+  const handleUpdateTransaction = () => {
+    if (!editingTransaction || editingTransaction.amount <= 0) return;
+
+    const docRef = doc(db, "finances", editingTransaction.id);
+    const updateData = {
+      date: editingTransaction.date,
+      amount: Number(editingTransaction.amount),
+      type: editingTransaction.type,
+      method: editingTransaction.method,
+      updatedAt: serverTimestamp()
+    };
+
+    updateDoc(docRef, updateData)
+      .then(() => {
+        setIsEditDialogOpen(false);
+        setEditingTransaction(null);
+        toast({ title: "Transaction updated" });
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'update',
+          requestResourceData: updateData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
+  };
+
+  const handleDeleteTransaction = () => {
+    if (!transactionToDelete) return;
+
+    const docRef = doc(db, "finances", transactionToDelete.id);
+    deleteDoc(docRef)
+      .then(() => {
+        setIsDeleteDialogOpen(false);
+        setTransactionToDelete(null);
+        toast({ title: "Transaction deleted" });
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'delete',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
   };
 
   const totalBalance = (finances || []).reduce((acc, curr) => 
@@ -68,7 +147,7 @@ export default function FinancesPage() {
           <Button variant="outline" className="glass border-white/10">
             <FileText className="mr-2 h-4 w-4" /> Reports
           </Button>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button className="bg-accent text-accent-foreground hover:bg-accent/80">
                 <DollarSign className="mr-2 h-4 w-4" /> Add Transaction
@@ -86,7 +165,7 @@ export default function FinancesPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Amount (GH₵)</Label>
-                    <Input type="number" value={newTransaction.amount} onChange={(e) => setNewTransaction({...newTransaction, amount: parseFloat(e.target.value)})} />
+                    <Input type="number" value={newTransaction.amount} onChange={(e) => setNewTransaction({...newTransaction, amount: parseFloat(e.target.value) || 0})} />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -109,7 +188,7 @@ export default function FinancesPage() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
                 <Button onClick={handleAddTransaction}>Save Transaction</Button>
               </DialogFooter>
             </DialogContent>
@@ -145,7 +224,7 @@ export default function FinancesPage() {
                 <TableHead>Type</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Method</TableHead>
-                <TableHead className="text-right">Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -160,7 +239,29 @@ export default function FinancesPage() {
                     {record.type === 'Expenditure' ? '-' : ''}GH₵{record.amount.toLocaleString()}
                   </TableCell>
                   <TableCell>{record.method}</TableCell>
-                  <TableCell className="text-right text-xs text-muted-foreground">Verified</TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="glass">
+                        <DropdownMenuItem onClick={() => {
+                          setEditingTransaction(record);
+                          setIsEditDialogOpen(true);
+                        }}>
+                          <Pencil className="mr-2 h-4 w-4" /> Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => {
+                          setTransactionToDelete(record);
+                          setIsDeleteDialogOpen(true);
+                        }}>
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
                 </TableRow>
               ))}
               {finances?.length === 0 && (
@@ -174,6 +275,69 @@ export default function FinancesPage() {
           </Table>
         )}
       </Card>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="glass">
+          <DialogHeader>
+            <DialogTitle>Edit Transaction</DialogTitle>
+          </DialogHeader>
+          {editingTransaction && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Date</Label>
+                  <Input type="date" value={editingTransaction.date} onChange={(e) => setEditingTransaction({...editingTransaction, date: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Amount (GH₵)</Label>
+                  <Input type="number" value={editingTransaction.amount} onChange={(e) => setEditingTransaction({...editingTransaction, amount: parseFloat(e.target.value) || 0})} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Transaction Type</Label>
+                <Select value={editingTransaction.type} onValueChange={(v) => setEditingTransaction({...editingTransaction, type: v})}>
+                  <SelectTrigger className="bg-white/5">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="glass">
+                    <SelectItem value="Tithe">Tithe</SelectItem>
+                    <SelectItem value="Offering">Offering</SelectItem>
+                    <SelectItem value="Donation">Donation</SelectItem>
+                    <SelectItem value="Expenditure">Expenditure</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Payment Method</Label>
+                <Input value={editingTransaction.method} onChange={(e) => setEditingTransaction({...editingTransaction, method: e.target.value})} placeholder="Bank Transfer" />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleUpdateTransaction}>Update Transaction</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent className="glass">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the transaction record.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive hover:bg-destructive/80" onClick={handleDeleteTransaction}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
