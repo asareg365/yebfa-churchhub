@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -61,7 +62,10 @@ export default function FinancesPage() {
   const [transactionToDelete, setTransactionToDelete] = useState<any>(null);
 
   const handleAddTransaction = () => {
-    if (newTransaction.amount <= 0) return;
+    if (newTransaction.amount <= 0) {
+      toast({ title: "Invalid amount", variant: "destructive" });
+      return;
+    }
     
     const transactionData = {
       ...newTransaction,
@@ -73,7 +77,7 @@ export default function FinancesPage() {
       .then(() => {
         setIsAddDialogOpen(false);
         setNewTransaction({ date: new Date().toISOString().split('T')[0], amount: 0, type: "Tithe", method: "Bank Transfer" });
-        toast({ title: "Transaction recorded" });
+        toast({ title: "Transaction recorded in GH₵" });
       })
       .catch(async (serverError) => {
         const permissionError = new FirestorePermissionError({
@@ -141,7 +145,7 @@ export default function FinancesPage() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold tracking-tight mb-1">Finances</h2>
-          <p className="text-muted-foreground">Detailed overview of tithes, offerings, and expenditures.</p>
+          <p className="text-muted-foreground">Detailed overview of tithes, offerings, and expenditures in Ghana Cedis.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="glass border-white/10">
@@ -150,7 +154,7 @@ export default function FinancesPage() {
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button className="bg-accent text-accent-foreground hover:bg-accent/80">
-                <DollarSign className="mr-2 h-4 w-4" /> Add Transaction
+                <Plus className="mr-2 h-4 w-4" /> Add Transaction
               </Button>
             </DialogTrigger>
             <DialogContent className="glass">
@@ -184,7 +188,7 @@ export default function FinancesPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Payment Method</Label>
-                  <Input value={newTransaction.method} onChange={(e) => setNewTransaction({...newTransaction, method: e.target.value})} placeholder="Bank Transfer" />
+                  <Input value={newTransaction.method} onChange={(e) => setNewTransaction({...newTransaction, method: e.target.value})} placeholder="e.g. Bank Transfer, MoMo" />
                 </div>
               </div>
               <DialogFooter>
@@ -267,7 +271,7 @@ export default function FinancesPage() {
               {finances?.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
-                    No financial records found.
+                    No financial records found. Start by adding a transaction.
                   </TableCell>
                 </TableRow>
               )}
@@ -310,7 +314,7 @@ export default function FinancesPage() {
               </div>
               <div className="space-y-2">
                 <Label>Payment Method</Label>
-                <Input value={editingTransaction.method} onChange={(e) => setEditingTransaction({...editingTransaction, method: e.target.value})} placeholder="Bank Transfer" />
+                <Input value={editingTransaction.method} onChange={(e) => setEditingTransaction({...editingTransaction, method: e.target.value})} placeholder="e.g. Bank Transfer" />
               </div>
             </div>
           )}
@@ -327,7 +331,7 @@ export default function FinancesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the transaction record.
+              This action cannot be undone. This will permanently delete this record from your financial history.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
