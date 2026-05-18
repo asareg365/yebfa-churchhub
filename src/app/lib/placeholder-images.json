@@ -1,0 +1,23 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "church-logo-1",
+      "description": "Abstract spiritual logo",
+      "imageUrl": "https://picsum.photos/seed/church1/200/200",
+      "imageHint": "church logo"
+    },
+    {
+      "id": "member-1",
+      "description": "Church member profile",
+      "imageUrl": "https://picsum.photos/seed/member1/400/400",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "event-1",
+      "description": "Church conference event",
+      "imageUrl": "https://picsum.photos/seed/event1/800/400",
+      "imageHint": "church gathering"
+    }
+  ]
+}
