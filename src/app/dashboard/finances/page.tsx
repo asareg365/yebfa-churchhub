@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -20,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCollection, useFirestore } from "@/firebase";
 import { collection, addDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 export default function FinancesPage() {
   const db = useFirestore();
@@ -85,7 +85,7 @@ export default function FinancesPage() {
                     <Input type="date" value={newTransaction.date} onChange={(e) => setNewTransaction({...newTransaction, date: e.target.value})} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Amount ($)</Label>
+                    <Label>Amount (GH₵)</Label>
                     <Input type="number" value={newTransaction.amount} onChange={(e) => setNewTransaction({...newTransaction, amount: parseFloat(e.target.value)})} />
                   </div>
                 </div>
@@ -123,13 +123,12 @@ export default function FinancesPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Balance</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalBalance.toLocaleString()}</div>
+            <div className="text-2xl font-bold">GH₵{totalBalance.toLocaleString()}</div>
             <p className="text-xs text-accent flex items-center gap-1 mt-1">
               <ArrowUpRight className="w-3 h-3" /> Account health stable
             </p>
           </CardContent>
         </Card>
-        {/* Additional stat cards can be added here */}
       </div>
 
       <Card className="glass border-white/5">
@@ -150,7 +149,7 @@ export default function FinancesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {finances?.map((record, i) => (
+              {finances?.map((record) => (
                 <TableRow key={record.id} className="border-white/5">
                   <TableCell>{record.date}</TableCell>
                   <TableCell>{record.type}</TableCell>
@@ -158,7 +157,7 @@ export default function FinancesPage() {
                     "font-semibold",
                     record.type === 'Expenditure' ? 'text-destructive' : 'text-accent'
                   )}>
-                    {record.type === 'Expenditure' ? '-' : ''}${record.amount.toLocaleString()}
+                    {record.type === 'Expenditure' ? '-' : ''}GH₵{record.amount.toLocaleString()}
                   </TableCell>
                   <TableCell>{record.method}</TableCell>
                   <TableCell className="text-right text-xs text-muted-foreground">Verified</TableCell>

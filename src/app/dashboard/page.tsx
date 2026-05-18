@@ -1,4 +1,3 @@
-
 "use client";
 
 import { 
@@ -124,7 +123,7 @@ export default function DashboardPage() {
                   <div className="flex justify-between items-center p-6 rounded-3xl bg-white/5 border border-white/5">
                     <div>
                       <p className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Total Tithes</p>
-                      <p className="text-3xl font-bold text-accent">$45,200.00</p>
+                      <p className="text-3xl font-bold text-accent">GH₵45,200.00</p>
                     </div>
                     <div className="h-14 w-14 rounded-full border-4 border-accent/20 border-t-accent animate-spin-slow"></div>
                   </div>
