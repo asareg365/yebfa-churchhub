@@ -2,8 +2,8 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Clock, Users, Plus, Loader2 } from "lucide-react";
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { CheckCircle2, Clock, Users, Plus, Loader2, Calendar as CalendarIcon, History, BarChart3 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,9 +17,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCollection, useFirestore } from "@/firebase";
 import { collection, addDoc, serverTimestamp, query, orderBy, limit } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
 
 export default function AttendancePage() {
   const db = useFirestore();
@@ -27,7 +31,7 @@ export default function AttendancePage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
   const attendanceRef = collection(db, "attendance");
-  const attendanceQuery = query(attendanceRef, orderBy("date", "desc"), limit(20));
+  const attendanceQuery = query(attendanceRef, orderBy("date", "desc"), limit(50));
   const { data: attendance, loading } = useCollection(attendanceQuery);
 
   const [newRecord, setNewRecord] = useState({
@@ -36,21 +40,36 @@ export default function AttendancePage() {
     count: 0
   });
 
-  const handleAddRecord = async () => {
+  const handleAddRecord = () => {
     if (newRecord.count <= 0) return;
-    try {
-      addDoc(attendanceRef, {
-        ...newRecord,
-        count: Number(newRecord.count),
-        createdAt: serverTimestamp()
+    
+    const recordData = {
+      ...newRecord,
+      count: Number(newRecord.count),
+      createdAt: serverTimestamp()
+    };
+
+    addDoc(attendanceRef, recordData)
+      .then(() => {
+        setIsDialogOpen(false);
+        setNewRecord({
+          date: new Date().toISOString().split('T')[0],
+          serviceName: "Sunday Main Service",
+          count: 0
+        });
+        toast({ title: "Attendance record saved" });
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: attendanceRef.path,
+          operation: 'create',
+          requestResourceData: recordData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
       });
-      setIsDialogOpen(false);
-      toast({ title: "Attendance record saved" });
-    } catch (e) {
-      toast({ title: "Error saving record", variant: "destructive" });
-    }
   };
 
+  const chartData = [...(attendance || [])].reverse();
   const lastSunday = attendance?.[0]?.count || 0;
 
   return (
@@ -81,7 +100,7 @@ export default function AttendancePage() {
               </div>
               <div className="space-y-2">
                 <Label>Headcount</Label>
-                <Input type="number" value={newRecord.count} onChange={(e) => setNewRecord({...newRecord, count: parseInt(e.target.value)})} />
+                <Input type="number" value={newRecord.count} onChange={(e) => setNewRecord({...newRecord, count: parseInt(e.target.value) || 0})} />
               </div>
             </div>
             <DialogFooter>
@@ -122,44 +141,98 @@ export default function AttendancePage() {
         </Card>
       </div>
 
-      <Card className="glass overflow-hidden border border-white/5">
-        <CardHeader className="bg-white/5 border-b border-white/5">
-          <CardTitle className="text-lg">Recent Service Records</CardTitle>
-        </CardHeader>
-        {loading ? (
-          <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="border-white/5">
-                <TableHead>Date</TableHead>
-                <TableHead>Service Name</TableHead>
-                <TableHead>Headcount</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {attendance?.map((record) => (
-                <TableRow key={record.id} className="hover:bg-white/5 transition-colors border-white/5">
-                  <TableCell className="font-medium">{record.date}</TableCell>
-                  <TableCell>{record.serviceName}</TableCell>
-                  <TableCell>{record.count}</TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">Details</Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {attendance?.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center py-12 text-muted-foreground">
-                    No records found. Start recording attendance.
-                  </TableCell>
-                </TableRow>
+      <Tabs defaultValue="log" className="space-y-6">
+        <TabsList className="glass border-white/10 p-1 rounded-2xl">
+          <TabsTrigger value="log" className="rounded-xl px-6">
+            <History className="w-4 h-4 mr-2" />
+            Service Log
+          </TabsTrigger>
+          <TabsTrigger value="trends" className="rounded-xl px-6">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Trends Analysis
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="log">
+          <Card className="glass overflow-hidden border border-white/5">
+            <CardHeader className="bg-white/5 border-b border-white/5">
+              <CardTitle className="text-lg">Recent Service Records</CardTitle>
+            </CardHeader>
+            {loading ? (
+              <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-white/5">
+                    <TableHead>Date</TableHead>
+                    <TableHead>Service Name</TableHead>
+                    <TableHead>Headcount</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {attendance?.map((record) => (
+                    <TableRow key={record.id} className="hover:bg-white/5 transition-colors border-white/5">
+                      <TableCell className="font-medium">{record.date}</TableCell>
+                      <TableCell>{record.serviceName}</TableCell>
+                      <TableCell>{record.count}</TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm">Details</Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {attendance?.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-20 text-muted-foreground">
+                        <CalendarIcon className="h-10 w-10 mx-auto mb-4 opacity-20" />
+                        No records found. Start recording attendance.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            )}
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="trends">
+          <Card className="glass h-[400px]">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-primary" />
+                Growth Trends
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="h-[300px]">
+              {loading ? (
+                <div className="h-full flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+              ) : attendance?.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }}
+                      itemStyle={{ color: 'hsl(var(--primary))' }}
+                    />
+                    <Area type="monotone" dataKey="count" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorCount)" strokeWidth={3} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  Record more data to see trends.
+                </div>
               )}
-            </TableBody>
-          </Table>
-        )}
-      </Card>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
