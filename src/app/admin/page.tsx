@@ -17,7 +17,8 @@ import {
   Pencil,
   UserPlus,
   Trash2,
-  Mail
+  Mail,
+  Plus
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -65,11 +66,20 @@ export default function SystemAdminPortal() {
   
   const [searchTerm, setSearchTerm] = useState("");
   const [isSeeding, setIsSeeding] = useState(false);
+  const [isAddingChurch, setIsAddingChurch] = useState(false);
   
   // Dialog States
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingChurch, setEditingChurch] = useState<any>(null);
   const [managingUsers, setManagingUsers] = useState<any>(null);
   const [newAdminEmail, setNewAdminEmail] = useState("");
+  
+  const [newChurch, setNewChurch] = useState({
+    name: "",
+    adminEmail: "",
+    plan: "Starter",
+    status: "Pending"
+  });
 
   const churchesQuery = useMemo(() => {
     return query(collection(db, "churches"), orderBy("registeredAt", "desc"));
@@ -125,6 +135,40 @@ export default function SystemAdminPortal() {
     }
   };
 
+  const handleAddChurch = async () => {
+    if (!newChurch.name || !newChurch.adminEmail) {
+      toast({ title: "Missing fields", description: "Please provide a name and admin email.", variant: "destructive" });
+      return;
+    }
+
+    setIsAddingChurch(true);
+    const churchesRef = collection(db, "churches");
+    
+    const churchData = {
+      ...newChurch,
+      adminEmails: [newChurch.adminEmail],
+      registeredAt: serverTimestamp()
+    };
+
+    addDoc(churchesRef, churchData)
+      .then(() => {
+        setIsAddDialogOpen(false);
+        setNewChurch({ name: "", adminEmail: "", plan: "Starter", status: "Pending" });
+        toast({ title: "Ministry Registered", description: `${newChurch.name} has been added to the system.` });
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: churchesRef.path,
+          operation: 'create',
+          requestResourceData: churchData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      })
+      .finally(() => {
+        setIsAddingChurch(false);
+      });
+  };
+
   const handleUpdateStatus = (churchId: string, newStatus: string) => {
     const churchDoc = doc(db, "churches", churchId);
     updateDoc(churchDoc, { status: newStatus })
@@ -174,7 +218,6 @@ export default function SystemAdminPortal() {
     })
     .then(() => {
       setNewAdminEmail("");
-      // Update local state for the dialog
       setManagingUsers({
         ...managingUsers,
         adminEmails: [...(managingUsers.adminEmails || []), newAdminEmail]
@@ -246,6 +289,13 @@ export default function SystemAdminPortal() {
           <p className="text-muted-foreground text-lg">Manage ministry registrations, authorized users, and approvals.</p>
         </div>
         <div className="flex gap-4">
+          <Button 
+            onClick={() => setIsAddDialogOpen(true)} 
+            className="bg-primary hover:bg-primary/90 rounded-xl"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add New Ministry
+          </Button>
           <Button 
             variant="outline" 
             onClick={handleSeedDemo} 
@@ -352,6 +402,78 @@ export default function SystemAdminPortal() {
           )}
         </CardContent>
       </Card>
+
+      {/* Add Church Dialog */}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent className="glass max-w-md">
+          <DialogHeader>
+            <DialogTitle>Register New Ministry</DialogTitle>
+            <DialogDescription>Manually add a new organization to the hub.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Ministry Name</Label>
+              <Input 
+                placeholder="e.g. Hope Sanctuary"
+                value={newChurch.name} 
+                onChange={(e) => setNewChurch({...newChurch, name: e.target.value})} 
+                className="bg-white/5"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Primary Admin Email</Label>
+              <Input 
+                type="email"
+                placeholder="admin@hopesanctuary.org"
+                value={newChurch.adminEmail} 
+                onChange={(e) => setNewChurch({...newChurch, adminEmail: e.target.value})} 
+                className="bg-white/5"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Service Plan</Label>
+                <Select 
+                  value={newChurch.plan} 
+                  onValueChange={(v) => setNewChurch({...newChurch, plan: v})}
+                >
+                  <SelectTrigger className="bg-white/5">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="glass">
+                    <SelectItem value="Starter">Starter</SelectItem>
+                    <SelectItem value="Growth">Growth</SelectItem>
+                    <SelectItem value="Premium">Premium</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Initial Status</Label>
+                <Select 
+                  value={newChurch.status} 
+                  onValueChange={(v) => setNewChurch({...newChurch, status: v})}
+                >
+                  <SelectTrigger className="bg-white/5">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="glass">
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="Approved">Approved</SelectItem>
+                    <SelectItem value="Suspended">Suspended</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleAddChurch} disabled={isAddingChurch}>
+              {isAddingChurch && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Register Ministry
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Church Dialog */}
       <Dialog open={!!editingChurch} onOpenChange={(open) => !open && setEditingChurch(null)}>
