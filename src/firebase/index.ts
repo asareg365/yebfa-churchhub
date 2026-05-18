@@ -1,3 +1,4 @@
+
 'use client';
 
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
@@ -9,12 +10,24 @@ export function initializeFirebase(): {
   firebaseApp: FirebaseApp;
   firestore: Firestore;
   auth: Auth;
-} {
-  const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-  const firestore = getFirestore(firebaseApp);
-  const auth = getAuth(firebaseApp);
+} | null {
+  // Validate config
+  const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined';
 
-  return { firebaseApp, firestore, auth };
+  if (!isConfigValid) {
+    return null;
+  }
+
+  try {
+    const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    const firestore = getFirestore(firebaseApp);
+    const auth = getAuth(firebaseApp);
+
+    return { firebaseApp, firestore, auth };
+  } catch (error) {
+    console.error('Firebase initialization failed:', error);
+    return null;
+  }
 }
 
 export * from './provider';
