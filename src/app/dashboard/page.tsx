@@ -7,23 +7,20 @@ import {
   TrendingUp, 
   CreditCard, 
   Cake, 
-  MessageCircle,
   ArrowUpRight,
   ArrowDownRight
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MOCK_CHURCH, MOCK_ATTENDANCE } from "@/app/lib/mock-data";
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   AreaChart,
   Area
 } from "recharts";
+import { cn } from "@/lib/utils";
 
 const stats = [
   { label: "Total Members", value: MOCK_CHURCH.stats.totalMembers, icon: Users, trend: "+12%", trendUp: true },
@@ -151,8 +148,4 @@ export default function DashboardPage() {
       </div>
     </div>
   );
-}
-
-function cn(...classes: string[]) {
-  return classes.filter(Boolean).join(' ');
 }
