@@ -1,29 +1,48 @@
 
 "use client";
 
-import { useState } from "react";
-import { Sparkles, TrendingUp, AlertTriangle, Lightbulb, Loader2, BrainCircuit, History, BarChart3, PieChart } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useMemo } from "react";
+import { Sparkles, TrendingUp, AlertTriangle, Lightbulb, Loader2, BrainCircuit, History } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MOCK_CHURCH, MOCK_ATTENDANCE, MOCK_FINANCES } from "@/app/lib/mock-data";
 import { aiPastoralInsightTool, AIPastoralInsightOutput } from "@/ai/flows/ai-pastoral-insight-tool";
 import { useToast } from "@/hooks/use-toast";
+import { useCollection, useFirestore, useUser } from "@/firebase";
+import { collection, query, where, limit } from "firebase/firestore";
 
 export default function InsightsPage() {
+  const db = useFirestore();
+  const { user } = useUser();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [insights, setInsights] = useState<AIPastoralInsightOutput | null>(null);
   const { toast } = useToast();
 
+  const churchQuery = useMemo(() => {
+    if (!user?.email) return null;
+    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email), limit(1));
+  }, [db, user?.email]);
+
+  const { data: churches } = useCollection(churchQuery);
+  const currentChurch = churches?.[0];
+
+  const { data: attendance } = useCollection(collection(db, "attendance"));
+  const { data: finances } = useCollection(collection(db, "finances"));
+
   const runAnalysis = async () => {
+    if (!currentChurch) {
+      toast({ title: "Ministry context required", description: "Could not find your ministry record.", variant: "destructive" });
+      return;
+    }
+
     setIsAnalyzing(true);
     try {
       const result = await aiPastoralInsightTool({
-        churchName: MOCK_CHURCH.name,
-        attendanceRecords: MOCK_ATTENDANCE,
-        financialRecords: MOCK_FINANCES,
-        currentChallenges: "Slight dip in youth attendance mid-month.",
-        desiredOutcomes: "Increase youth engagement and retention."
+        churchName: currentChurch.name || "Our Ministry",
+        attendanceRecords: attendance.map(a => ({ date: a.date, count: a.count })),
+        financialRecords: finances.map(f => ({ date: f.date, amount: f.amount, type: f.type })),
+        currentChallenges: "General analysis requested for recent growth trends.",
+        desiredOutcomes: "Improve community engagement and retention."
       });
       setInsights(result);
       toast({ title: "Analysis complete", description: "Fresh pastoral insights are ready." });

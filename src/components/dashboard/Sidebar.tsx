@@ -48,25 +48,24 @@ export function Sidebar() {
     return user?.email && SUPER_ADMINS.includes(user.email);
   }, [user?.email]);
 
-  // Fetch current user's church to check enabled modules
   const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
+    if (!user?.email || isSuperAdmin) return null;
     return query(
       collection(db, "churches"),
       where("adminEmails", "array-contains", user.email),
       limit(1)
     );
-  }, [db, user?.email]);
+  }, [db, user?.email, isSuperAdmin]);
 
   const { data: churches, loading: churchLoading } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
   const filteredMenuItems = useMemo(() => {
-    // If we're still loading user info or church info, wait
-    if (churchLoading) return [];
-    
-    // Super Admins get access to all modules to manage/preview the platform
+    // Super Admins always see everything immediately
     if (isSuperAdmin) return ALL_MENU_ITEMS;
+    
+    // If still loading church info for regular user, wait
+    if (churchLoading) return [];
 
     // Regular users see base modules + whatever is enabled for their church
     const baseModules = ["dashboard", "settings"];
@@ -98,7 +97,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto pr-2 custom-scrollbar">
-        {churchLoading && !isSuperAdmin ? (
+        {(churchLoading && !isSuperAdmin) ? (
           <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-primary/50" /></div>
         ) : (
           filteredMenuItems.map((item) => {
@@ -121,7 +120,6 @@ export function Sidebar() {
           })
         )}
         
-        {/* System Admin Link - Only visible to super admins */}
         {isSuperAdmin && (
           <Link
             href="/admin"

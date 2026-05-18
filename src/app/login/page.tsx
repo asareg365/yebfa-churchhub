@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, Suspense } from "react";
@@ -15,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, Loader2, Church, Mail, Lock, CheckCircle2 } from "lucide-react";
+import { Sparkles, Loader2, Church, Mail, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -117,6 +118,7 @@ function LoginContent() {
         description: error.message, 
         variant: "destructive" 
       });
+    } finally {
       setIsLoading(false);
     }
   };
