@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -43,7 +44,9 @@ export function Sidebar() {
   const db = useFirestore();
   const { user } = useUser();
 
-  const isSuperAdmin = user?.email && SUPER_ADMINS.includes(user.email);
+  const isSuperAdmin = useMemo(() => {
+    return user?.email && SUPER_ADMINS.includes(user.email);
+  }, [user?.email]);
 
   // Fetch current user's church to check enabled modules
   const churchQuery = useMemo(() => {
@@ -59,16 +62,20 @@ export function Sidebar() {
   const currentChurch = churches?.[0];
 
   const filteredMenuItems = useMemo(() => {
+    // If we're still loading user info or church info, wait
     if (churchLoading) return [];
     
-    // Always show Overview, Settings and Dashboard base
+    // Super Admins get access to all modules to manage/preview the platform
+    if (isSuperAdmin) return ALL_MENU_ITEMS;
+
+    // Regular users see base modules + whatever is enabled for their church
     const baseModules = ["dashboard", "settings"];
     const enabledModules = currentChurch?.enabledModules || [];
     
     return ALL_MENU_ITEMS.filter(item => 
       baseModules.includes(item.id) || enabledModules.includes(item.id)
     );
-  }, [currentChurch, churchLoading]);
+  }, [currentChurch, churchLoading, isSuperAdmin]);
 
   const handleLogout = async () => {
     try {
@@ -91,7 +98,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto pr-2 custom-scrollbar">
-        {churchLoading ? (
+        {churchLoading && !isSuperAdmin ? (
           <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-primary/50" /></div>
         ) : (
           filteredMenuItems.map((item) => {

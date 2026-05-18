@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -121,7 +122,7 @@ export default function SystemAdminPortal() {
       const demoData = {
         name: "Grace Community Sanctuary",
         adminEmail: "admin@gracecommunity.org",
-        adminEmails: ["admin@gracecommunity.org"],
+        adminEmails: ["admin@gracecommunity.org", ...SUPER_ADMINS],
         enabledModules: ["members", "attendance", "finances", "events", "communication", "insights", "reports"],
         status: "Approved",
         plan: "Premium",
