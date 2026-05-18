@@ -81,7 +81,6 @@ export default function SystemAdminPortal() {
   
   const [searchTerm, setSearchTerm] = useState("");
   const [isSeeding, setIsSeeding] = useState(false);
-  const [isAddingChurch, setIsAddingChurch] = useState(false);
   
   // Dialog States
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -89,14 +88,16 @@ export default function SystemAdminPortal() {
   const [managingUsers, setManagingUsers] = useState<any>(null);
   const [newAdminEmail, setNewAdminEmail] = useState("");
   
-  const [newChurch, setNewChurch] = useState({
+  const initialChurchState = {
     name: "",
     slug: "",
     adminEmail: "",
     plan: "Starter",
     status: "Pending",
     enabledModules: ["members", "attendance"]
-  });
+  };
+
+  const [newChurch, setNewChurch] = useState(initialChurchState);
 
   const churchesQuery = useMemo(() => {
     return query(collection(db, "churches"), orderBy("registeredAt", "desc"));
@@ -107,10 +108,8 @@ export default function SystemAdminPortal() {
   useEffect(() => {
     if (!userLoading) {
       if (!user) {
-        // Redirect to admin login if not authenticated
         router.push("/admin/login");
       } else if (!SUPER_ADMINS.includes(user.email || "")) {
-        // Redirect to dashboard if authenticated but not a super admin
         router.push("/dashboard");
       }
     }
@@ -180,9 +179,7 @@ export default function SystemAdminPortal() {
       return;
     }
 
-    setIsAddingChurch(true);
     const churchesRef = collection(db, "churches");
-    
     const slug = newChurch.slug || generateSlug(newChurch.name);
     const churchData = {
       ...newChurch,
@@ -191,12 +188,8 @@ export default function SystemAdminPortal() {
       registeredAt: serverTimestamp()
     };
 
+    // Mutation call (non-blocking)
     addDoc(churchesRef, churchData)
-      .then(() => {
-        setIsAddDialogOpen(false);
-        setNewChurch({ name: "", slug: "", adminEmail: "", plan: "Starter", status: "Pending", enabledModules: ["members", "attendance"] });
-        toast({ title: "Ministry Registered", description: `Slug: ${slug}` });
-      })
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
           path: churchesRef.path,
@@ -204,10 +197,12 @@ export default function SystemAdminPortal() {
           requestResourceData: churchData,
         });
         errorEmitter.emit('permission-error', permissionError);
-      })
-      .finally(() => {
-        setIsAddingChurch(false);
       });
+
+    // Reset and close immediately for snappy UI
+    setIsAddDialogOpen(false);
+    setNewChurch(initialChurchState);
+    toast({ title: "Ministry Registered", description: `Tenant ID: ${slug} initialized.` });
   };
 
   const handleUpdateStatus = (churchId: string, newStatus: string) => {
@@ -439,7 +434,10 @@ export default function SystemAdminPortal() {
       </Card>
 
       {/* Add Church Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+      <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
+        setIsAddDialogOpen(open);
+        if (!open) setNewChurch(initialChurchState);
+      }}>
         <DialogContent className="glass max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Onboard New Organization</DialogTitle>
@@ -501,8 +499,7 @@ export default function SystemAdminPortal() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleAddChurch} disabled={isAddingChurch}>
-              {isAddingChurch && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button onClick={handleAddChurch}>
               Register Organization
             </Button>
           </DialogFooter>
