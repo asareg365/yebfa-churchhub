@@ -51,6 +51,8 @@ export default function SystemAdminPortal() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isSeeding, setIsSeeding] = useState(false);
   
+  // Stabilize the query. Note: orderBy with null values (pending timestamps) 
+  // can sometimes behave unexpectedly in local cache, but this is the standard way.
   const churchesQuery = useMemo(() => {
     return query(collection(db, "churches"), orderBy("registeredAt", "desc"));
   }, [db]);
@@ -68,7 +70,7 @@ export default function SystemAdminPortal() {
     const churchesRef = collection(db, "churches");
     
     try {
-      // Check if it already exists to avoid duplicates
+      // Check for existence to avoid duplicates during demo seeding
       const q = query(churchesRef, where("name", "==", "Grace Community Sanctuary"));
       const snap = await getDocs(q);
       
@@ -86,6 +88,7 @@ export default function SystemAdminPortal() {
         registeredAt: serverTimestamp()
       };
 
+      // We initiate the write and handle the catch block for permissions
       addDoc(churchesRef, demoData)
         .then(() => {
           toast({ title: "Ministry Seeded!", description: "Grace Community Sanctuary has been added to the directory." });
@@ -109,7 +112,7 @@ export default function SystemAdminPortal() {
     const churchDoc = doc(db, "churches", churchId);
     updateDoc(churchDoc, { status: newStatus })
       .then(() => {
-        toast({ title: `Church ${newStatus.toLowerCase()} successfully` });
+        toast({ title: `Church status updated to ${newStatus}` });
       })
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
@@ -140,10 +143,25 @@ export default function SystemAdminPortal() {
     { label: "Active Subscriptions", value: churches?.filter(c => c.status === "Approved").length || 0, icon: ShieldCheck, color: "text-green-500" },
   ];
 
+  // Robust timestamp formatter to handle pending states and object variations
   const formatTimestamp = (ts: any) => {
     if (!ts) return 'Processing...';
-    if (ts instanceof Timestamp) return ts.toDate().toLocaleDateString();
-    if (ts.toDate) return ts.toDate().toLocaleDateString();
+    
+    // Check if it's a Firestore Timestamp object
+    if (ts instanceof Timestamp) {
+      return ts.toDate().toLocaleDateString();
+    }
+    
+    // Check if it has the seconds property (sometimes happens in serialized states)
+    if (ts && typeof ts.seconds === 'number') {
+      return new Date(ts.seconds * 1000).toLocaleDateString();
+    }
+
+    // Fallback for native Date objects or other formats
+    if (ts instanceof Date) {
+      return ts.toLocaleDateString();
+    }
+
     return 'Just now';
   };
 
