@@ -4,7 +4,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Sparkles, Shield, Users, Zap, ArrowRight, Check, Smartphone, Search, ShieldCheck, Lock } from "lucide-react";
+import { Sparkles, Shield, Users, Zap, ArrowRight, Check, Smartphone, Search, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -55,7 +55,7 @@ export default function LandingPage() {
           <nav className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Features</a>
             <a href="#pricing" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Pricing</a>
-            <Link href="/admin">
+            <Link href="/admin/login">
               <Button variant="ghost" className="text-sm flex items-center gap-2 text-primary">
                 <ShieldCheck className="w-4 h-4" /> Admin Access
               </Button>
@@ -209,7 +209,7 @@ export default function LandingPage() {
             © Yebfa Consult 2026. Built for the modern church.
           </p>
           <div className="flex gap-6 items-center">
-            <Link href="/admin" className="text-xs font-bold text-primary flex items-center gap-1 hover:underline">
+            <Link href="/admin/login" className="text-xs font-bold text-primary flex items-center gap-1 hover:underline">
               <ShieldCheck className="w-3 h-3" />
               Admin Access
             </Link>

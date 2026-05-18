@@ -104,10 +104,10 @@ export default function SystemAdminPortal() {
   useEffect(() => {
     if (!userLoading) {
       if (!user) {
-        // Redirect to login if not authenticated
-        router.push("/login?redirect=/admin");
+        // Redirect to admin login if not authenticated
+        router.push("/admin/login");
       } else if (!SUPER_ADMINS.includes(user.email || "")) {
-        // Redirect to dashboard if not a super admin
+        // Redirect to dashboard if authenticated but not a super admin
         router.push("/dashboard");
       }
     }
