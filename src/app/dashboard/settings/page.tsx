@@ -1,7 +1,7 @@
 
 "use client";
 
-import { Settings, User, Bell, Shield, Cloud, CreditCard, Save, Check, Info, Smartphone } from "lucide-react";
+import { Settings, User, Bell, Shield, Cloud, CreditCard, Save, Check, Info, Smartphone, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,14 +49,14 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="general" className="space-y-6">
-        <TabsList className="glass border-white/10 p-1">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="billing">Billing</TabsTrigger>
+        <TabsList className="glass border-white/10 p-1 rounded-2xl">
+          <TabsTrigger value="general" className="rounded-xl px-6">General</TabsTrigger>
+          <TabsTrigger value="notifications" className="rounded-xl px-6">Notifications</TabsTrigger>
+          <TabsTrigger value="security" className="rounded-xl px-6">Security</TabsTrigger>
+          <TabsTrigger value="billing" className="rounded-xl px-6">Billing</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="general">
+        <TabsContent value="general" className="animate-in fade-in-50 duration-500">
           <Card className="glass">
             <CardHeader>
               <CardTitle>Church Information</CardTitle>
@@ -85,31 +85,31 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="notifications">
+        <TabsContent value="notifications" className="animate-in fade-in-50 duration-500">
           <Card className="glass">
             <CardHeader>
               <CardTitle>Notification Preferences</CardTitle>
               <CardDescription>Control how you and your members receive updates.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors">
                 <div className="space-y-0.5">
-                  <Label>Automated Birthday SMS</Label>
-                  <p className="text-xs text-muted-foreground">Send greetings to members on their birthday.</p>
+                  <Label className="text-base">Automated Birthday SMS</Label>
+                  <p className="text-sm text-muted-foreground">Send greetings to members on their birthday.</p>
                 </div>
                 <Switch defaultChecked />
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors">
                 <div className="space-y-0.5">
-                  <Label>Low SMS Credit Alert</Label>
-                  <p className="text-xs text-muted-foreground">Notify when credits fall below 500.</p>
+                  <Label className="text-base">Low SMS Credit Alert</Label>
+                  <p className="text-sm text-muted-foreground">Notify when credits fall below 500.</p>
                 </div>
                 <Switch defaultChecked />
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors">
                 <div className="space-y-0.5">
-                  <Label>Daily Attendance Reports</Label>
-                  <p className="text-xs text-muted-foreground">Email summary of attendance each evening.</p>
+                  <Label className="text-base">Daily Attendance Reports</Label>
+                  <p className="text-sm text-muted-foreground">Email summary of attendance each evening.</p>
                 </div>
                 <Switch />
               </div>
@@ -117,11 +117,11 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="billing" className="space-y-6">
-          <Alert className="glass-primary border-primary/30 py-6">
-            <Smartphone className="h-5 w-5 text-primary" />
-            <AlertTitle className="text-primary font-bold ml-2">Payment Instructions</AlertTitle>
-            <AlertDescription className="mt-2 text-foreground/90 ml-2">
+        <TabsContent value="billing" className="space-y-6 animate-in fade-in-50 duration-500">
+          <Alert className="glass-primary border-primary/30 py-6 rounded-3xl">
+            <Smartphone className="h-6 w-6 text-primary" />
+            <AlertTitle className="text-primary font-bold text-lg ml-2">Payment Instructions</AlertTitle>
+            <AlertDescription className="mt-2 text-foreground/90 ml-2 text-base">
               To activate or renew your plan, please MoMo the plan cost to 
               <span className="font-bold text-primary mx-1">0248472474</span>. 
               Use your <span className="font-bold underline">Church Name</span> as the reference. 
@@ -131,7 +131,7 @@ export default function SettingsPage() {
 
           <div className="grid gap-6 md:grid-cols-3">
             {plans.map((plan) => (
-              <Card key={plan.name} className={plan.current ? "glass border-primary/50 ring-1 ring-primary/20" : "glass"}>
+              <Card key={plan.name} className={plan.current ? "glass border-primary/50 ring-1 ring-primary/20 scale-105" : "glass"}>
                 <CardHeader>
                   <div className="flex justify-between items-start">
                     <div>
@@ -154,7 +154,7 @@ export default function SettingsPage() {
                       </li>
                     ))}
                   </ul>
-                  <Button className="w-full" variant={plan.current ? "outline" : "default"}>
+                  <Button className="w-full h-11 rounded-xl" variant={plan.current ? "outline" : "default"}>
                     {plan.current ? "Renew Plan" : `Upgrade to ${plan.name}`}
                   </Button>
                 </CardContent>
@@ -163,16 +163,25 @@ export default function SettingsPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="security">
-          <Card className="glass border-destructive/20">
-            <CardHeader>
-              <CardTitle className="text-destructive">Danger Zone</CardTitle>
-              <CardDescription>Critical actions for your church account.</CardDescription>
+        <TabsContent value="security" className="animate-in fade-in-50 duration-500">
+          <Card className="glass border-destructive/20 overflow-hidden">
+            <CardHeader className="bg-destructive/5 border-b border-white/5">
+              <CardTitle className="text-destructive flex items-center gap-2">
+                <Shield className="w-5 h-5" />
+                Danger Zone
+              </CardTitle>
+              <CardDescription>Critical actions for your church account that cannot be undone.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <Button variant="destructive" className="bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive hover:text-white">
-                Delete Church Data
-              </Button>
+            <CardContent className="pt-6 space-y-4">
+              <div className="flex items-center justify-between p-4 rounded-2xl bg-destructive/5 border border-destructive/10">
+                <div>
+                  <h4 className="font-bold text-destructive">Delete Church Data</h4>
+                  <p className="text-sm text-muted-foreground">Permanently remove all members, records, and financial history.</p>
+                </div>
+                <Button variant="destructive" className="bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive hover:text-white rounded-xl">
+                  <Trash2 className="w-4 h-4 mr-2" /> Delete Everything
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
