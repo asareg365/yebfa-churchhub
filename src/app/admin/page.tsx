@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -49,6 +48,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useCollection, useFirestore, useUser } from "@/firebase";
 import { collection, doc, updateDoc, query, orderBy, Timestamp, addDoc, serverTimestamp, getDocs, where, arrayUnion, arrayRemove } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
@@ -57,6 +57,16 @@ import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 
 const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+
+const MODULES = [
+  { id: "members", label: "Members Management" },
+  { id: "attendance", label: "Attendance Tracking" },
+  { id: "events", label: "Event Planning" },
+  { id: "finances", label: "Financial Records" },
+  { id: "communication", label: "AI Communications" },
+  { id: "insights", label: "Pastoral Insights" },
+  { id: "reports", label: "Detailed Reports" },
+];
 
 export default function SystemAdminPortal() {
   const { user, loading: userLoading } = useUser();
@@ -78,7 +88,8 @@ export default function SystemAdminPortal() {
     name: "",
     adminEmail: "",
     plan: "Starter",
-    status: "Pending"
+    status: "Pending",
+    enabledModules: ["members", "attendance"]
   });
 
   const churchesQuery = useMemo(() => {
@@ -111,7 +122,8 @@ export default function SystemAdminPortal() {
         name: "Grace Community Sanctuary",
         adminEmail: "admin@gracecommunity.org",
         adminEmails: ["admin@gracecommunity.org"],
-        status: "Pending",
+        enabledModules: ["members", "attendance", "finances", "events", "communication", "insights", "reports"],
+        status: "Approved",
         plan: "Premium",
         registeredAt: serverTimestamp()
       };
@@ -153,7 +165,7 @@ export default function SystemAdminPortal() {
     addDoc(churchesRef, churchData)
       .then(() => {
         setIsAddDialogOpen(false);
-        setNewChurch({ name: "", adminEmail: "", plan: "Starter", status: "Pending" });
+        setNewChurch({ name: "", adminEmail: "", plan: "Starter", status: "Pending", enabledModules: ["members", "attendance"] });
         toast({ title: "Ministry Registered", description: `${newChurch.name} has been added to the system.` });
       })
       .catch(async (error) => {
@@ -192,6 +204,7 @@ export default function SystemAdminPortal() {
       name: editingChurch.name,
       plan: editingChurch.plan,
       status: editingChurch.status,
+      enabledModules: editingChurch.enabledModules || []
     };
 
     updateDoc(churchDoc, updateData)
@@ -207,6 +220,14 @@ export default function SystemAdminPortal() {
         });
         errorEmitter.emit('permission-error', permissionError);
       });
+  };
+
+  const toggleModuleInState = (state: any, setState: any, moduleId: string) => {
+    const currentModules = state.enabledModules || [];
+    const updatedModules = currentModules.includes(moduleId)
+      ? currentModules.filter((id: string) => id !== moduleId)
+      : [...currentModules, moduleId];
+    setState({ ...state, enabledModules: updatedModules });
   };
 
   const handleAddAdmin = () => {
@@ -405,7 +426,7 @@ export default function SystemAdminPortal() {
 
       {/* Add Church Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="glass max-w-md">
+        <DialogContent className="glass max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Register New Ministry</DialogTitle>
             <DialogDescription>Manually add a new organization to the hub.</DialogDescription>
@@ -464,6 +485,24 @@ export default function SystemAdminPortal() {
                 </Select>
               </div>
             </div>
+
+            <div className="space-y-3 pt-4 border-t border-white/5">
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Features to Enable</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {MODULES.map((module) => (
+                  <div key={module.id} className="flex items-center space-x-3 p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+                    <Checkbox 
+                      id={`new-${module.id}`} 
+                      checked={newChurch.enabledModules.includes(module.id)}
+                      onCheckedChange={() => toggleModuleInState(newChurch, setNewChurch, module.id)}
+                    />
+                    <label htmlFor={`new-${module.id}`} className="text-sm cursor-pointer flex-1">
+                      {module.label}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
@@ -477,7 +516,7 @@ export default function SystemAdminPortal() {
 
       {/* Edit Church Dialog */}
       <Dialog open={!!editingChurch} onOpenChange={(open) => !open && setEditingChurch(null)}>
-        <DialogContent className="glass max-w-md">
+        <DialogContent className="glass max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Ministry Details</DialogTitle>
             <DialogDescription>Update the core identification and status of this organization.</DialogDescription>
@@ -523,6 +562,24 @@ export default function SystemAdminPortal() {
                     <SelectItem value="Suspended">Suspended</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            <div className="space-y-3 pt-4 border-t border-white/5">
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Features Enabled</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {MODULES.map((module) => (
+                  <div key={module.id} className="flex items-center space-x-3 p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+                    <Checkbox 
+                      id={`edit-${module.id}`} 
+                      checked={editingChurch?.enabledModules?.includes(module.id)}
+                      onCheckedChange={() => toggleModuleInState(editingChurch, setEditingChurch, module.id)}
+                    />
+                    <label htmlFor={`edit-${module.id}`} className="text-sm cursor-pointer flex-1">
+                      {module.label}
+                    </label>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

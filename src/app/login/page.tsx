@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { 
   signInWithEmailAndPassword, 
@@ -16,11 +15,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, Loader2, Church, Mail, Lock } from "lucide-react";
+import { Sparkles, Loader2, Church, Mail, Lock, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
+import { Checkbox } from "@/components/ui/checkbox";
 import Link from "next/link";
+
+const AVAILABLE_MODULES = [
+  { id: "members", label: "Members Management" },
+  { id: "attendance", label: "Attendance Tracking" },
+  { id: "events", label: "Event Planning" },
+  { id: "finances", label: "Financial Records" },
+  { id: "communication", label: "AI Communications" },
+  { id: "insights", label: "Pastoral Insights" },
+  { id: "reports", label: "Detailed Reports" },
+];
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -29,6 +39,7 @@ function LoginContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [churchName, setChurchName] = useState("");
+  const [selectedModules, setSelectedModules] = useState<string[]>(["members", "attendance"]);
   const [isLoading, setIsLoading] = useState(false);
   const auth = useAuth();
   const db = useFirestore();
@@ -53,9 +64,20 @@ function LoginContent() {
     }
   };
 
+  const handleModuleToggle = (moduleId: string) => {
+    setSelectedModules(prev => 
+      prev.includes(moduleId) 
+        ? prev.filter(id => id !== moduleId) 
+        : [...prev, moduleId]
+    );
+  };
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!churchName || !email || !password) return;
+    if (!churchName || !email || !password) {
+       toast({ title: "Required fields", description: "Please fill in all fields.", variant: "destructive" });
+       return;
+    }
     setIsLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -64,12 +86,13 @@ function LoginContent() {
         name: churchName,
         adminEmail: email,
         adminUid: userCredential.user.uid,
+        adminEmails: [email],
+        enabledModules: selectedModules,
         status: "Pending",
         plan: "Starter",
         registeredAt: serverTimestamp()
       };
 
-      // Create a registration record for the church
       const churchesRef = collection(db, "churches");
       addDoc(churchesRef, churchData)
         .then(() => {
@@ -197,46 +220,66 @@ function LoginContent() {
                 <CardTitle>Register Ministry</CardTitle>
                 <CardDescription>Launch your church on Yebfa ChurchHub.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="churchName">Church / Ministry Name</Label>
-                  <div className="relative">
-                    <Church className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <CardContent className="space-y-6 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="space-y-4">
+                   <div className="space-y-2">
+                    <Label htmlFor="churchName">Church / Ministry Name</Label>
+                    <div className="relative">
+                      <Church className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        id="churchName" 
+                        placeholder="Grace Community Sanctuary" 
+                        className="pl-10 bg-white/5" 
+                        value={churchName}
+                        onChange={(e) => setChurchName(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-email">Admin Email</Label>
                     <Input 
-                      id="churchName" 
-                      placeholder="Grace Community Sanctuary" 
-                      className="pl-10 bg-white/5" 
-                      value={churchName}
-                      onChange={(e) => setChurchName(e.target.value)}
+                      id="signup-email" 
+                      type="email" 
+                      placeholder="admin@church.org" 
+                      className="bg-white/5" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-password">Password</Label>
+                    <Input 
+                      id="signup-password" 
+                      type="password" 
+                      className="bg-white/5" 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       required
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-email">Admin Email</Label>
-                  <Input 
-                    id="signup-email" 
-                    type="email" 
-                    placeholder="admin@church.org" 
-                    className="bg-white/5" 
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
-                  <Input 
-                    id="signup-password" 
-                    type="password" 
-                    className="bg-white/5" 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
+
+                <div className="space-y-3 pt-4 border-t border-white/5">
+                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Features to Enable</Label>
+                  <div className="grid gap-2">
+                    {AVAILABLE_MODULES.map((module) => (
+                      <div key={module.id} className="flex items-center space-x-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+                        <Checkbox 
+                          id={module.id} 
+                          checked={selectedModules.includes(module.id)}
+                          onCheckedChange={() => handleModuleToggle(module.id)}
+                        />
+                        <label htmlFor={module.id} className="text-sm font-medium leading-none cursor-pointer flex-1">
+                          {module.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </CardContent>
-              <CardFooter>
+              <CardFooter className="pt-6">
                 <Button className="w-full bg-accent text-accent-foreground h-11" type="submit" disabled={isLoading}>
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Account"}
                 </Button>
