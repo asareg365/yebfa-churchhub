@@ -13,7 +13,8 @@ import {
   Loader2,
   Building2,
   Clock,
-  RefreshCcw
+  RefreshCcw,
+  PlusCircle
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { useCollection, useFirestore, useUser } from "@/firebase";
-import { collection, doc, updateDoc, query, orderBy, Timestamp } from "firebase/firestore";
+import { collection, doc, updateDoc, query, orderBy, Timestamp, addDoc, serverTimestamp, getDocs, where } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { errorEmitter } from "@/firebase/error-emitter";
@@ -48,8 +49,8 @@ export default function SystemAdminPortal() {
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [isSeeding, setIsSeeding] = useState(false);
   
-  // Stabilize the query to avoid infinite re-renders
   const churchesQuery = useMemo(() => {
     return query(collection(db, "churches"), orderBy("registeredAt", "desc"));
   }, [db]);
@@ -62,13 +63,47 @@ export default function SystemAdminPortal() {
     }
   }, [user, userLoading, router]);
 
-  if (userLoading || !user || !SUPER_ADMINS.includes(user.email || "")) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const handleSeedDemo = async () => {
+    setIsSeeding(true);
+    const churchesRef = collection(db, "churches");
+    
+    try {
+      // Check if it already exists to avoid duplicates
+      const q = query(churchesRef, where("name", "==", "Grace Community Sanctuary"));
+      const snap = await getDocs(q);
+      
+      if (!snap.empty) {
+        toast({ title: "Ministry already exists", description: "Grace Community Sanctuary is already in the directory." });
+        setIsSeeding(false);
+        return;
+      }
+
+      const demoData = {
+        name: "Grace Community Sanctuary",
+        adminEmail: "admin@gracecommunity.org",
+        status: "Pending",
+        plan: "Premium",
+        registeredAt: serverTimestamp()
+      };
+
+      addDoc(churchesRef, demoData)
+        .then(() => {
+          toast({ title: "Ministry Seeded!", description: "Grace Community Sanctuary has been added to the directory." });
+        })
+        .catch(async (error) => {
+          const permissionError = new FirestorePermissionError({
+            path: churchesRef.path,
+            operation: 'create',
+            requestResourceData: demoData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
+    } catch (e) {
+      toast({ title: "Seeding failed", variant: "destructive" });
+    } finally {
+      setIsSeeding(false);
+    }
+  };
 
   const handleUpdateStatus = (churchId: string, newStatus: string) => {
     const churchDoc = doc(db, "churches", churchId);
@@ -86,6 +121,14 @@ export default function SystemAdminPortal() {
       });
   };
 
+  if (userLoading || !user || !SUPER_ADMINS.includes(user.email || "")) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   const filteredChurches = (churches || []).filter(c => 
     c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.adminEmail?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -98,10 +141,10 @@ export default function SystemAdminPortal() {
   ];
 
   const formatTimestamp = (ts: any) => {
-    if (!ts) return 'Pending...';
+    if (!ts) return 'Processing...';
     if (ts instanceof Timestamp) return ts.toDate().toLocaleDateString();
     if (ts.toDate) return ts.toDate().toLocaleDateString();
-    return 'N/A';
+    return 'Just now';
   };
 
   return (
@@ -115,6 +158,15 @@ export default function SystemAdminPortal() {
           <p className="text-muted-foreground text-lg">Manage ministry registrations and approve service activations.</p>
         </div>
         <div className="flex gap-4">
+          <Button 
+            variant="outline" 
+            onClick={handleSeedDemo} 
+            disabled={isSeeding}
+            className="glass border-primary/20 hover:bg-primary/10 text-primary"
+          >
+            {isSeeding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+            Seed Grace Community
+          </Button>
           <Button variant="outline" onClick={() => window.location.reload()} className="glass border-white/10">
             <RefreshCcw className="mr-2 h-4 w-4" /> Refresh
           </Button>
