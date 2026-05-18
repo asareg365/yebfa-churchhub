@@ -20,7 +20,8 @@ import {
   Mail,
   Plus,
   Hash,
-  LogOut
+  LogOut,
+  Calendar
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -99,6 +100,7 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
+  // Stabilize query to handle server timestamps better
   const churchesQuery = useMemo(() => {
     return query(collection(db, "churches"), orderBy("registeredAt", "desc"));
   }, [db]);
@@ -134,7 +136,7 @@ export default function SystemAdminPortal() {
       const snap = await getDocs(q);
       
       if (!snap.empty) {
-        toast({ title: "Ministry exists", description: "Demo church already in directory." });
+        toast({ title: "Ministry exists", description: "Grace Community Sanctuary is already in the directory." });
         setIsSeeding(false);
         return;
       }
@@ -150,20 +152,14 @@ export default function SystemAdminPortal() {
         registeredAt: serverTimestamp()
       };
 
-      addDoc(churchesRef, demoData)
-        .then(() => {
-          toast({ title: "Ministry Seeded!", description: "Grace Community Sanctuary is live." });
-        })
-        .catch(async (error) => {
-          const permissionError = new FirestorePermissionError({
-            path: churchesRef.path,
-            operation: 'create',
-            requestResourceData: demoData,
-          });
-          errorEmitter.emit('permission-error', permissionError);
-        });
-    } catch (e) {
-      toast({ title: "Seeding failed", variant: "destructive" });
+      await addDoc(churchesRef, demoData);
+      toast({ title: "Ministry Seeded!", description: "Grace Community Sanctuary is live." });
+    } catch (error: any) {
+      const permissionError = new FirestorePermissionError({
+        path: churchesRef.path,
+        operation: 'create',
+      });
+      errorEmitter.emit('permission-error', permissionError);
     } finally {
       setIsSeeding(false);
     }
@@ -184,12 +180,18 @@ export default function SystemAdminPortal() {
     const churchData = {
       ...newChurch,
       slug: slug,
-      adminEmails: [newChurch.adminEmail],
+      adminEmails: [newChurch.adminEmail, ...SUPER_ADMINS], // Ensure super admins can see it
       registeredAt: serverTimestamp()
     };
 
-    // Mutation call (non-blocking)
+    // Closing the dialog and resetting form immediately for snappiness
+    setIsAddDialogOpen(false);
+    setNewChurch(initialChurchState);
+
     addDoc(churchesRef, churchData)
+      .then(() => {
+        toast({ title: "Ministry Registered", description: `Tenant ID: ${slug} initialized.` });
+      })
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
           path: churchesRef.path,
@@ -198,11 +200,6 @@ export default function SystemAdminPortal() {
         });
         errorEmitter.emit('permission-error', permissionError);
       });
-
-    // Reset and close immediately for snappy UI
-    setIsAddDialogOpen(false);
-    setNewChurch(initialChurchState);
-    toast({ title: "Ministry Registered", description: `Tenant ID: ${slug} initialized.` });
   };
 
   const handleUpdateStatus = (churchId: string, newStatus: string) => {
@@ -303,6 +300,12 @@ export default function SystemAdminPortal() {
     });
   };
 
+  const formatTimestamp = (ts: any) => {
+    if (!ts) return "Just now";
+    if (ts.toDate) return ts.toDate().toLocaleDateString();
+    return "Processing...";
+  };
+
   if (userLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -376,7 +379,7 @@ export default function SystemAdminPortal() {
                 <TableRow className="border-white/5">
                   <TableHead>Ministry Name</TableHead>
                   <TableHead>Tenant ID (Slug)</TableHead>
-                  <TableHead>Primary Admin</TableHead>
+                  <TableHead>Registered</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -390,7 +393,10 @@ export default function SystemAdminPortal() {
                         {church.slug}
                       </code>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{church.adminEmail}</TableCell>
+                    <TableCell className="text-muted-foreground flex items-center gap-2">
+                      <Calendar className="h-3 w-3 opacity-50" />
+                      {formatTimestamp(church.registeredAt)}
+                    </TableCell>
                     <TableCell>
                       <Badge className={cn(
                         "capitalize",
