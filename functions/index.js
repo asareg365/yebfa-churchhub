@@ -14,6 +14,8 @@ exports.sendBirthdaySMS = functions.pubsub
   .timeZone("Africa/Accra")
   .onRun(async (context) => {
     const db = admin.firestore();
+    
+    // Get current date in Accra timezone context
     const today = new Date();
     const currentMonth = today.getMonth() + 1; // getMonth is 0-indexed
     const currentDay = today.getDate();
@@ -26,16 +28,16 @@ exports.sendBirthdaySMS = functions.pubsub
 
       if (!member.dateOfBirth) return;
 
+      // Expecting YYYY-MM-DD format from the schema
       const dob = new Date(member.dateOfBirth);
       const dobMonth = dob.getMonth() + 1;
       const dobDay = dob.getDate();
 
-      // Simple month/day comparison for birthdays
+      // Compare month and day
       if (dobMonth === currentMonth && dobDay === currentDay) {
-        // Use member.name to match the schema in backend.json
         const name = member.name || "Beloved Member";
         const message = `Happy Birthday ${name}! God bless your new age. — Yebfa Church`;
-        const phone = member.phone;
+        const phone = member.phone; // Assuming phone exists on the document
 
         if (phone) {
           smsPromises.push(
@@ -71,8 +73,8 @@ exports.sendBirthdaySMS = functions.pubsub
   });
 
 /**
- * Helper function to send SMS via Hubtel API v1
- * Uses lowercase keys (from, to, content) per Hubtel's latest snippets.
+ * Helper function to send SMS via Hubtel SMS Regular API
+ * Reference: https://smsc.hubtel.com/v1/messages/send
  */
 async function sendSMS(phone, message) {
   const clientId = functions.config().hubtel?.client_id;
@@ -80,7 +82,7 @@ async function sendSMS(phone, message) {
   const senderId = functions.config().hubtel?.sender_id || "YebfaChurch";
 
   if (!clientId || !clientSecret) {
-    throw new Error("Hubtel credentials (client_id/client_secret) are not configured.");
+    throw new Error("Hubtel credentials (client_id/client_secret) are not configured in Firebase functions:config.");
   }
 
   const url = "https://smsc.hubtel.com/v1/messages/send";
@@ -98,6 +100,7 @@ async function sendSMS(phone, message) {
         Authorization: `Basic ${auth}`,
         "Content-Type": "application/json",
       },
+      timeout: 10000, // 10 second timeout
     }
   );
 }
