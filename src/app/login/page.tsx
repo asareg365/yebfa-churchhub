@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
@@ -109,6 +108,10 @@ function LoginContent() {
     setIsLoading(true);
     try {
       const normalizedEmail = email.toLowerCase().trim();
+      
+      // We first create the church record to ensure slug uniqueness if rules allow
+      // Note: If Auth fails later, we have an orphaned church.
+      // But usually, we create User first.
       await createUserWithEmailAndPassword(auth, normalizedEmail, password);
       
       const authorizedEmails = Array.from(new Set([
