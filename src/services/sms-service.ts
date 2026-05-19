@@ -8,7 +8,9 @@ import {
   Firestore,
   query,
   where,
-  getDocs
+  getDocs,
+  doc,
+  getDoc
 } from 'firebase/firestore';
 
 /**
@@ -27,12 +29,11 @@ export interface SMSLog {
 }
 
 /**
- * Placeholder for Hubtel SMS API integration.
- * In production, this would call a secure server-side endpoint or Firebase Function.
+ * Placeholder for mNotify SMS API simulation.
+ * In production, the real sending happens in Cloud Functions or via a secure proxy.
  */
-async function sendSMSViaProvider(phone: string, message: string) {
-  // Simulating network delay and API response
-  console.log(`[SMS SERVICE] Sending to ${phone}: ${message}`);
+async function sendSMSViaProvider(phone: string, message: string, senderId: string) {
+  console.log(`[mNotify SERVICE] Sending to ${phone} from ${senderId}: ${message}`);
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve({ success: true, messageId: Math.random().toString(36).substr(2, 9) });
@@ -55,10 +56,16 @@ export async function sendAndLogSMS(
   }
 ) {
   const logsRef = collection(db, 'churches', churchId, 'smsLogs');
+  const churchRef = doc(db, 'churches', churchId);
   
   try {
-    // 1. Attempt to send
-    const response: any = await sendSMSViaProvider(payload.phone, payload.message);
+    // Fetch church settings for senderId
+    const churchSnap = await getDoc(churchRef);
+    const churchData = churchSnap.data();
+    const senderId = churchData?.settings?.senderId || "ChurchHub";
+
+    // 1. Attempt to send (Simulated on client, handled by mNotify on server)
+    const response: any = await sendSMSViaProvider(payload.phone, payload.message, senderId);
     
     // 2. Log success
     const logData: SMSLog = {
@@ -96,14 +103,20 @@ export async function sendAndLogSMS(
  */
 export async function processBirthdaysToday(db: Firestore, churchId: string) {
   const membersRef = collection(db, 'churches', churchId, 'members');
+  const churchRef = doc(db, 'churches', churchId);
   const today = new Date();
   const currentMonth = today.getMonth() + 1;
   const currentDay = today.getDate();
 
-  const snap = await getDocs(membersRef);
+  const [membersSnap, churchSnap] = await Promise.all([
+    getDocs(membersRef),
+    getDoc(churchRef)
+  ]);
+
+  const churchData = churchSnap.data();
   const results = { sent: 0, failed: 0, skipped: 0 };
 
-  for (const doc of snap.docs) {
+  for (const doc of membersSnap.docs) {
     const member = doc.data();
     if (!member.dateOfBirth || !member.phone) {
       results.skipped++;
@@ -112,7 +125,7 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
 
     const dob = new Date(member.dateOfBirth);
     if (dob.getMonth() + 1 === currentMonth && dob.getDate() === currentDay) {
-      const message = `Happy Birthday ${member.name}! God bless your new age. - ${member.churchName || 'Yebfa Church'}`;
+      const message = `Happy Birthday ${member.name}! God bless your new age. — ${churchData?.name || 'Our Church'}`;
       const outcome = await sendAndLogSMS(db, churchId, {
         phone: member.phone,
         message,

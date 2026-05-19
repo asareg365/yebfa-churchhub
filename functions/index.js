@@ -6,9 +6,8 @@ const axios = require("axios");
 admin.initializeApp();
 
 /**
- * Multi-Tenant Birthday SMS Cloud Function
+ * Multi-Tenant Birthday SMS Cloud Function for mNotify
  * Runs daily at 06:00 AM (Africa/Accra)
- * Iterates through all churches, their members, and sends greetings.
  */
 exports.sendBirthdaySMS = functions.pubsub
   .schedule("every day 06:00")
@@ -21,7 +20,7 @@ exports.sendBirthdaySMS = functions.pubsub
     const currentMonth = today.getMonth() + 1;
     const currentDay = today.getDate();
 
-    // 1. Get all churches
+    // 1. Get all active churches
     const churchesSnapshot = await db.collection("churches").get();
     const allSmsPromises = [];
 
@@ -30,7 +29,7 @@ exports.sendBirthdaySMS = functions.pubsub
       const churchId = churchDoc.id;
       const churchName = churchData.name || "Our Church";
 
-      // Skip churches with birthday SMS disabled in settings
+      // Skip churches with birthday SMS disabled
       if (churchData.settings?.birthdaySmsEnabled === false) continue;
 
       // 2. Get members for this specific church
@@ -48,7 +47,7 @@ exports.sendBirthdaySMS = functions.pubsub
           allSmsPromises.push(
             (async () => {
               try {
-                await sendSMS(phone, message, churchData);
+                await sendMNotifySMS(phone, message, churchData);
                 // Log in tenant's specific collection
                 await db.collection("churches").doc(churchId).collection("smsLogs").add({
                   phone,
@@ -83,29 +82,32 @@ exports.sendBirthdaySMS = functions.pubsub
   });
 
 /**
- * Helper function to send SMS via Hubtel API (Simulated if credentials missing)
+ * Helper function to send SMS via mNotify API
  */
-async function sendSMS(phone, message, churchData) {
-  // Use global config if church doesn't have custom ones
-  const clientId = functions.config().hubtel?.client_id;
-  const clientSecret = functions.config().hubtel?.client_secret;
-  const senderId = functions.config().hubtel?.sender_id || "YebfaHub";
+async function sendMNotifySMS(phone, message, churchData) {
+  const apiKey = functions.config().mnotify?.api_key;
+  // Use tenant-specific senderId if configured, otherwise use default
+  const senderId = churchData.settings?.senderId || functions.config().mnotify?.sender_id || "ChurchHub";
 
-  if (!clientId || !clientSecret) {
+  if (!apiKey) {
     // Simulated sending in development/unconfigured states
-    console.log(`[SIMULATED SMS] To: ${phone}, Msg: ${message}`);
+    console.log(`[SIMULATED mNotify SMS] To: ${phone}, Sender: ${senderId}, Msg: ${message}`);
     return Promise.resolve({ success: true });
   }
 
-  const url = "https://smsc.hubtel.com/v1/messages/send";
-  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  // mNotify Quick SMS Endpoint
+  const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
 
   return axios.post(
     url,
-    { from: senderId, to: phone, content: message },
+    {
+      recipient: [phone],
+      sender: senderId,
+      message: message,
+      is_schedule: false
+    },
     {
       headers: {
-        Authorization: `Basic ${auth}`,
         "Content-Type": "application/json",
       },
       timeout: 10000,

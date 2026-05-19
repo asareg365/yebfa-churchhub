@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -17,7 +18,8 @@ import {
   Loader2, 
   KeyRound,
   ShieldAlert,
-  Lock
+  Lock,
+  MessageSquare
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,7 +31,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { useUser, useFirestore, useCollection, useAuth } from "@/firebase";
 import { doc, updateDoc, query, collection, where, limit } from "firebase/firestore";
-import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
+import { updatePassword } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -60,7 +62,8 @@ export default function SettingsPage() {
     phone: "",
     birthdaySmsEnabled: true,
     lowCreditAlertEnabled: true,
-    dailyReportsEnabled: false
+    dailyReportsEnabled: false,
+    senderId: ""
   });
 
   const [passwords, setPasswords] = useState({
@@ -76,7 +79,8 @@ export default function SettingsPage() {
         phone: currentChurch.phone || "",
         birthdaySmsEnabled: currentChurch.settings?.birthdaySmsEnabled ?? true,
         lowCreditAlertEnabled: currentChurch.settings?.lowCreditAlertEnabled ?? true,
-        dailyReportsEnabled: currentChurch.settings?.dailyReportsEnabled ?? false
+        dailyReportsEnabled: currentChurch.settings?.dailyReportsEnabled ?? false,
+        senderId: currentChurch.settings?.senderId || ""
       });
     }
   }, [currentChurch]);
@@ -92,7 +96,8 @@ export default function SettingsPage() {
       settings: {
         birthdaySmsEnabled: settings.birthdaySmsEnabled,
         lowCreditAlertEnabled: settings.lowCreditAlertEnabled,
-        dailyReportsEnabled: settings.dailyReportsEnabled
+        dailyReportsEnabled: settings.dailyReportsEnabled,
+        senderId: settings.senderId
       }
     };
 
@@ -127,28 +132,18 @@ export default function SettingsPage() {
       if (auth.currentUser) {
         await updatePassword(auth.currentUser, passwords.new);
         
-        // If they were forced to change, update the flag in Firestore to "unlock" the system
         if (currentChurch?.id) {
           const docRef = doc(db, "churches", currentChurch.id);
           await updateDoc(docRef, { mustChangePassword: false });
         }
 
-        toast({ title: "Password changed", description: "Your security credentials have been updated. The ministry portal is now unlocked." });
+        toast({ title: "Password changed", description: "Your security credentials have been updated." });
         setPasswords({ new: "", confirm: "" });
       }
     } catch (error: any) {
-      console.error("Password update error:", error);
-      
-      let message = error.message;
-      if (error.code === 'auth/requires-recent-login') {
-        message = "For security, please sign out and sign back in to change your password.";
-      } else if (error.code === 'auth/network-request-failed') {
-        message = "Network error. Please check your internet connection and try again.";
-      }
-
       toast({ 
         title: "Update failed", 
-        description: message, 
+        description: error.message, 
         variant: "destructive" 
       });
     } finally {
@@ -235,6 +230,19 @@ export default function SettingsPage() {
                     className="bg-white/5 border-white/10 opacity-50 font-mono" 
                   />
                 </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label className="flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-primary" />
+                    mNotify Sender ID
+                  </Label>
+                  <Input 
+                    placeholder="e.g. HOPE-CHURCH" 
+                    value={settings.senderId} 
+                    onChange={(e) => setSettings({...settings, senderId: e.target.value.toUpperCase().slice(0, 11)})}
+                    className="bg-white/5 border-white/10 font-mono" 
+                  />
+                  <p className="text-[10px] text-muted-foreground italic">Must be pre-approved on your mNotify account. Max 11 characters.</p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -250,7 +258,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors">
                 <div className="space-y-0.5">
                   <Label className="text-base">Automated Birthday SMS</Label>
-                  <p className="text-sm text-muted-foreground">Send greetings to members on their birthday.</p>
+                  <p className="text-sm text-muted-foreground">Send greetings to members on their birthday via mNotify.</p>
                 </div>
                 <Switch 
                   checked={settings.birthdaySmsEnabled} 
@@ -260,7 +268,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors">
                 <div className="space-y-0.5">
                   <Label className="text-base">Low SMS Credit Alert</Label>
-                  <p className="text-sm text-muted-foreground">Notify when credits fall below 500.</p>
+                  <p className="text-sm text-muted-foreground">Notify when mNotify credits fall below 500.</p>
                 </div>
                 <Switch 
                   checked={settings.lowCreditAlertEnabled} 
@@ -288,8 +296,7 @@ export default function SettingsPage() {
             <AlertDescription className="mt-2 text-foreground/90 ml-2 text-base">
               To activate or renew your plan, please MoMo the plan cost to 
               <span className="font-bold text-primary mx-1">0248472474</span>. 
-              Use your <span className="font-bold underline">Church Name</span> as the reference. 
-              Once paid, our team will approve your access within 1 hour.
+              Use your <span className="font-bold underline">Church Name</span> as the reference.
             </AlertDescription>
           </Alert>
 
@@ -328,16 +335,6 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="security" className="space-y-6 animate-in fade-in-50 duration-500">
-          {isForced && (
-            <Alert className="border-primary/50 bg-primary/10">
-              <ShieldAlert className="h-4 w-4 text-primary" />
-              <AlertTitle>Security Update Required</AlertTitle>
-              <AlertDescription>
-                For protection, please update your ministry account password before proceeding.
-              </AlertDescription>
-            </Alert>
-          )}
-
           <Card className="glass">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -379,29 +376,6 @@ export default function SettingsPage() {
               </form>
             </CardContent>
           </Card>
-
-          {!isForced && (
-            <Card className="glass border-destructive/20 overflow-hidden">
-              <CardHeader className="bg-destructive/5 border-b border-white/5">
-                <CardTitle className="text-destructive flex items-center gap-2">
-                  <Shield className="w-5 h-5" />
-                  Danger Zone
-                </CardTitle>
-                <CardDescription>Critical actions for your church account that cannot be undone.</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                <div className="flex items-center justify-between p-4 rounded-2xl bg-destructive/5 border border-destructive/10">
-                  <div>
-                    <h4 className="font-bold text-destructive">Delete Church Data</h4>
-                    <p className="text-sm text-muted-foreground">Permanently remove all members, records, and financial history.</p>
-                  </div>
-                  <Button variant="destructive" className="bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive hover:text-white rounded-xl">
-                    <Trash2 className="w-4 h-4 mr-2" /> Delete Everything
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </TabsContent>
       </Tabs>
     </div>

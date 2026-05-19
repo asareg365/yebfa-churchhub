@@ -103,7 +103,8 @@
           "properties": {
             "birthdaySmsEnabled": { "type": "boolean" },
             "lowCreditAlertEnabled": { "type": "boolean" },
-            "dailyReportsEnabled": { "type": "boolean" }
+            "dailyReportsEnabled": { "type": "boolean" },
+            "senderId": { "type": "string" }
           }
         },
         "registeredAt": { "type": "string", "format": "date-time" }
