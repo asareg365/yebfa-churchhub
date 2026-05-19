@@ -258,6 +258,11 @@ export default function DashboardPage() {
           </Card>
         </TabsContent>
       </Tabs>
+      <style jsx global>{`
+        #colorCount {
+          stop-color: hsl(var(--primary));
+        }
+      `}</style>
     </div>
   );
 }

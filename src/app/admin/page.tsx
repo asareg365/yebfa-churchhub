@@ -121,6 +121,7 @@ export default function SystemAdminPortal() {
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
     const email = user.email.toLowerCase().trim();
+    // For Super Admins, we show everything they are authorized for
     return query(collection(db, "churches"), where("adminEmails", "array-contains", email));
   }, [db, user?.email]);
 
@@ -711,7 +712,7 @@ export default function SystemAdminPortal() {
                         >
                           <SendHorizontal className="h-4 w-4" />
                         </Button>
-                        {!SUPER_ADMINS.includes(email) && email !== managingUsers.adminEmail && (
+                        {!SUPER_ADMINS.includes(email) && (
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -762,3 +763,4 @@ export default function SystemAdminPortal() {
     </div>
   );
 }
+
