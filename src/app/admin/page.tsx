@@ -51,6 +51,16 @@ import {
   DialogDescription,
   DialogFooter
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -93,6 +103,7 @@ export default function SystemAdminPortal() {
   const [managingUsers, setManagingUsers] = useState<any>(null);
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [otpDialog, setOtpDialog] = useState<{ isOpen: boolean, password: string, email: string } | null>(null);
+  const [adminToRemove, setAdminToRemove] = useState<string | null>(null);
   
   const initialChurchState = {
     name: "",
@@ -209,7 +220,6 @@ export default function SystemAdminPortal() {
         await createUserWithEmailAndPassword(secondaryAuth, normalizedAdminEmail, otp);
         await authSignOut(secondaryAuth);
       } catch (authError: any) {
-        // If email exists, that's fine, the admin just needs to log in
         if (authError.code !== 'auth/email-already-in-use') {
           console.error("Auth creation failed:", authError);
           toast({ title: "Auth Warning", description: "Church record created, but user account might need manual setup.", variant: "destructive" });
@@ -322,6 +332,7 @@ export default function SystemAdminPortal() {
         ...managingUsers,
         adminEmails: (managingUsers.adminEmails || []).filter((e: string) => e !== email)
       });
+      setAdminToRemove(null);
       toast({ title: "Admin user removed" });
     })
     .catch(async (error) => {
@@ -691,7 +702,7 @@ export default function SystemAdminPortal() {
                           variant="ghost" 
                           size="icon" 
                           className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                          onClick={() => handleRemoveAdmin(email)}
+                          onClick={() => setAdminToRemove(email)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -711,6 +722,27 @@ export default function SystemAdminPortal() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Admin Removal Alert */}
+      <AlertDialog open={!!adminToRemove} onOpenChange={(open) => !open && setAdminToRemove(null)}>
+        <AlertDialogContent className="glass">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke Access?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove <strong>{adminToRemove}</strong> from the authorized administrators list. They will no longer be able to access this ministry's portal.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => adminToRemove && handleRemoveAdmin(adminToRemove)}
+              className="bg-destructive hover:bg-destructive/90 text-white"
+            >
+              Confirm Removal
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
