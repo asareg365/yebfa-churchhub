@@ -39,7 +39,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/avatar";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -62,7 +62,8 @@ export default function MembersPage() {
   // Get current church context
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
-    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
+    const email = user.email.toLowerCase().trim();
+    return query(collection(db, "churches"), where("adminEmails", "array-contains", email), limit(1));
   }, [db, user?.email]);
   
   const { data: churches } = useCollection(churchQuery);

@@ -27,7 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useCollection, useFirestore, useUser } from "@/firebase";
 import { collection, query, orderBy, limit, where } from "firebase/firestore";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/avatar";
 import { useMemo } from "react";
 
 export default function DashboardPage() {
@@ -36,9 +36,10 @@ export default function DashboardPage() {
 
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
+    const normalizedEmail = user.email.toLowerCase().trim();
     return query(
       collection(db, "churches"),
-      where("adminEmails", "array-contains", user.email),
+      where("adminEmails", "array-contains", normalizedEmail),
       limit(1)
     );
   }, [db, user?.email]);
@@ -46,11 +47,31 @@ export default function DashboardPage() {
   const { data: churches } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
-  const { data: members, loading: membersLoading } = useCollection(collection(db, "members"));
-  const { data: attendance, loading: attendanceLoading } = useCollection(
-    query(collection(db, "attendance"), orderBy("date", "desc"), limit(10))
-  );
-  const { data: finances } = useCollection(collection(db, "finances"));
+  // Isolated collections for the specific tenant
+  const membersRef = useMemo(() => {
+    if (!currentChurch?.id) return null;
+    return collection(db, "churches", currentChurch.id, "members");
+  }, [db, currentChurch?.id]);
+
+  const attendanceRef = useMemo(() => {
+    if (!currentChurch?.id) return null;
+    return collection(db, "churches", currentChurch.id, "attendance");
+  }, [db, currentChurch?.id]);
+
+  const financesRef = useMemo(() => {
+    if (!currentChurch?.id) return null;
+    return collection(db, "churches", currentChurch.id, "finances");
+  }, [db, currentChurch?.id]);
+
+  const { data: members, loading: membersLoading } = useCollection(membersRef);
+  
+  const attendanceQuery = useMemo(() => {
+    if (!attendanceRef) return null;
+    return query(attendanceRef, orderBy("date", "desc"), limit(10));
+  }, [attendanceRef]);
+  
+  const { data: attendance, loading: attendanceLoading } = useCollection(attendanceQuery);
+  const { data: finances } = useCollection(financesRef);
 
   const stats = [
     { label: "Total Members", value: members?.length || 0, icon: Users, trend: members?.length > 0 ? "+1" : "N/A", trendUp: true },
@@ -59,7 +80,7 @@ export default function DashboardPage() {
       const birthDate = new Date(m.dateOfBirth);
       return birthDate.getMonth() === new Date().getMonth();
     }).length || 0, icon: Cake, trend: "This Month", trendUp: true },
-    { label: "Total Attendance", value: attendance?.reduce((acc, curr) => acc + curr.count, 0) || 0, icon: TrendingUp, trend: "Live", trendUp: true },
+    { label: "Total Attendance", value: attendance?.reduce((acc, curr) => acc + (curr.count || 0), 0) || 0, icon: TrendingUp, trend: "Live", trendUp: true },
     { label: "Ministry Health", value: currentChurch?.status === 'Approved' ? "Active" : "Pending", icon: Activity, trend: "Status", trendUp: true },
   ];
 

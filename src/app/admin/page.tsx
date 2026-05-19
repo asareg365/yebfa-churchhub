@@ -102,7 +102,7 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // Filter query to match security rules requirements
+  // Filter query to match security rules requirements - Super Admins should see everything they are in adminEmails for
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
     const email = user.email.toLowerCase().trim();
