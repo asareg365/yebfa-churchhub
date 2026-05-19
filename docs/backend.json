@@ -72,6 +72,7 @@
         },
         "plan": { "type": "string", "enum": ["Starter", "Growth", "Premium"] },
         "status": { "type": "string", "enum": ["Pending", "Approved", "Suspended"] },
+        "mustChangePassword": { "type": "boolean" },
         "settings": {
           "type": "object",
           "properties": {

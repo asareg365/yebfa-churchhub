@@ -2,7 +2,24 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Settings, User, Bell, Shield, Cloud, CreditCard, Save, Check, Info, Smartphone, Trash2, Loader2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { 
+  Settings, 
+  User, 
+  Bell, 
+  Shield, 
+  Cloud, 
+  CreditCard, 
+  Save, 
+  Check, 
+  Info, 
+  Smartphone, 
+  Trash2, 
+  Loader2, 
+  KeyRound,
+  ShieldAlert,
+  Lock
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,21 +28,28 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { useUser, useFirestore, useCollection } from "@/firebase";
+import { useUser, useFirestore, useCollection, useAuth } from "@/firebase";
 import { doc, updateDoc, query, collection, where, limit } from "firebase/firestore";
+import { updatePassword } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 
 export default function SettingsPage() {
   const { user } = useUser();
+  const auth = useAuth();
   const db = useFirestore();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+  const isForced = searchParams.get("force") === "true";
+
   const [isSaving, setIsSaving] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [activeTab, setActiveTab] = useState(isForced ? "security" : "general");
 
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
-    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email), limit(1));
+    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
   }, [db, user?.email]);
 
   const { data: churches, loading: churchLoading } = useCollection(churchQuery);
@@ -38,6 +62,11 @@ export default function SettingsPage() {
     birthdaySmsEnabled: true,
     lowCreditAlertEnabled: true,
     dailyReportsEnabled: false
+  });
+
+  const [passwords, setPasswords] = useState({
+    new: "",
+    confirm: ""
   });
 
   useEffect(() => {
@@ -83,6 +112,44 @@ export default function SettingsPage() {
       .finally(() => setIsSaving(false));
   };
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwords.new !== passwords.confirm) {
+      toast({ title: "Passwords do not match", variant: "destructive" });
+      return;
+    }
+    if (passwords.new.length < 6) {
+      toast({ title: "Password too short", description: "Minimum 6 characters required.", variant: "destructive" });
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      if (auth.currentUser) {
+        await updatePassword(auth.currentUser, passwords.new);
+        
+        // If they were forced to change, update the flag in Firestore
+        if (currentChurch?.mustChangePassword) {
+          const docRef = doc(db, "churches", currentChurch.id);
+          await updateDoc(docRef, { mustChangePassword: false });
+        }
+
+        toast({ title: "Password changed", description: "Your security credentials have been updated." });
+        setPasswords({ new: "", confirm: "" });
+      }
+    } catch (error: any) {
+      toast({ 
+        title: "Update failed", 
+        description: error.message === "Firebase: Error (auth/requires-recent-login)." 
+          ? "Please sign out and sign in again to verify your identity before changing password." 
+          : error.message, 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
   const plans = [
     { name: "Starter", price: "200", description: "Essential tools for small congregations.", features: ["Up to 200 members", "Attendance tracking", "Basic reports"], current: currentChurch?.plan === "Starter" },
     { name: "Growth", price: "500", description: "Advanced features for growing ministries.", features: ["Up to 1,000 members", "Finance management", "AI Insights Lite"], current: currentChurch?.plan === "Growth" },
@@ -104,17 +171,19 @@ export default function SettingsPage() {
           <h2 className="text-3xl font-bold tracking-tight mb-1">Settings</h2>
           <p className="text-muted-foreground">Manage your church configuration and platform preferences.</p>
         </div>
-        <Button onClick={handleSave} disabled={isSaving} className="bg-primary hover:bg-primary/80">
-          {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          Save Changes
-        </Button>
+        {!isForced && (
+          <Button onClick={handleSave} disabled={isSaving} className="bg-primary hover:bg-primary/80">
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save Changes
+          </Button>
+        )}
       </div>
 
-      <Tabs defaultValue="general" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="glass border-white/10 p-1 rounded-2xl">
-          <TabsTrigger value="general" className="rounded-xl px-6">General</TabsTrigger>
-          <TabsTrigger value="notifications" className="rounded-xl px-6">Notifications</TabsTrigger>
-          <TabsTrigger value="billing" className="rounded-xl px-6">Billing</TabsTrigger>
+          <TabsTrigger value="general" className="rounded-xl px-6" disabled={isForced}>General</TabsTrigger>
+          <TabsTrigger value="notifications" className="rounded-xl px-6" disabled={isForced}>Notifications</TabsTrigger>
+          <TabsTrigger value="billing" className="rounded-xl px-6" disabled={isForced}>Billing</TabsTrigger>
           <TabsTrigger value="security" className="rounded-xl px-6">Security</TabsTrigger>
         </TabsList>
 
@@ -252,27 +321,81 @@ export default function SettingsPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="security" className="animate-in fade-in-50 duration-500">
-          <Card className="glass border-destructive/20 overflow-hidden">
-            <CardHeader className="bg-destructive/5 border-b border-white/5">
-              <CardTitle className="text-destructive flex items-center gap-2">
-                <Shield className="w-5 h-5" />
-                Danger Zone
+        <TabsContent value="security" className="space-y-6 animate-in fade-in-50 duration-500">
+          {isForced && (
+            <Alert className="border-primary/50 bg-primary/10">
+              <ShieldAlert className="h-4 w-4 text-primary" />
+              <AlertTitle>Password Change Required</AlertTitle>
+              <AlertDescription>
+                You are currently using a one-time password. Please update your password to continue to the dashboard.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <Card className="glass">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Lock className="h-5 w-5 text-primary" />
+                Change Password
               </CardTitle>
-              <CardDescription>Critical actions for your church account that cannot be undone.</CardDescription>
+              <CardDescription>Update your security credentials.</CardDescription>
             </CardHeader>
-            <CardContent className="pt-6 space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-2xl bg-destructive/5 border border-destructive/10">
-                <div>
-                  <h4 className="font-bold text-destructive">Delete Church Data</h4>
-                  <p className="text-sm text-muted-foreground">Permanently remove all members, records, and financial history.</p>
+            <CardContent>
+              <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">New Password</Label>
+                  <Input 
+                    id="new-password"
+                    type="password"
+                    value={passwords.new}
+                    onChange={(e) => setPasswords({...passwords, new: e.target.value})}
+                    className="bg-white/5 border-white/10"
+                    placeholder="Min. 6 characters"
+                    required
+                  />
                 </div>
-                <Button variant="destructive" className="bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive hover:text-white rounded-xl">
-                  <Trash2 className="w-4 h-4 mr-2" /> Delete Everything
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm New Password</Label>
+                  <Input 
+                    id="confirm-password"
+                    type="password"
+                    value={passwords.confirm}
+                    onChange={(e) => setPasswords({...passwords, confirm: e.target.value})}
+                    className="bg-white/5 border-white/10"
+                    placeholder="Repeat new password"
+                    required
+                  />
+                </div>
+                <Button type="submit" disabled={isChangingPassword} className="w-full">
+                  {isChangingPassword ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <KeyRound className="h-4 w-4 mr-2" />}
+                  Update Password
                 </Button>
-              </div>
+              </form>
             </CardContent>
           </Card>
+
+          {!isForced && (
+            <Card className="glass border-destructive/20 overflow-hidden">
+              <CardHeader className="bg-destructive/5 border-b border-white/5">
+                <CardTitle className="text-destructive flex items-center gap-2">
+                  <Shield className="w-5 h-5" />
+                  Danger Zone
+                </CardTitle>
+                <CardDescription>Critical actions for your church account that cannot be undone.</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex items-center justify-between p-4 rounded-2xl bg-destructive/5 border border-destructive/10">
+                  <div>
+                    <h4 className="font-bold text-destructive">Delete Church Data</h4>
+                    <p className="text-sm text-muted-foreground">Permanently remove all members, records, and financial history.</p>
+                  </div>
+                  <Button variant="destructive" className="bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive hover:text-white rounded-xl">
+                    <Trash2 className="w-4 h-4 mr-2" /> Delete Everything
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>

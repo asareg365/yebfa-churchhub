@@ -20,7 +20,9 @@ import {
   Calendar,
   AlertCircle,
   Database,
-  User
+  User,
+  KeyRound,
+  Copy
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -86,6 +88,7 @@ export default function SystemAdminPortal() {
   const [editingChurch, setEditingChurch] = useState<any>(null);
   const [managingUsers, setManagingUsers] = useState<any>(null);
   const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [otpDialog, setOtpDialog] = useState<{ isOpen: boolean, password: string, email: string } | null>(null);
   
   const initialChurchState = {
     name: "",
@@ -98,8 +101,6 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // CRITICAL: Queries must match security rules. For Super Admins to see documents, 
-  // we must query where their normalized email is present in the adminEmails array.
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
     const normalizedEmail = user.email.toLowerCase().trim();
@@ -111,7 +112,6 @@ export default function SystemAdminPortal() {
 
   const { data: rawChurches, loading: collectionLoading, error: collectionError } = useCollection(churchesQuery);
 
-  // Client-side filtering and sorting for performance and reliability
   const sortedChurches = useMemo(() => {
     if (!rawChurches) return [];
     
@@ -152,6 +152,15 @@ export default function SystemAdminPortal() {
     return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').trim();
   };
 
+  const generateOTP = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let otp = "";
+    for (let i = 0; i < 8; i++) {
+      otp += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return otp;
+  };
+
   const handleAddChurch = async () => {
     if (!newChurch.name || !newChurch.adminEmail) {
       toast({ title: "Missing fields", description: "Name and email are required.", variant: "destructive" });
@@ -160,8 +169,8 @@ export default function SystemAdminPortal() {
 
     const churchesRef = collection(db, "churches");
     const slug = newChurch.slug || generateSlug(newChurch.name);
+    const otp = generateOTP();
     
-    // Ensure all admin emails are lowercased for matching
     const normalizedAdminEmail = newChurch.adminEmail.toLowerCase().trim();
     const authorizedEmails = Array.from(new Set([
       normalizedAdminEmail, 
@@ -173,6 +182,7 @@ export default function SystemAdminPortal() {
       slug: slug,
       adminEmail: normalizedAdminEmail,
       adminEmails: authorizedEmails,
+      mustChangePassword: true,
       registeredAt: serverTimestamp(),
       settings: {
         birthdaySmsEnabled: true,
@@ -187,6 +197,7 @@ export default function SystemAdminPortal() {
     addDoc(churchesRef, churchData)
       .then(() => {
         toast({ title: "Ministry Registered", description: `Tenant ID: ${slug} initialized.` });
+        setOtpDialog({ isOpen: true, password: otp, email: normalizedAdminEmail });
       })
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
@@ -301,6 +312,11 @@ export default function SystemAdminPortal() {
     if (!ts) return "Just now";
     if (ts.toDate) return ts.toDate().toLocaleDateString();
     return "Processing...";
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copied to clipboard" });
   };
 
   if (userLoading) {
@@ -456,6 +472,51 @@ export default function SystemAdminPortal() {
           )}
         </CardContent>
       </Card>
+
+      {/* OTP Dialog */}
+      <Dialog open={!!otpDialog} onOpenChange={(open) => !open && setOtpDialog(null)}>
+        <DialogContent className="glass max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-primary" />
+              One-Time Setup Password
+            </DialogTitle>
+            <DialogDescription>
+              A one-time setup password has been generated for the new administrator. 
+              Please provide these credentials to them. They will be required to change this password on their first sign-in.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2 p-4 rounded-xl bg-white/5 border border-white/10">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground font-bold">Admin Email</Label>
+              <div className="flex items-center justify-between gap-2">
+                <code className="text-sm font-mono">{otpDialog?.email}</code>
+                <Button variant="ghost" size="icon" onClick={() => copyToClipboard(otpDialog?.email || "")}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2 p-4 rounded-xl bg-primary/10 border border-primary/20">
+              <Label className="text-xs uppercase tracking-wider text-primary font-bold">One-Time Password</Label>
+              <div className="flex items-center justify-between gap-2">
+                <code className="text-lg font-bold font-mono tracking-widest text-primary">{otpDialog?.password}</code>
+                <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/20" onClick={() => copyToClipboard(otpDialog?.password || "")}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <Alert className="bg-accent/5 border-accent/20">
+              <Info className="h-4 w-4 text-accent" />
+              <AlertDescription className="text-xs">
+                Important: Create the Auth account in the Firebase console or share these credentials for the admin to claim their church.
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter>
+            <Button className="w-full" onClick={() => setOtpDialog(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Church Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
