@@ -98,7 +98,6 @@ export default function SystemAdminPortal() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   
-  // Dialog States
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingChurch, setEditingChurch] = useState<any>(null);
   const [managingUsersId, setManagingUsersId] = useState<string | null>(null);
@@ -120,6 +119,9 @@ export default function SystemAdminPortal() {
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
     const email = user.email.toLowerCase().trim();
+    if (SUPER_ADMINS.includes(email)) {
+      return query(collection(db, "churches"));
+    }
     return query(collection(db, "churches"), where("adminEmails", "array-contains", email));
   }, [db, user?.email]);
 
@@ -318,8 +320,8 @@ export default function SystemAdminPortal() {
   };
 
   const handleRemoveAdmin = (email: string) => {
-    if (!managingUsers) return;
-    const churchDoc = doc(db, "churches", managingUsers.id);
+    if (!managingUsersId) return;
+    const churchDoc = doc(db, "churches", managingUsersId);
     
     updateDoc(churchDoc, {
       adminEmails: arrayRemove(email)
