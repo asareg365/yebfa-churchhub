@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -34,6 +33,7 @@ import { cn } from '@/lib/utils';
 import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, query, orderBy, limit, where } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { useMemo } from 'react';
 import { useSearch } from '@/context/search-context';
 
