@@ -23,7 +23,8 @@ import {
   User,
   KeyRound,
   Copy,
-  Info
+  Info,
+  SendHorizontal
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -66,7 +67,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCollection, useFirestore, useUser, useAuth } from "@/firebase";
 import { collection, doc, updateDoc, query, setDoc, serverTimestamp, arrayUnion, arrayRemove, where } from "firebase/firestore";
-import { signOut, createUserWithEmailAndPassword, getAuth, signOut as authSignOut } from "firebase/auth";
+import { signOut, createUserWithEmailAndPassword, getAuth, signOut as authSignOut, sendPasswordResetEmail } from "firebase/auth";
 import { initializeApp, deleteApp } from "firebase/app";
 import { firebaseConfig } from "@/firebase/config";
 import { useToast } from "@/hooks/use-toast";
@@ -116,10 +117,11 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // For System Admins, we fetch the directory using a super-admin context filter
+  // Directory query: Filter by global admin identity
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
-    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()));
+    const email = user.email.toLowerCase().trim();
+    return query(collection(db, "churches"), where("adminEmails", "array-contains", email));
   }, [db, user?.email]);
 
   const { data: rawChurches, loading: collectionLoading } = useCollection(churchesQuery);
@@ -219,8 +221,7 @@ export default function SystemAdminPortal() {
         await authSignOut(secondaryAuth);
       } catch (authError: any) {
         if (authError.code !== 'auth/email-already-in-use') {
-          console.error("Auth creation failed:", authError);
-          toast({ title: "Auth Warning", description: "Church record created, but user account setup failed.", variant: "destructive" });
+          toast({ title: "Auth Notification", description: "Church linked to an existing account." });
         }
       } finally {
         await deleteApp(secondaryApp);
@@ -302,7 +303,6 @@ export default function SystemAdminPortal() {
     })
     .then(() => {
       setNewAdminEmail("");
-      // Deduplicate emails locally for state update
       const updatedEmails = Array.from(new Set([...(managingUsers.adminEmails || []), normalizedEmail]));
       setManagingUsers({
         ...managingUsers,
@@ -342,6 +342,16 @@ export default function SystemAdminPortal() {
       });
       errorEmitter.emit('permission-error', permissionError);
     });
+  };
+
+  const handleTriggerReset = (email: string) => {
+    sendPasswordResetEmail(auth, email)
+      .then(() => {
+        toast({ title: "Reset link sent", description: `A password reset link was sent to ${email}.` });
+      })
+      .catch((error) => {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      });
   };
 
   const formatTimestamp = (ts: any) => {
@@ -533,7 +543,7 @@ export default function SystemAdminPortal() {
             <Alert className="bg-accent/5 border-accent/20">
               <Info className="h-4 w-4 text-accent" />
               <AlertDescription className="text-xs">
-                Important: Create the Auth account in the Firebase console or share these credentials for the admin to claim their church.
+                Important: Ensure the administrator logs in to complete their registration.
               </AlertDescription>
             </Alert>
           </div>
@@ -684,20 +694,35 @@ export default function SystemAdminPortal() {
               <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Active Admins</Label>
               <div className="rounded-xl border border-white/5 overflow-hidden">
                 {managingUsers?.adminEmails?.length > 0 ? (
-                  // Deduplicate admins for rendering to avoid duplicate key errors
                   Array.from(new Set(managingUsers.adminEmails as string[])).map((email: string) => (
-                    <div key={email} className="flex items-center justify-between p-3 bg-white/5 border-b border-white/5 last:border-0">
-                      <span className="text-sm font-medium">{email}</span>
-                      {email !== managingUsers.adminEmail && (
+                    <div key={email} className="flex items-center justify-between p-3 bg-white/5 border-b border-white/5 last:border-0 group">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">{email}</span>
+                        {email === managingUsers.adminEmail && <span className="text-[10px] text-primary uppercase font-bold">Owner</span>}
+                        {SUPER_ADMINS.includes(email) && <span className="text-[10px] text-accent uppercase font-bold">System Admin</span>}
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                          onClick={() => setAdminToRemove(email)}
+                          className="h-8 w-8 text-primary hover:bg-primary/10"
+                          onClick={() => handleTriggerReset(email)}
+                          title="Send Password Reset"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <SendHorizontal className="h-4 w-4" />
                         </Button>
-                      )}
+                        {!SUPER_ADMINS.includes(email) && email !== managingUsers.adminEmail && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                            onClick={() => setAdminToRemove(email)}
+                            title="Remove Admin"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))
                 ) : (
