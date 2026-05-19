@@ -103,7 +103,7 @@ export default function SystemAdminPortal() {
   const [managingUsersId, setManagingUsersId] = useState<string | null>(null);
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [otpDialog, setOtpDialog] = useState<{ isOpen: boolean, password: string, email: string } | null>(null);
-  const [adminToRemove, setAdminToRemove] = useState<string | null>(null);
+  const [adminToRemove, setAdminToRemove] = useState<{ email: string; churchId: string } | null>(null);
   
   const initialChurchState = {
     name: "",
@@ -319,16 +319,14 @@ export default function SystemAdminPortal() {
     });
   };
 
-  const handleRemoveAdmin = (email: string) => {
-    if (!managingUsersId) return;
-    const churchDoc = doc(db, "churches", managingUsersId);
-    
+  const handleRemoveAdmin = (email: string, churchId: string) => {
+    const churchDoc = doc(db, "churches", churchId);
     updateDoc(churchDoc, {
       adminEmails: arrayRemove(email)
     })
     .then(() => {
       setAdminToRemove(null);
-      toast({ title: "Admin user removed" });
+      toast({ title: "Admin user access revoked" });
     })
     .catch(async (error) => {
       const permissionError = new FirestorePermissionError({
@@ -391,23 +389,6 @@ export default function SystemAdminPortal() {
             Logout
           </Button>
         </div>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-         <Alert className="glass border-primary/20 bg-primary/5">
-            <User className="h-4 w-4 text-primary" />
-            <AlertTitle>Admin Identity</AlertTitle>
-            <AlertDescription className="text-xs font-mono">
-              Logged in as: {user?.email?.toLowerCase()}
-            </AlertDescription>
-         </Alert>
-         <Alert className="glass border-accent/20 bg-accent/5">
-            <Database className="h-4 w-4 text-accent" />
-            <AlertTitle>Directory Status</AlertTitle>
-            <AlertDescription className="text-xs">
-              Live synchronization active. Showing {sortedChurches.length} organizations.
-            </AlertDescription>
-         </Alert>
       </div>
 
       <Card className="glass border-white/10">
@@ -497,6 +478,7 @@ export default function SystemAdminPortal() {
         </CardContent>
       </Card>
 
+      {/* Setup OTP Dialog */}
       <Dialog open={!!otpDialog} onOpenChange={(open) => !open && setOtpDialog(null)}>
         <DialogContent className="glass max-w-md">
           <DialogHeader>
@@ -527,12 +509,6 @@ export default function SystemAdminPortal() {
                 </Button>
               </div>
             </div>
-            <Alert className="bg-accent/5 border-accent/20">
-              <Info className="h-4 w-4 text-accent" />
-              <AlertDescription className="text-xs">
-                Ensure the administrator logs in to update their password.
-              </AlertDescription>
-            </Alert>
           </div>
           <DialogFooter>
             <Button className="w-full" onClick={() => setOtpDialog(null)}>Done</Button>
@@ -540,6 +516,7 @@ export default function SystemAdminPortal() {
         </DialogContent>
       </Dialog>
 
+      {/* Add Church Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
         setIsAddDialogOpen(open);
         if (!open) setNewChurch(initialChurchState);
@@ -613,8 +590,9 @@ export default function SystemAdminPortal() {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Church Dialog */}
       <Dialog open={!!editingChurch} onOpenChange={(open) => !open && setEditingChurch(null)}>
-        <DialogContent className="glass max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="glass max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Organization Configuration</DialogTitle>
           </DialogHeader>
@@ -652,6 +630,7 @@ export default function SystemAdminPortal() {
         </DialogContent>
       </Dialog>
 
+      {/* Manage Admins Dialog */}
       <Dialog open={!!managingUsersId} onOpenChange={(open) => !open && setManagingUsersId(null)}>
         <DialogContent className="glass max-w-md">
           <DialogHeader>
@@ -700,10 +679,10 @@ export default function SystemAdminPortal() {
                             variant="ghost" 
                             size="icon" 
                             className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setAdminToRemove(email);
+                            onClick={() => {
+                              if (managingUsersId) {
+                                setAdminToRemove({ email, churchId: managingUsersId });
+                              }
                             }}
                             title="Remove Admin"
                           >
@@ -727,12 +706,16 @@ export default function SystemAdminPortal() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!adminToRemove} onOpenChange={(open) => !open && setAdminToRemove(null)}>
+      {/* Admin Removal Alert Dialog */}
+      <AlertDialog 
+        open={!!adminToRemove} 
+        onOpenChange={(open) => !open && setAdminToRemove(null)}
+      >
         <AlertDialogContent className="glass">
           <AlertDialogHeader>
-            <AlertDialogTitle>Revoke Access?</AlertDialogTitle>
+            <AlertDialogTitle>Revoke Admin Access?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove <strong>{adminToRemove}</strong> from the authorized administrators list.
+              Are you sure you want to remove <strong>{adminToRemove?.email}</strong>? They will immediately lose access to this organization's dashboard.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -740,7 +723,9 @@ export default function SystemAdminPortal() {
             <AlertDialogAction 
               onClick={(e) => {
                 e.preventDefault();
-                if (adminToRemove) handleRemoveAdmin(adminToRemove);
+                if (adminToRemove) {
+                  handleRemoveAdmin(adminToRemove.email, adminToRemove.churchId);
+                }
               }}
               className="bg-destructive hover:bg-destructive/90 text-white"
             >
