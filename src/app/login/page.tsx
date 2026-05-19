@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
@@ -7,7 +8,7 @@ import {
   createUserWithEmailAndPassword, 
 } from "firebase/auth";
 import { useAuth, useFirestore } from "@/firebase";
-import { collection, addDoc, serverTimestamp, query, where, getDocs, limit } from "firebase/firestore";
+import { collection, doc, setDoc, serverTimestamp, query, where, getDocs, limit } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -109,9 +110,7 @@ function LoginContent() {
     try {
       const normalizedEmail = email.toLowerCase().trim();
       
-      // We first create the church record to ensure slug uniqueness if rules allow
-      // Note: If Auth fails later, we have an orphaned church.
-      // But usually, we create User first.
+      // Create auth account
       await createUserWithEmailAndPassword(auth, normalizedEmail, password);
       
       const authorizedEmails = Array.from(new Set([
@@ -136,8 +135,8 @@ function LoginContent() {
         }
       };
 
-      const churchesRef = collection(db, "churches");
-      addDoc(churchesRef, churchData)
+      const churchDocRef = doc(db, "churches", finalSlug);
+      setDoc(churchDocRef, churchData)
         .then(() => {
           toast({ 
             title: "Ministry Onboarded!", 
@@ -147,7 +146,7 @@ function LoginContent() {
         })
         .catch(async (error) => {
           const permissionError = new FirestorePermissionError({
-            path: churchesRef.path,
+            path: churchDocRef.path,
             operation: 'create',
             requestResourceData: churchData,
           });

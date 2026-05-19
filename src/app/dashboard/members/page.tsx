@@ -45,7 +45,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useCollection, useFirestore, useUser } from "@/firebase";
-import { collection, addDoc, serverTimestamp, doc, deleteDoc, query, where, limit, getDocs } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, deleteDoc, query, where, limit } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -93,10 +93,9 @@ export default function MembersPage() {
       photo: `https://picsum.photos/seed/${Math.random()}/100/100`
     };
 
-    setIsAddDialogOpen(false);
-
     addDoc(membersRef, memberData)
       .then(() => {
+        setIsAddDialogOpen(false); // Close dialog on success
         setNewMember({ name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "" });
         toast({ title: "Member added successfully" });
       })

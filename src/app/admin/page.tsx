@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -54,7 +55,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCollection, useFirestore, useUser, useAuth } from "@/firebase";
-import { collection, doc, updateDoc, query, addDoc, serverTimestamp, arrayUnion, arrayRemove, where } from "firebase/firestore";
+import { collection, doc, updateDoc, query, setDoc, serverTimestamp, arrayUnion, arrayRemove, where } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -101,8 +102,7 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // Firestore Security Rules require a query that matches the authorized list.
-  // We filter by the current user's email since Super Admins are added to every church's adminEmails.
+  // Filter query to match security rules
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
     const email = user.email.toLowerCase().trim();
@@ -166,8 +166,8 @@ export default function SystemAdminPortal() {
       return;
     }
 
-    const churchesRef = collection(db, "churches");
-    const slug = newChurch.slug || generateSlug(newChurch.name);
+    const finalSlug = newChurch.slug || generateSlug(newChurch.name);
+    const churchDocRef = doc(db, "churches", finalSlug);
     const otp = generateOTP();
     
     const normalizedAdminEmail = newChurch.adminEmail.toLowerCase().trim();
@@ -178,7 +178,7 @@ export default function SystemAdminPortal() {
 
     const churchData = {
       name: newChurch.name,
-      slug: slug,
+      slug: finalSlug,
       adminEmail: normalizedAdminEmail,
       adminEmails: authorizedEmails,
       plan: newChurch.plan,
@@ -196,14 +196,14 @@ export default function SystemAdminPortal() {
     setIsAddDialogOpen(false);
     setNewChurch(initialChurchState);
 
-    addDoc(churchesRef, churchData)
+    setDoc(churchDocRef, churchData)
       .then(() => {
-        toast({ title: "Ministry Registered", description: `Tenant ID: ${slug} initialized.` });
+        toast({ title: "Ministry Registered", description: `Tenant ID: ${finalSlug} initialized.` });
         setOtpDialog({ isOpen: true, password: otp, email: normalizedAdminEmail });
       })
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
-          path: churchesRef.path,
+          path: churchDocRef.path,
           operation: 'create',
           requestResourceData: churchData,
         });
@@ -232,7 +232,6 @@ export default function SystemAdminPortal() {
     const churchDoc = doc(db, "churches", editingChurch.id);
     const updateData = {
       name: editingChurch.name,
-      slug: editingChurch.slug,
       plan: editingChurch.plan,
       status: editingChurch.status,
       enabledModules: editingChurch.enabledModules || []
@@ -608,15 +607,6 @@ export default function SystemAdminPortal() {
                 className="bg-white/5"
               />
             </div>
-            <div className="space-y-2">
-              <Label>Tenant ID (Slug)</Label>
-              <Input 
-                value={editingChurch?.slug || ""} 
-                onChange={(e) => setEditingChurch({...editingChurch, slug: generateSlug(e.target.value)})} 
-                className="bg-white/5 font-mono"
-              />
-            </div>
-
             <div className="space-y-3 pt-4 border-t border-white/5">
               <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Features Enabled</Label>
               <div className="grid grid-cols-2 gap-2">
