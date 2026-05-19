@@ -8,7 +8,6 @@ import { Footer } from '@/components/dashboard/Footer';
 import { useUser, useCollection, useFirestore } from '@/firebase';
 import { collection, query, where, limit } from 'firebase/firestore';
 import { Loader2, ShieldAlert } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -53,7 +52,10 @@ export default function DashboardLayout({
   if (loading || churchLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-10 h-10 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground animate-pulse">Initializing Ministry Hub...</p>
+        </div>
       </div>
     );
   }
@@ -71,7 +73,7 @@ export default function DashboardLayout({
           {currentChurch?.mustChangePassword &&
           pathname !== '/dashboard/settings' ? (
             <div className="flex items-center justify-center h-full p-8">
-              <Card className="glass border-primary/30 max-w-md w-full">
+              <Card className="glass border-primary/30 max-w-md w-full shadow-2xl">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-primary">
                     <ShieldAlert className="h-6 w-6" />
@@ -80,11 +82,13 @@ export default function DashboardLayout({
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-muted-foreground">
-                    For your security, you must change your one-time password
-                    before accessing the dashboard.
+                    For your security, you must change your assigned password
+                    before accessing the ministry dashboard.
                   </p>
                   <Link href="/dashboard/settings?force=true" className="block">
-                    <Button className="w-full">Go to Settings</Button>
+                    <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+                      Go to Security Settings
+                    </Button>
                   </Link>
                 </CardContent>
               </Card>

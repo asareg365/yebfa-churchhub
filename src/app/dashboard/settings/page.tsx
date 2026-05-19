@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -30,7 +29,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { useUser, useFirestore, useCollection, useAuth } from "@/firebase";
 import { doc, updateDoc, query, collection, where, limit } from "firebase/firestore";
-import { updatePassword } from "firebase/auth";
+import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -138,11 +137,18 @@ export default function SettingsPage() {
         setPasswords({ new: "", confirm: "" });
       }
     } catch (error: any) {
+      console.error("Password update error:", error);
+      
+      let message = error.message;
+      if (error.code === 'auth/requires-recent-login') {
+        message = "For security, please sign out and sign back in to change your password.";
+      } else if (error.code === 'auth/network-request-failed') {
+        message = "Network error. Please check your internet connection and try again.";
+      }
+
       toast({ 
         title: "Update failed", 
-        description: error.message === "Firebase: Error (auth/requires-recent-login)." 
-          ? "Please sign out and sign in again to verify your identity before changing password." 
-          : error.message, 
+        description: message, 
         variant: "destructive" 
       });
     } finally {
@@ -325,9 +331,9 @@ export default function SettingsPage() {
           {isForced && (
             <Alert className="border-primary/50 bg-primary/10">
               <ShieldAlert className="h-4 w-4 text-primary" />
-              <AlertTitle>Password Change Required</AlertTitle>
+              <AlertTitle>Security Update Required</AlertTitle>
               <AlertDescription>
-                You are currently using a one-time password. Please update your password to continue to the dashboard.
+                For protection, please update your ministry account password before proceeding.
               </AlertDescription>
             </Alert>
           )}
@@ -336,9 +342,9 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Lock className="h-5 w-5 text-primary" />
-                Change Password
+                Security Credentials
               </CardTitle>
-              <CardDescription>Update your security credentials.</CardDescription>
+              <CardDescription>Update your ministry dashboard access password.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
@@ -366,9 +372,9 @@ export default function SettingsPage() {
                     required
                   />
                 </div>
-                <Button type="submit" disabled={isChangingPassword} className="w-full">
+                <Button type="submit" disabled={isChangingPassword} className="w-full bg-primary text-primary-foreground">
                   {isChangingPassword ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <KeyRound className="h-4 w-4 mr-2" />}
-                  Update Password
+                  Update Access Password
                 </Button>
               </form>
             </CardContent>
