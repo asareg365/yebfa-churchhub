@@ -22,7 +22,8 @@ import {
   Database,
   User,
   KeyRound,
-  Copy
+  Copy,
+  Info
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -104,6 +105,7 @@ export default function SystemAdminPortal() {
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
     const normalizedEmail = user.email.toLowerCase().trim();
+    // For Super Admins, we want to see all churches where they are listed as an adminEmail
     return query(
       collection(db, "churches"),
       where("adminEmails", "array-contains", normalizedEmail)
@@ -411,7 +413,7 @@ export default function SystemAdminPortal() {
               </TableHeader>
               <TableBody>
                 {sortedChurches.map((church) => (
-                  <TableRow key={church.id} className="border-white/5 hover:bg-white/5 transition-colors">
+                  <TableRow key={church.id} className="border-white/5 hover:bg-white/5 transition-colors border-white/5">
                     <TableCell className="font-bold">{church.name}</TableCell>
                     <TableCell>
                       <code className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-bold">
