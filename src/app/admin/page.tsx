@@ -49,7 +49,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCollection, useFirestore, useUser, useAuth } from "@/firebase";
-import { collection, doc, updateDoc, query, orderBy, addDoc, serverTimestamp, arrayUnion, arrayRemove } from "firebase/firestore";
+import { collection, doc, updateDoc, query, addDoc, serverTimestamp, arrayUnion, arrayRemove } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -94,11 +94,21 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
+  // Simplified query to avoid indexing issues
   const churchesQuery = useMemo(() => {
-    return query(collection(db, "churches"), orderBy("registeredAt", "desc"));
+    return collection(db, "churches");
   }, [db]);
 
-  const { data: churches, loading: collectionLoading } = useCollection(churchesQuery);
+  const { data: rawChurches, loading: collectionLoading } = useCollection(churchesQuery);
+
+  // Client-side sorting as a fallback for missing indexes
+  const sortedChurches = useMemo(() => {
+    return [...(rawChurches || [])].sort((a, b) => {
+      const dateA = a.registeredAt?.toDate?.() || new Date(0);
+      const dateB = b.registeredAt?.toDate?.() || new Date(0);
+      return dateB.getTime() - dateA.getTime();
+    });
+  }, [rawChurches]);
 
   useEffect(() => {
     if (!userLoading) {
@@ -273,7 +283,7 @@ export default function SystemAdminPortal() {
     );
   }
 
-  const filteredChurches = (churches || []).filter(c => 
+  const filteredChurches = sortedChurches.filter(c => 
     c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.adminEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.slug?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -343,9 +353,11 @@ export default function SystemAdminPortal() {
                         {church.slug}
                       </code>
                     </TableCell>
-                    <TableCell className="text-muted-foreground flex items-center gap-2">
-                      <Calendar className="h-3 w-3 opacity-50" />
-                      {formatTimestamp(church.registeredAt)}
+                    <TableCell className="text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-3 w-3 opacity-50" />
+                        {formatTimestamp(church.registeredAt)}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge className={cn(
