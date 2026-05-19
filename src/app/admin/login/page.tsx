@@ -26,7 +26,7 @@ export default function AdminLoginPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!userLoading && user && SUPER_ADMINS.includes(user.email || "")) {
+    if (!userLoading && user && SUPER_ADMINS.includes(user.email?.toLowerCase() || "")) {
       router.push("/admin");
     }
   }, [user, userLoading, router]);
@@ -35,8 +35,10 @@ export default function AdminLoginPage() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      if (SUPER_ADMINS.includes(userCredential.user.email || "")) {
+      const userCredential = await signInWithEmailAndPassword(auth, email.toLowerCase().trim(), password);
+      const userEmail = userCredential.user.email?.toLowerCase() || "";
+      
+      if (SUPER_ADMINS.includes(userEmail)) {
         router.push("/admin");
         toast({ title: "Welcome, Administrator", description: "Access granted to the system portal." });
       } else {
@@ -45,7 +47,6 @@ export default function AdminLoginPage() {
           description: "This portal is reserved for System Administrators.", 
           variant: "destructive" 
         });
-        // We might want to sign them out if they aren't a super admin but logged in here
       }
     } catch (error: any) {
       toast({ 
@@ -68,7 +69,6 @@ export default function AdminLoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-background relative overflow-hidden">
-      {/* Background blobs for aesthetics */}
       <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary rounded-full blur-[120px]" />
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent rounded-full blur-[120px]" />

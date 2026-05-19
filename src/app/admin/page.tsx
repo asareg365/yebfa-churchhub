@@ -98,13 +98,13 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // Firestore "Query is not a filter" rule: 
-  // We must query specifically for documents where the user is an admin
+  // Use a query that matches security rules: email in adminEmails array
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
+    const normalizedEmail = user.email.toLowerCase().trim();
     return query(
       collection(db, "churches"),
-      where("adminEmails", "array-contains", user.email.toLowerCase().trim())
+      where("adminEmails", "array-contains", normalizedEmail)
     );
   }, [db, user?.email]);
 
@@ -339,7 +339,7 @@ export default function SystemAdminPortal() {
             <User className="h-4 w-4 text-primary" />
             <AlertTitle>Admin Identity</AlertTitle>
             <AlertDescription className="text-xs font-mono">
-              Logged in as: {user?.email}
+              Logged in as: {user?.email?.toLowerCase()}
             </AlertDescription>
          </Alert>
          <Alert className="glass border-accent/20 bg-accent/5">
