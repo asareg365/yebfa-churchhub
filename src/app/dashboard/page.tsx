@@ -8,7 +8,6 @@ import {
   CreditCard, 
   Cake, 
   ArrowUpRight,
-  ArrowDownRight,
   Activity,
   DollarSign,
   Loader2,
@@ -165,19 +164,13 @@ export default function DashboardPage() {
               {attendance?.length ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={[...attendance].reverse()}>
-                    <defs>
-                      <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
                     <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                     <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                     <Tooltip 
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }}
                       itemStyle={{ color: 'hsl(var(--primary))' }}
                     />
-                    <Area type="monotone" dataKey="count" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorCount)" strokeWidth={3} />
+                    <Area type="monotone" dataKey="count" stroke="hsl(var(--primary))" fillOpacity={1} strokeWidth={3} fill="url(#colorCount)" />
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, Search, Filter, Download, MoreVertical, QrCode, Mail, Phone, Loader2, Users as UsersIcon, Cake, Trash2 } from "lucide-react";
+import { Plus, Search, Download, MoreVertical, QrCode, Mail, Phone, Loader2, Users as UsersIcon, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 

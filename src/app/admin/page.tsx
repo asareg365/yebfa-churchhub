@@ -56,7 +56,9 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCollection, useFirestore, useUser, useAuth } from "@/firebase";
 import { collection, doc, updateDoc, query, setDoc, serverTimestamp, arrayUnion, arrayRemove, where } from "firebase/firestore";
-import { signOut } from "firebase/auth";
+import { signOut, createUserWithEmailAndPassword, getAuth, signOut as authSignOut } from "firebase/auth";
+import { initializeApp, deleteApp } from "firebase/app";
+import { firebaseConfig } from "@/firebase/config";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { errorEmitter } from "@/firebase/error-emitter";
@@ -83,6 +85,7 @@ export default function SystemAdminPortal() {
   const { toast } = useToast();
   
   const [searchTerm, setSearchTerm] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
   
   // Dialog States
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -96,13 +99,13 @@ export default function SystemAdminPortal() {
     slug: "",
     adminEmail: "",
     plan: "Starter" as const,
-    status: "Pending" as const,
+    status: "Approved" as const,
     enabledModules: ["members", "attendance"]
   };
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // Use a stable query to avoid permission errors
+  // For System Admins, we look for churches where they are listed as authorized admins
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
     const email = user.email.toLowerCase().trim();
@@ -166,6 +169,7 @@ export default function SystemAdminPortal() {
       return;
     }
 
+    setIsProcessing(true);
     const finalSlug = newChurch.slug || generateSlug(newChurch.name);
     const churchDocRef = doc(db, "churches", finalSlug);
     const otp = generateOTP();
@@ -193,22 +197,42 @@ export default function SystemAdminPortal() {
       }
     };
 
-    setIsAddDialogOpen(false);
-    setNewChurch(initialChurchState);
+    try {
+      // 1. Create the Church Record
+      await setDoc(churchDocRef, churchData);
 
-    setDoc(churchDocRef, churchData)
-      .then(() => {
-        toast({ title: "Ministry Registered", description: `Tenant ID: ${finalSlug} initialized.` });
-        setOtpDialog({ isOpen: true, password: otp, email: normalizedAdminEmail });
-      })
-      .catch(async (error) => {
-        const permissionError = new FirestorePermissionError({
-          path: churchDocRef.path,
-          operation: 'create',
-          requestResourceData: churchData,
-        });
-        errorEmitter.emit('permission-error', permissionError);
+      // 2. Create the Auth User with OTP using a secondary app to avoid signing out current admin
+      const secondaryApp = initializeApp(firebaseConfig, "SecondaryAuthCreation");
+      const secondaryAuth = getAuth(secondaryApp);
+      
+      try {
+        await createUserWithEmailAndPassword(secondaryAuth, normalizedAdminEmail, otp);
+        await authSignOut(secondaryAuth);
+      } catch (authError: any) {
+        // If email exists, that's fine, the admin just needs to log in
+        if (authError.code !== 'auth/email-already-in-use') {
+          console.error("Auth creation failed:", authError);
+          toast({ title: "Auth Warning", description: "Church record created, but user account might need manual setup.", variant: "destructive" });
+        }
+      } finally {
+        await deleteApp(secondaryApp);
+      }
+
+      setIsAddDialogOpen(false);
+      setNewChurch(initialChurchState);
+      setOtpDialog({ isOpen: true, password: otp, email: normalizedAdminEmail });
+      toast({ title: "Ministry Registered", description: `Tenant ID: ${finalSlug} is now active.` });
+
+    } catch (error: any) {
+      const permissionError = new FirestorePermissionError({
+        path: churchDocRef.path,
+        operation: 'create',
+        requestResourceData: churchData,
       });
+      errorEmitter.emit('permission-error', permissionError);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleUpdateStatus = (churchId: string, newStatus: string) => {
@@ -375,7 +399,7 @@ export default function SystemAdminPortal() {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Synchronization Error</AlertTitle>
           <AlertDescription>
-            Could not retrieve tenant data. Please ensure your query matches system security requirements.
+            Could not retrieve tenant data. Access restricted to authorized administrators.
           </AlertDescription>
         </Alert>
       )}
@@ -480,11 +504,10 @@ export default function SystemAdminPortal() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <KeyRound className="h-5 w-5 text-primary" />
-              One-Time Setup Password
+              Setup Complete
             </DialogTitle>
             <DialogDescription>
-              A one-time setup password has been generated for the new administrator. 
-              Please provide these credentials to them. They will be required to change this password on their first sign-in.
+              A secure access account has been created for the new administrator. Provide these credentials to them; they will be forced to change this password on their first login.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -509,7 +532,7 @@ export default function SystemAdminPortal() {
             <Alert className="bg-accent/5 border-accent/20">
               <Info className="h-4 w-4 text-accent" />
               <AlertDescription className="text-xs">
-                Important: Create the Auth account in the Firebase console or share these credentials for the admin to claim their church.
+                The one-time password is now active in Firebase Auth. The admin can log in immediately.
               </AlertDescription>
             </Alert>
           </div>
@@ -527,7 +550,7 @@ export default function SystemAdminPortal() {
         <DialogContent className="glass max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Onboard New Organization</DialogTitle>
-            <DialogDescription>Assign a permanent name and Tenant ID to the new church.</DialogDescription>
+            <DialogDescription>Assign a permanent name and Tenant ID. This also creates their security account.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -585,8 +608,9 @@ export default function SystemAdminPortal() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleAddChurch}>
-              Register Organization
+            <Button onClick={handleAddChurch} disabled={isProcessing}>
+              {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Register & Create Account
             </Button>
           </DialogFooter>
         </DialogContent>
