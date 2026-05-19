@@ -46,7 +46,6 @@ export default function DashboardPage() {
   const { data: churches } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
-  // Isolated collections for the specific tenant
   const membersRef = useMemo(() => {
     if (!currentChurch?.id) return null;
     return collection(db, "churches", currentChurch.id, "members");
@@ -199,11 +198,6 @@ export default function DashboardPage() {
                       <p className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Total Balance</p>
                       <p className="text-3xl font-bold text-accent">GH₵{totalBalance.toLocaleString()}</p>
                     </div>
-                  </div>
-                  <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                      Manage your financial health by recording tithes, offerings, and expenditures in the Finances module.
-                    </p>
                   </div>
                 </div>
                 

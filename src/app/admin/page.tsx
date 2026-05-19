@@ -117,7 +117,6 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // Directory query: Filter by global admin identity to satisfy rules and fetch relevant data
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
     const email = user.email.toLowerCase().trim();
@@ -142,7 +141,6 @@ export default function SystemAdminPortal() {
     });
   }, [rawChurches, searchTerm]);
 
-  // The specific church currently being managed for users
   const managingUsers = useMemo(() => {
     return sortedChurches.find(c => c.id === managingUsersId) || null;
   }, [sortedChurches, managingUsersId]);
@@ -491,20 +489,12 @@ export default function SystemAdminPortal() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {!collectionLoading && sortedChurches.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
-                      No organizations found in the directory.
-                    </TableCell>
-                  </TableRow>
-                )}
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
 
-      {/* OTP Dialog */}
       <Dialog open={!!otpDialog} onOpenChange={(open) => !open && setOtpDialog(null)}>
         <DialogContent className="glass max-w-md">
           <DialogHeader>
@@ -513,7 +503,7 @@ export default function SystemAdminPortal() {
               Setup Complete
             </DialogTitle>
             <DialogDescription>
-              A secure access account has been created for the new administrator. Provide these credentials to them.
+              A secure access account has been created for the new administrator.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -538,7 +528,7 @@ export default function SystemAdminPortal() {
             <Alert className="bg-accent/5 border-accent/20">
               <Info className="h-4 w-4 text-accent" />
               <AlertDescription className="text-xs">
-                Important: Ensure the administrator logs in to complete their registration.
+                Ensure the administrator logs in to update their password.
               </AlertDescription>
             </Alert>
           </div>
@@ -548,7 +538,6 @@ export default function SystemAdminPortal() {
         </DialogContent>
       </Dialog>
 
-      {/* Add Church Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
         setIsAddDialogOpen(open);
         if (!open) setNewChurch(initialChurchState);
@@ -556,7 +545,7 @@ export default function SystemAdminPortal() {
         <DialogContent className="glass max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Onboard New Organization</DialogTitle>
-            <DialogDescription>Assign a permanent name and Tenant ID. This also creates their security account.</DialogDescription>
+            <DialogDescription>Assign a permanent name and Tenant ID.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -622,7 +611,6 @@ export default function SystemAdminPortal() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Church Dialog */}
       <Dialog open={!!editingChurch} onOpenChange={(open) => !open && setEditingChurch(null)}>
         <DialogContent className="glass max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -662,12 +650,11 @@ export default function SystemAdminPortal() {
         </DialogContent>
       </Dialog>
 
-      {/* Manage Admins Dialog */}
       <Dialog open={!!managingUsersId} onOpenChange={(open) => !open && setManagingUsersId(null)}>
         <DialogContent className="glass max-w-md">
           <DialogHeader>
             <DialogTitle>Authorized Administrators</DialogTitle>
-            <DialogDescription>Manage organizational access for {managingUsers?.name}.</DialogDescription>
+            <DialogDescription>Manage access for {managingUsers?.name}.</DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             <div className="flex gap-2">
@@ -711,7 +698,11 @@ export default function SystemAdminPortal() {
                             variant="ghost" 
                             size="icon" 
                             className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                            onClick={() => setAdminToRemove(email)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setAdminToRemove(email);
+                            }}
                             title="Remove Admin"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -734,19 +725,21 @@ export default function SystemAdminPortal() {
         </DialogContent>
       </Dialog>
 
-      {/* Admin Removal Alert */}
       <AlertDialog open={!!adminToRemove} onOpenChange={(open) => !open && setAdminToRemove(null)}>
         <AlertDialogContent className="glass">
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke Access?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove <strong>{adminToRemove}</strong> from the authorized administrators list. They will no longer be able to access this ministry's portal.
+              This will remove <strong>{adminToRemove}</strong> from the authorized administrators list.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setAdminToRemove(null)}>Cancel</AlertDialogCancel>
             <AlertDialogAction 
-              onClick={() => adminToRemove && handleRemoveAdmin(adminToRemove)}
+              onClick={(e) => {
+                e.preventDefault();
+                if (adminToRemove) handleRemoveAdmin(adminToRemove);
+              }}
               className="bg-destructive hover:bg-destructive/90 text-white"
             >
               Confirm Removal
