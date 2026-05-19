@@ -95,7 +95,7 @@ export default function MembersPage() {
 
     addDoc(membersRef, memberData)
       .then(() => {
-        setIsAddDialogOpen(false); // Close dialog on success
+        setIsAddDialogOpen(false);
         setNewMember({ name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "" });
         toast({ title: "Member added successfully" });
       })
@@ -110,7 +110,7 @@ export default function MembersPage() {
   };
 
   const handleDeleteMember = () => {
-    if (!memberToDelete || !membersRef) return;
+    if (!memberToDelete || !membersRef || !currentChurch) return;
 
     const docRef = doc(db, "churches", currentChurch.id, "members", memberToDelete.id);
     deleteDoc(docRef)
