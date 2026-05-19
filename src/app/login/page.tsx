@@ -6,8 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  signInWithPopup, 
-  GoogleAuthProvider 
 } from "firebase/auth";
 import { useAuth, useFirestore } from "@/firebase";
 import { collection, addDoc, serverTimestamp, query, where, getDocs, limit } from "firebase/firestore";
@@ -16,12 +14,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, Loader2, Church, Mail, Lock, ShieldCheck } from "lucide-react";
+import { Loader2, Church, Mail, Lock, ShieldCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 import { Checkbox } from "@/components/ui/checkbox";
 import Link from "next/link";
+
+const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 
 const AVAILABLE_MODULES = [
   { id: "members", label: "Members Management" },
@@ -53,10 +53,10 @@ function LoginContent() {
 
   useEffect(() => {
     if (tenantSlug) {
-      const q = query(collection(db, "churches"), where("slug", "==", tenantSlug.toLowerCase()), limit(1));
+      const q = query(collection(db, "churches"), where("slug", "==", tenantSlug.toLowerCase().trim()), limit(1));
       getDocs(q).then(snap => {
         if (!snap.empty) {
-          setActiveChurch(snap.docs[0].data());
+          setActiveChurch({ ...snap.docs[0].data(), id: snap.docs[0].id });
         } else {
           toast({ title: "Ministry not found", description: `Tenant ID '${tenantSlug}' is invalid.`, variant: "destructive" });
         }
@@ -108,11 +108,16 @@ function LoginContent() {
         slug: slug,
         adminEmail: email,
         adminUid: userCredential.user.uid,
-        adminEmails: [email],
+        adminEmails: [email, ...SUPER_ADMINS], // Crucial: Include super admins for platform-wide visibility
         enabledModules: selectedModules,
         status: "Pending",
         plan: "Starter",
-        registeredAt: serverTimestamp()
+        registeredAt: serverTimestamp(),
+        settings: {
+          birthdaySmsEnabled: true,
+          lowCreditAlertEnabled: true,
+          dailyReportsEnabled: false
+        }
       };
 
       const churchesRef = collection(db, "churches");

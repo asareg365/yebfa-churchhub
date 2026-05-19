@@ -17,7 +17,8 @@ import {
   PlusCircle,
   Hash,
   LogOut,
-  Calendar
+  Calendar,
+  AlertCircle
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 
@@ -94,16 +96,17 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // Simplified query to avoid indexing issues
+  // Simple query for reliability
   const churchesQuery = useMemo(() => {
     return collection(db, "churches");
   }, [db]);
 
-  const { data: rawChurches, loading: collectionLoading } = useCollection(churchesQuery);
+  const { data: rawChurches, loading: collectionLoading, error: collectionError } = useCollection(churchesQuery);
 
-  // Client-side sorting as a fallback for missing indexes
+  // Client-side sorting for immediate feedback and to avoid composite index requirements
   const sortedChurches = useMemo(() => {
-    return [...(rawChurches || [])].sort((a, b) => {
+    if (!rawChurches) return [];
+    return [...rawChurches].sort((a: any, b: any) => {
       const dateA = a.registeredAt?.toDate?.() || new Date(0);
       const dateB = b.registeredAt?.toDate?.() || new Date(0);
       return dateB.getTime() - dateA.getTime();
@@ -131,7 +134,7 @@ export default function SystemAdminPortal() {
   };
 
   const generateSlug = (name: string) => {
-    return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').trim();
   };
 
   const handleAddChurch = async () => {
@@ -142,10 +145,11 @@ export default function SystemAdminPortal() {
 
     const churchesRef = collection(db, "churches");
     const slug = newChurch.slug || generateSlug(newChurch.name);
+    
     const churchData = {
       ...newChurch,
       slug: slug,
-      adminEmails: [newChurch.adminEmail, ...SUPER_ADMINS],
+      adminEmails: Array.from(new Set([newChurch.adminEmail, ...SUPER_ADMINS])),
       registeredAt: serverTimestamp(),
       settings: {
         birthdaySmsEnabled: true,
@@ -226,13 +230,13 @@ export default function SystemAdminPortal() {
     const churchDoc = doc(db, "churches", managingUsers.id);
     
     updateDoc(churchDoc, {
-      adminEmails: arrayUnion(newAdminEmail)
+      adminEmails: arrayUnion(newAdminEmail.toLowerCase().trim())
     })
     .then(() => {
       setNewAdminEmail("");
       setManagingUsers({
         ...managingUsers,
-        adminEmails: [...(managingUsers.adminEmails || []), newAdminEmail]
+        adminEmails: [...(managingUsers.adminEmails || []), newAdminEmail.toLowerCase().trim()]
       });
       toast({ title: "Admin user added" });
     })
@@ -313,6 +317,16 @@ export default function SystemAdminPortal() {
           </Button>
         </div>
       </div>
+
+      {collectionError && (
+        <Alert variant="destructive" className="glass border-destructive/50">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Synchronization Error</AlertTitle>
+          <AlertDescription>
+            Could not retrieve tenant data. Ensure you have proper administrative permissions.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Card className="glass border-white/10">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-7">
@@ -395,10 +409,10 @@ export default function SystemAdminPortal() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {filteredChurches.length === 0 && (
+                {!collectionLoading && filteredChurches.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
-                      No organizations registered yet.
+                      No organizations found.
                     </TableCell>
                   </TableRow>
                 )}
