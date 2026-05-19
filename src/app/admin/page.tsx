@@ -116,10 +116,10 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // For System Admins, we fetch the directory
+  // For System Admins, we fetch the directory using a super-admin context filter
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
-    return collection(db, "churches");
+    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()));
   }, [db, user?.email]);
 
   const { data: rawChurches, loading: collectionLoading } = useCollection(churchesQuery);
@@ -302,9 +302,11 @@ export default function SystemAdminPortal() {
     })
     .then(() => {
       setNewAdminEmail("");
+      // Deduplicate emails locally for state update
+      const updatedEmails = Array.from(new Set([...(managingUsers.adminEmails || []), normalizedEmail]));
       setManagingUsers({
         ...managingUsers,
-        adminEmails: [...(managingUsers.adminEmails || []), normalizedEmail]
+        adminEmails: updatedEmails
       });
       toast({ title: "Admin user added" });
     })
@@ -531,7 +533,7 @@ export default function SystemAdminPortal() {
             <Alert className="bg-accent/5 border-accent/20">
               <Info className="h-4 w-4 text-accent" />
               <AlertDescription className="text-xs">
-                Important: The admin will be forced to change this password on their first login.
+                Important: Create the Auth account in the Firebase console or share these credentials for the admin to claim their church.
               </AlertDescription>
             </Alert>
           </div>
@@ -682,7 +684,8 @@ export default function SystemAdminPortal() {
               <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Active Admins</Label>
               <div className="rounded-xl border border-white/5 overflow-hidden">
                 {managingUsers?.adminEmails?.length > 0 ? (
-                  managingUsers.adminEmails.map((email: string) => (
+                  // Deduplicate admins for rendering to avoid duplicate key errors
+                  Array.from(new Set(managingUsers.adminEmails as string[])).map((email: string) => (
                     <div key={email} className="flex items-center justify-between p-3 bg-white/5 border-b border-white/5 last:border-0">
                       <span className="text-sm font-medium">{email}</span>
                       {email !== managingUsers.adminEmail && (
