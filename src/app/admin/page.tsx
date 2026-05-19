@@ -116,11 +116,10 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // For System Admins, we look for churches where they are listed as authorized admins
+  // For System Admins, we look for all churches
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
-    const email = user.email.toLowerCase().trim();
-    return query(collection(db, "churches"), where("adminEmails", "array-contains", email));
+    return collection(db, "churches");
   }, [db, user?.email]);
 
   const { data: rawChurches, loading: collectionLoading, error: collectionError } = useCollection(churchesQuery);
@@ -146,6 +145,7 @@ export default function SystemAdminPortal() {
       if (!user) {
         router.push("/admin/login");
       } else if (!SUPER_ADMINS.includes(user.email?.toLowerCase() || "")) {
+        // Church Admins belong in the dashboard, not the System Portal
         router.push("/dashboard");
       }
     }
@@ -209,10 +209,9 @@ export default function SystemAdminPortal() {
     };
 
     try {
-      // 1. Create the Church Record
       await setDoc(churchDocRef, churchData);
 
-      // 2. Create the Auth User with OTP using a secondary app to avoid signing out current admin
+      // Create Auth user with OTP
       const secondaryApp = initializeApp(firebaseConfig, "SecondaryAuthCreation");
       const secondaryAuth = getAuth(secondaryApp);
       
@@ -222,7 +221,7 @@ export default function SystemAdminPortal() {
       } catch (authError: any) {
         if (authError.code !== 'auth/email-already-in-use') {
           console.error("Auth creation failed:", authError);
-          toast({ title: "Auth Warning", description: "Church record created, but user account might need manual setup.", variant: "destructive" });
+          toast({ title: "Auth Warning", description: "Church record created, but user account setup failed.", variant: "destructive" });
         }
       } finally {
         await deleteApp(secondaryApp);
@@ -404,16 +403,6 @@ export default function SystemAdminPortal() {
             </AlertDescription>
          </Alert>
       </div>
-
-      {collectionError && (
-        <Alert variant="destructive" className="glass border-destructive/50">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Synchronization Error</AlertTitle>
-          <AlertDescription>
-            Could not retrieve tenant data. Access restricted to authorized administrators.
-          </AlertDescription>
-        </Alert>
-      )}
 
       <Card className="glass border-white/10">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-7">
