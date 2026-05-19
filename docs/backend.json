@@ -17,6 +17,31 @@
       },
       "required": ["name", "department", "status"]
     },
+    "SMSLog": {
+      "title": "SMS Log",
+      "description": "Record of a sent or failed SMS communication.",
+      "type": "object",
+      "properties": {
+        "phone": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["sent", "failed", "pending"] },
+        "type": { "type": "string", "enum": ["birthday", "announcement", "test", "other"] },
+        "memberName": { "type": "string" },
+        "memberId": { "type": "string" },
+        "error": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "SMSTemplate": {
+      "title": "SMS Template",
+      "description": "Reusable SMS message structure.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
     "Attendance": {
       "title": "Attendance",
       "description": "A record of service attendance.",
@@ -97,6 +122,14 @@
     "/churches/{churchId}/members/{memberId}": {
       "schema": "Member",
       "description": "Isolated collection of church members per tenant."
+    },
+    "/churches/{churchId}/smsLogs/{logId}": {
+      "schema": "SMSLog",
+      "description": "Isolated logs of SMS sent by the tenant."
+    },
+    "/churches/{churchId}/smsTemplates/{templateId}": {
+      "schema": "SMSTemplate",
+      "description": "Isolated message templates per tenant."
     },
     "/churches/{churchId}/attendance/{attendanceId}": {
       "schema": "Attendance",
