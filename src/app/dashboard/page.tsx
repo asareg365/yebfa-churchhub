@@ -27,7 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useCollection, useFirestore, useUser } from "@/firebase";
 import { collection, query, orderBy, limit, where } from "firebase/firestore";
-import { Avatar, AvatarFallback, AvatarImage } from "@/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useMemo } from "react";
 
 export default function DashboardPage() {
