@@ -18,13 +18,11 @@ import {
   Hash,
   LogOut,
   Calendar,
-  AlertCircle,
-  Database,
-  User,
   KeyRound,
   Copy,
   Info,
-  SendHorizontal
+  SendHorizontal,
+  Lock
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -74,7 +72,6 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 
@@ -101,14 +98,16 @@ export default function SystemAdminPortal() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingChurch, setEditingChurch] = useState<any>(null);
   const [managingUsersId, setManagingUsersId] = useState<string | null>(null);
+  
   const [newAdminEmail, setNewAdminEmail] = useState("");
-  const [otpDialog, setOtpDialog] = useState<{ isOpen: boolean, password: string, email: string } | null>(null);
+  const [newAdminPassword, setNewAdminPassword] = useState("");
   const [adminToRemove, setAdminToRemove] = useState<{ email: string; churchId: string } | null>(null);
   
   const initialChurchState = {
     name: "",
     slug: "",
     adminEmail: "",
+    adminPassword: "",
     plan: "Starter" as const,
     status: "Approved" as const,
     enabledModules: ["members", "attendance"]
@@ -129,13 +128,11 @@ export default function SystemAdminPortal() {
 
   const sortedChurches = useMemo(() => {
     if (!rawChurches) return [];
-    
     const filtered = rawChurches.filter(c => 
       c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.adminEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.slug?.toLowerCase().includes(searchTerm.toLowerCase())
     );
-
     return [...filtered].sort((a: any, b: any) => {
       const dateA = a.registeredAt?.toDate?.() || new Date(0);
       const dateB = b.registeredAt?.toDate?.() || new Date(0);
@@ -171,25 +168,15 @@ export default function SystemAdminPortal() {
     return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').trim();
   };
 
-  const generateOTP = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let otp = "";
-    for (let i = 0; i < 8; i++) {
-      otp += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return otp;
-  };
-
   const handleAddChurch = async () => {
-    if (!newChurch.name || !newChurch.adminEmail) {
-      toast({ title: "Missing fields", description: "Name and email are required.", variant: "destructive" });
+    if (!newChurch.name || !newChurch.adminEmail || !newChurch.adminPassword) {
+      toast({ title: "Missing fields", description: "Name, email, and password are required.", variant: "destructive" });
       return;
     }
 
     setIsProcessing(true);
     const finalSlug = newChurch.slug || generateSlug(newChurch.name);
     const churchDocRef = doc(db, "churches", finalSlug);
-    const otp = generateOTP();
     
     const normalizedAdminEmail = newChurch.adminEmail.toLowerCase().trim();
     const authorizedEmails = Array.from(new Set([
@@ -216,12 +203,12 @@ export default function SystemAdminPortal() {
 
     try {
       await setDoc(churchDocRef, churchData);
-
+      
       const secondaryApp = initializeApp(firebaseConfig, `AuthCreation-${Date.now()}`);
       const secondaryAuth = getAuth(secondaryApp);
       
       try {
-        await createUserWithEmailAndPassword(secondaryAuth, normalizedAdminEmail, otp);
+        await createUserWithEmailAndPassword(secondaryAuth, normalizedAdminEmail, newChurch.adminPassword);
         await authSignOut(secondaryAuth);
       } catch (authError: any) {
         if (authError.code !== 'auth/email-already-in-use') {
@@ -233,9 +220,7 @@ export default function SystemAdminPortal() {
 
       setIsAddDialogOpen(false);
       setNewChurch(initialChurchState);
-      setOtpDialog({ isOpen: true, password: otp, email: normalizedAdminEmail });
       toast({ title: "Ministry Registered", description: `Tenant ID: ${finalSlug} is now active.` });
-
     } catch (error: any) {
       const permissionError = new FirestorePermissionError({
         path: churchDocRef.path,
@@ -297,26 +282,47 @@ export default function SystemAdminPortal() {
     setState({ ...state, enabledModules: updatedModules });
   };
 
-  const handleAddAdmin = () => {
-    if (!managingUsers || !newAdminEmail || !newAdminEmail.includes('@')) return;
+  const handleAddAdmin = async () => {
+    if (!managingUsers || !newAdminEmail || !newAdminEmail.includes('@') || !newAdminPassword) {
+      toast({ title: "Required", description: "Email and password are required.", variant: "destructive" });
+      return;
+    }
+    
+    setIsProcessing(true);
     const churchDoc = doc(db, "churches", managingUsers.id);
     const normalizedEmail = newAdminEmail.toLowerCase().trim();
     
-    updateDoc(churchDoc, {
-      adminEmails: arrayUnion(normalizedEmail)
-    })
-    .then(() => {
+    try {
+      const secondaryApp = initializeApp(firebaseConfig, `AuthAdmin-${Date.now()}`);
+      const secondaryAuth = getAuth(secondaryApp);
+      
+      try {
+        await createUserWithEmailAndPassword(secondaryAuth, normalizedEmail, newAdminPassword);
+        await authSignOut(secondaryAuth);
+      } catch (authError: any) {
+        if (authError.code !== 'auth/email-already-in-use') {
+          console.error("Auth creation failed:", authError);
+        }
+      } finally {
+        await deleteApp(secondaryApp);
+      }
+
+      await updateDoc(churchDoc, {
+        adminEmails: arrayUnion(normalizedEmail)
+      });
+
       setNewAdminEmail("");
+      setNewAdminPassword("");
       toast({ title: "Admin user added" });
-    })
-    .catch(async (error) => {
+    } catch (error: any) {
       const permissionError = new FirestorePermissionError({
         path: churchDoc.path,
         operation: 'update',
-        requestResourceData: { adminEmails: normalizedEmail },
       });
       errorEmitter.emit('permission-error', permissionError);
-    });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleRemoveAdmin = (email: string, churchId: string) => {
@@ -478,45 +484,7 @@ export default function SystemAdminPortal() {
         </CardContent>
       </Card>
 
-      {/* Setup OTP Dialog */}
-      <Dialog open={!!otpDialog} onOpenChange={(open) => !open && setOtpDialog(null)}>
-        <DialogContent className="glass max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <KeyRound className="h-5 w-5 text-primary" />
-              Setup Complete
-            </DialogTitle>
-            <DialogDescription>
-              A secure access account has been created for the new administrator.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2 p-4 rounded-xl bg-white/5 border border-white/10">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground font-bold">Admin Email</Label>
-              <div className="flex items-center justify-between gap-2">
-                <code className="text-sm font-mono">{otpDialog?.email}</code>
-                <Button variant="ghost" size="icon" onClick={() => copyToClipboard(otpDialog?.email || "")}>
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2 p-4 rounded-xl bg-primary/10 border border-primary/20">
-              <Label className="text-xs uppercase tracking-wider text-primary font-bold">One-Time Password</Label>
-              <div className="flex items-center justify-between gap-2">
-                <code className="text-lg font-bold font-mono tracking-widest text-primary">{otpDialog?.password}</code>
-                <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/20" onClick={() => copyToClipboard(otpDialog?.password || "")}>
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button className="w-full" onClick={() => setOtpDialog(null)}>Done</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Church Dialog */}
+      {/* Onboard New Ministry Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
         setIsAddDialogOpen(open);
         if (!open) setNewChurch(initialChurchState);
@@ -524,7 +492,7 @@ export default function SystemAdminPortal() {
         <DialogContent className="glass max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Onboard New Organization</DialogTitle>
-            <DialogDescription>Assign a permanent name and Tenant ID.</DialogDescription>
+            <DialogDescription>Assign a permanent name, Tenant ID, and initial access password.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -551,15 +519,27 @@ export default function SystemAdminPortal() {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Primary Admin Email</Label>
-              <Input 
-                type="email"
-                placeholder="admin@email.org"
-                value={newChurch.adminEmail} 
-                onChange={(e) => setNewChurch({...newChurch, adminEmail: e.target.value})} 
-                className="bg-white/5"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Admin Email</Label>
+                <Input 
+                  type="email"
+                  placeholder="admin@email.org"
+                  value={newChurch.adminEmail} 
+                  onChange={(e) => setNewChurch({...newChurch, adminEmail: e.target.value})} 
+                  className="bg-white/5"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Admin Password</Label>
+                <Input 
+                  type="password"
+                  placeholder="Enter secure password"
+                  value={newChurch.adminPassword} 
+                  onChange={(e) => setNewChurch({...newChurch, adminPassword: e.target.value})} 
+                  className="bg-white/5"
+                />
+              </div>
             </div>
 
             <div className="space-y-3 pt-4 border-t border-white/5">
@@ -638,19 +618,35 @@ export default function SystemAdminPortal() {
             <DialogDescription>Manage access for {managingUsers?.name}.</DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  placeholder="admin@email.com" 
-                  value={newAdminEmail}
-                  onChange={(e) => setNewAdminEmail(e.target.value)}
-                  className="pl-10 bg-white/5"
-                />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Add New Admin</Label>
+                <div className="flex flex-col gap-2">
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Email Address" 
+                      value={newAdminEmail}
+                      onChange={(e) => setNewAdminEmail(e.target.value)}
+                      className="pl-10 bg-white/5"
+                    />
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      type="password"
+                      placeholder="Assign Password" 
+                      value={newAdminPassword}
+                      onChange={(e) => setNewAdminPassword(e.target.value)}
+                      className="pl-10 bg-white/5"
+                    />
+                  </div>
+                  <Button onClick={handleAddAdmin} disabled={!newAdminEmail || !newAdminPassword || isProcessing} className="w-full">
+                    {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <PlusCircle className="h-4 w-4 mr-2" />}
+                    Add Administrator
+                  </Button>
+                </div>
               </div>
-              <Button onClick={handleAddAdmin} disabled={!newAdminEmail}>
-                <PlusCircle className="h-4 w-4" />
-              </Button>
             </div>
 
             <div className="space-y-2">
@@ -679,7 +675,8 @@ export default function SystemAdminPortal() {
                             variant="ghost" 
                             size="icon" 
                             className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.preventDefault();
                               if (managingUsersId) {
                                 setAdminToRemove({ email, churchId: managingUsersId });
                               }
