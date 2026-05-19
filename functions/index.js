@@ -30,8 +30,9 @@ exports.sendBirthdaySMS = functions.pubsub
       const dobMonth = dob.getMonth() + 1;
       const dobDay = dob.getDate();
 
+      // Simple month/day comparison for birthdays
       if (dobMonth === currentMonth && dobDay === currentDay) {
-        // Use member.name (matching the schema in backend.json)
+        // Use member.name to match the schema in backend.json
         const name = member.name || "Beloved Member";
         const message = `Happy Birthday ${name}! God bless your new age. — Yebfa Church`;
         const phone = member.phone;
@@ -70,7 +71,8 @@ exports.sendBirthdaySMS = functions.pubsub
   });
 
 /**
- * Helper function to send SMS via Hubtel
+ * Helper function to send SMS via Hubtel API v1
+ * Uses lowercase keys (from, to, content) per Hubtel's latest snippets.
  */
 async function sendSMS(phone, message) {
   const clientId = functions.config().hubtel?.client_id;
@@ -78,7 +80,7 @@ async function sendSMS(phone, message) {
   const senderId = functions.config().hubtel?.sender_id || "YebfaChurch";
 
   if (!clientId || !clientSecret) {
-    throw new Error("Hubtel credentials (client_id/client_secret) are not configured in Firebase environment.");
+    throw new Error("Hubtel credentials (client_id/client_secret) are not configured.");
   }
 
   const url = "https://smsc.hubtel.com/v1/messages/send";
@@ -87,9 +89,9 @@ async function sendSMS(phone, message) {
   return axios.post(
     url,
     {
-      From: senderId,
-      To: phone,
-      Content: message,
+      from: senderId,
+      to: phone,
+      content: message,
     },
     {
       headers: {
