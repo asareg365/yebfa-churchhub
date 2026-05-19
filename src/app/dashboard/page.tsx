@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -11,6 +12,7 @@ import {
   DollarSign,
   Loader2,
   Gift,
+  Search,
 } from 'lucide-react';
 import {
   Card,
@@ -33,10 +35,12 @@ import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, query, orderBy, limit, where } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useMemo } from 'react';
+import { useSearch } from '@/context/search-context';
 
 export default function DashboardPage() {
   const db = useFirestore();
   const { user } = useUser();
+  const { searchTerm } = useSearch();
 
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
@@ -120,14 +124,16 @@ export default function DashboardPage() {
       .filter((m) => {
         if (!m.dateOfBirth) return false;
         const birthDate = new Date(m.dateOfBirth);
-        return birthDate.getMonth() === new Date().getMonth();
+        const matchesMonth = birthDate.getMonth() === new Date().getMonth();
+        const matchesSearch = m.name?.toLowerCase().includes(searchTerm.toLowerCase());
+        return matchesMonth && matchesSearch;
       })
       .sort((a, b) => {
         const dayA = new Date(a.dateOfBirth).getDate();
         const dayB = new Date(b.dateOfBirth).getDate();
         return dayA - dayB;
       });
-  }, [members]);
+  }, [members, searchTerm]);
 
   const totalBalance = (finances || []).reduce(
     (acc, curr) =>
@@ -298,14 +304,24 @@ export default function DashboardPage() {
         >
           <Card className="glass min-h-[400px]">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Gift className="w-5 h-5 text-primary" />
-                Celebrants This Month
-              </CardTitle>
-              <CardDescription>
-                Members celebrating their special day in{' '}
-                {new Date().toLocaleString('default', { month: 'long' })}.
-              </CardDescription>
+              <div className="flex justify-between items-start">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Gift className="w-5 h-5 text-primary" />
+                    Celebrants This Month
+                  </CardTitle>
+                  <CardDescription>
+                    Members celebrating their special day in{' '}
+                    {new Date().toLocaleString('default', { month: 'long' })}.
+                  </CardDescription>
+                </div>
+                {searchTerm && (
+                  <Badge variant="outline" className="flex items-center gap-1">
+                    <Search className="w-3 h-3" />
+                    Filtering for: {searchTerm}
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {membersLoading ? (
@@ -341,7 +357,7 @@ export default function DashboardPage() {
               ) : (
                 <div className="flex flex-col items-center justify-center p-20 text-center opacity-40">
                   <Gift className="w-16 h-16 mb-4" />
-                  <p>No birthdays recorded for this month.</p>
+                  <p>{searchTerm ? "No results matching your search." : "No birthdays recorded for this month."}</p>
                 </div>
               )}
             </CardContent>
