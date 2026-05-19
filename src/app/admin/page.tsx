@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -216,7 +217,6 @@ export default function SystemAdminPortal() {
     try {
       await setDoc(churchDocRef, churchData);
 
-      // Create Auth user with OTP using secondary app to avoid side-effects on current session
       const secondaryApp = initializeApp(firebaseConfig, `AuthCreation-${Date.now()}`);
       const secondaryAuth = getAuth(secondaryApp);
       
