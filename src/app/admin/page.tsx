@@ -116,13 +116,13 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // For System Admins, we look for all churches
+  // For System Admins, we fetch the directory
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
     return collection(db, "churches");
   }, [db, user?.email]);
 
-  const { data: rawChurches, loading: collectionLoading, error: collectionError } = useCollection(churchesQuery);
+  const { data: rawChurches, loading: collectionLoading } = useCollection(churchesQuery);
 
   const sortedChurches = useMemo(() => {
     if (!rawChurches) return [];
@@ -145,7 +145,6 @@ export default function SystemAdminPortal() {
       if (!user) {
         router.push("/admin/login");
       } else if (!SUPER_ADMINS.includes(user.email?.toLowerCase() || "")) {
-        // Church Admins belong in the dashboard, not the System Portal
         router.push("/dashboard");
       }
     }
@@ -212,7 +211,7 @@ export default function SystemAdminPortal() {
       await setDoc(churchDocRef, churchData);
 
       // Create Auth user with OTP
-      const secondaryApp = initializeApp(firebaseConfig, "SecondaryAuthCreation");
+      const secondaryApp = initializeApp(firebaseConfig, `AuthCreation-${Date.now()}`);
       const secondaryAuth = getAuth(secondaryApp);
       
       try {
@@ -507,7 +506,7 @@ export default function SystemAdminPortal() {
               Setup Complete
             </DialogTitle>
             <DialogDescription>
-              A secure access account has been created for the new administrator. Provide these credentials to them; they will be forced to change this password on their first login.
+              A secure access account has been created for the new administrator. Provide these credentials to them.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -532,7 +531,7 @@ export default function SystemAdminPortal() {
             <Alert className="bg-accent/5 border-accent/20">
               <Info className="h-4 w-4 text-accent" />
               <AlertDescription className="text-xs">
-                The one-time password is now active in Firebase Auth. The admin can log in immediately.
+                Important: The admin will be forced to change this password on their first login.
               </AlertDescription>
             </Alert>
           </div>
