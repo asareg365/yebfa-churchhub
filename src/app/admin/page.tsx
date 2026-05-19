@@ -52,7 +52,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCollection, useFirestore, useUser, useAuth } from "@/firebase";
-import { collection, doc, updateDoc, query, addDoc, serverTimestamp, arrayUnion, arrayRemove, where, onSnapshot } from "firebase/firestore";
+import { collection, doc, updateDoc, query, addDoc, serverTimestamp, arrayUnion, arrayRemove, where } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -98,23 +98,28 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // For System Admins, we fetch the entire collection. 
-  // Security rules are expected to allow global read for super-admin emails.
-  const churchesRef = useMemo(() => collection(db, "churches"), [db]);
-  const { data: rawChurches, loading: collectionLoading, error: collectionError } = useCollection(churchesRef);
+  // Firestore "Query is not a filter" rule: 
+  // We must query specifically for documents where the user is an admin
+  const churchesQuery = useMemo(() => {
+    if (!user?.email) return null;
+    return query(
+      collection(db, "churches"),
+      where("adminEmails", "array-contains", user.email.toLowerCase().trim())
+    );
+  }, [db, user?.email]);
+
+  const { data: rawChurches, loading: collectionLoading, error: collectionError } = useCollection(churchesQuery);
 
   // Client-side filtering and sorting
   const sortedChurches = useMemo(() => {
     if (!rawChurches) return [];
     
-    // First, filter by the search term
     const filtered = rawChurches.filter(c => 
       c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.adminEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.slug?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    // Then sort by registration date (descending)
     return [...filtered].sort((a: any, b: any) => {
       const dateA = a.registeredAt?.toDate?.() || new Date(0);
       const dateB = b.registeredAt?.toDate?.() || new Date(0);
