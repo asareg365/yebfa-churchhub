@@ -104,9 +104,11 @@ export default function SystemAdminPortal() {
 
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
-    // For Super Admins, we fetch the full directory. 
-    // Security rules will either permit the global read or we fallback to user-specific filtering.
-    return collection(db, "churches");
+    const email = user.email.toLowerCase().trim();
+    // Security rules for 'list' require a filtered query.
+    // Since super admins are added to every church's adminEmails array, 
+    // this query satisfies the rule while returning all permitted organizations.
+    return query(collection(db, "churches"), where("adminEmails", "array-contains", email));
   }, [db, user?.email]);
 
   const { data: rawChurches, loading: collectionLoading, error: collectionError } = useCollection(churchesQuery);
@@ -171,7 +173,6 @@ export default function SystemAdminPortal() {
     const otp = generateOTP();
     
     const normalizedAdminEmail = newChurch.adminEmail.toLowerCase().trim();
-    // CRITICAL: Always include all super admins in the authorized list for global visibility
     const authorizedEmails = Array.from(new Set([
       normalizedAdminEmail, 
       ...SUPER_ADMINS.map(email => email.toLowerCase().trim())
@@ -374,7 +375,7 @@ export default function SystemAdminPortal() {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Synchronization Error</AlertTitle>
           <AlertDescription>
-            Could not retrieve tenant data. This may be due to Firestore permissions or missing indexes.
+            Could not retrieve tenant data. Please ensure your query matches system security requirements.
           </AlertDescription>
         </Alert>
       )}
@@ -645,7 +646,7 @@ export default function SystemAdminPortal() {
         <DialogContent className="glass max-w-md">
           <DialogHeader>
             <DialogTitle>Authorized Administrators</DialogTitle>
-            <DropdownDescription>Manage organizational access for {managingUsers?.name}.</DropdownDescription>
+            <DialogDescription>Manage organizational access for {managingUsers?.name}.</DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             <div className="flex gap-2">
