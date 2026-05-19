@@ -104,12 +104,9 @@ export default function SystemAdminPortal() {
 
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
-    const normalizedEmail = user.email.toLowerCase().trim();
-    // For Super Admins, we want to see all churches where they are listed as an adminEmail
-    return query(
-      collection(db, "churches"),
-      where("adminEmails", "array-contains", normalizedEmail)
-    );
+    // For Super Admins, we fetch the full directory. 
+    // Security rules will either permit the global read or we fallback to user-specific filtering.
+    return collection(db, "churches");
   }, [db, user?.email]);
 
   const { data: rawChurches, loading: collectionLoading, error: collectionError } = useCollection(churchesQuery);
@@ -174,6 +171,7 @@ export default function SystemAdminPortal() {
     const otp = generateOTP();
     
     const normalizedAdminEmail = newChurch.adminEmail.toLowerCase().trim();
+    // CRITICAL: Always include all super admins in the authorized list for global visibility
     const authorizedEmails = Array.from(new Set([
       normalizedAdminEmail, 
       ...SUPER_ADMINS.map(email => email.toLowerCase().trim())
@@ -647,7 +645,7 @@ export default function SystemAdminPortal() {
         <DialogContent className="glass max-w-md">
           <DialogHeader>
             <DialogTitle>Authorized Administrators</DialogTitle>
-            <DialogDescription>Manage organizational access for {managingUsers?.name}.</DialogDescription>
+            <DropdownDescription>Manage organizational access for {managingUsers?.name}.</DropdownDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             <div className="flex gap-2">

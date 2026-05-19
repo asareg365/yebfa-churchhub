@@ -104,6 +104,7 @@ function LoginContent() {
       const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
       
       const slug = churchName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      // CRITICAL: Always include all super admins in the authorized list for global visibility
       const authorizedEmails = Array.from(new Set([
         normalizedEmail, 
         ...SUPER_ADMINS.map(email => email.toLowerCase().trim())
