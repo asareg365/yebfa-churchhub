@@ -14,6 +14,7 @@ import {
   Trash2,
   Mail,
   Plus,
+  PlusCircle,
   Hash,
   LogOut,
   Calendar
