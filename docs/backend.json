@@ -12,6 +12,7 @@
         "status": { "type": "string", "enum": ["Active", "Inactive", "Probation"] },
         "joined": { "type": "string", "format": "date" },
         "dateOfBirth": { "type": "string", "format": "date" },
+        "phone": { "type": "string" },
         "photo": { "type": "string" }
       },
       "required": ["name", "department", "status"]
@@ -59,20 +60,26 @@
       "type": "object",
       "properties": {
         "name": { "type": "string" },
-        "slug": { "type": "string", "description": "Unique tenant ID for the church login." },
+        "slug": { "type": "string" },
         "adminEmail": { "type": "string" },
         "adminEmails": { 
           "type": "array", 
-          "items": { "type": "string" },
-          "description": "List of authorized administrator emails for this tenant."
+          "items": { "type": "string" }
         },
         "enabledModules": {
           "type": "array",
-          "items": { "type": "string" },
-          "description": "List of enabled features for the dashboard."
+          "items": { "type": "string" }
         },
         "plan": { "type": "string", "enum": ["Starter", "Growth", "Premium"] },
         "status": { "type": "string", "enum": ["Pending", "Approved", "Suspended"] },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "birthdaySmsEnabled": { "type": "boolean" },
+            "lowCreditAlertEnabled": { "type": "boolean" },
+            "dailyReportsEnabled": { "type": "boolean" }
+          }
+        },
         "registeredAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "slug", "adminEmail", "plan", "status"]

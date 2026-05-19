@@ -1,7 +1,8 @@
 
 "use client";
 
-import { Settings, User, Bell, Shield, Cloud, CreditCard, Save, Check, Info, Smartphone, Trash2 } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Settings, User, Bell, Shield, Cloud, CreditCard, Save, Check, Info, Smartphone, Trash2, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,31 +11,91 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { useUser, useFirestore, useCollection } from "@/firebase";
+import { doc, updateDoc, query, collection, where, limit } from "firebase/firestore";
+import { useToast } from "@/hooks/use-toast";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 export default function SettingsPage() {
-  const plans = [
-    {
-      name: "Starter",
-      price: "200",
-      description: "Essential tools for small congregations.",
-      features: ["Up to 200 members", "Attendance tracking", "Basic reports", "Email support"],
-      current: false
-    },
-    {
-      name: "Growth",
-      price: "500",
-      description: "Advanced features for growing ministries.",
-      features: ["Up to 1,000 members", "Finance management", "AI Insights Lite", "Priority support"],
-      current: true
-    },
-    {
-      name: "Premium",
-      price: "1,200",
-      description: "Full suite for enterprise organizations.",
-      features: ["Unlimited members", "Full AI Suite", "Bulk SMS engine", "Dedicated manager"],
-      current: false
+  const { user } = useUser();
+  const db = useFirestore();
+  const { toast } = useToast();
+  const [isSaving, setIsSaving] = useState(false);
+
+  const churchQuery = useMemo(() => {
+    if (!user?.email) return null;
+    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email), limit(1));
+  }, [db, user?.email]);
+
+  const { data: churches, loading: churchLoading } = useCollection(churchQuery);
+  const currentChurch = churches?.[0];
+
+  const [settings, setSettings] = useState({
+    name: "",
+    adminEmail: "",
+    phone: "",
+    birthdaySmsEnabled: true,
+    lowCreditAlertEnabled: true,
+    dailyReportsEnabled: false
+  });
+
+  useEffect(() => {
+    if (currentChurch) {
+      setSettings({
+        name: currentChurch.name || "",
+        adminEmail: currentChurch.adminEmail || "",
+        phone: currentChurch.phone || "",
+        birthdaySmsEnabled: currentChurch.settings?.birthdaySmsEnabled ?? true,
+        lowCreditAlertEnabled: currentChurch.settings?.lowCreditAlertEnabled ?? true,
+        dailyReportsEnabled: currentChurch.settings?.dailyReportsEnabled ?? false
+      });
     }
+  }, [currentChurch]);
+
+  const handleSave = () => {
+    if (!currentChurch) return;
+    setIsSaving(true);
+
+    const docRef = doc(db, "churches", currentChurch.id);
+    const updateData = {
+      name: settings.name,
+      phone: settings.phone,
+      settings: {
+        birthdaySmsEnabled: settings.birthdaySmsEnabled,
+        lowCreditAlertEnabled: settings.lowCreditAlertEnabled,
+        dailyReportsEnabled: settings.dailyReportsEnabled
+      }
+    };
+
+    updateDoc(docRef, updateData)
+      .then(() => {
+        toast({ title: "Settings updated", description: "Your changes have been saved successfully." });
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'update',
+          requestResourceData: updateData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      })
+      .finally(() => setIsSaving(false));
+  };
+
+  const plans = [
+    { name: "Starter", price: "200", description: "Essential tools for small congregations.", features: ["Up to 200 members", "Attendance tracking", "Basic reports"], current: currentChurch?.plan === "Starter" },
+    { name: "Growth", price: "500", description: "Advanced features for growing ministries.", features: ["Up to 1,000 members", "Finance management", "AI Insights Lite"], current: currentChurch?.plan === "Growth" },
+    { name: "Premium", price: "1,200", description: "Full suite for enterprise organizations.", features: ["Unlimited members", "Full AI Suite", "Bulk SMS engine"], current: currentChurch?.plan === "Premium" }
   ];
+
+  if (churchLoading) {
+    return (
+      <div className="min-h-[400px] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -43,8 +104,9 @@ export default function SettingsPage() {
           <h2 className="text-3xl font-bold tracking-tight mb-1">Settings</h2>
           <p className="text-muted-foreground">Manage your church configuration and platform preferences.</p>
         </div>
-        <Button className="bg-primary hover:bg-primary/80">
-          <Save className="mr-2 h-4 w-4" /> Save Changes
+        <Button onClick={handleSave} disabled={isSaving} className="bg-primary hover:bg-primary/80">
+          {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Changes
         </Button>
       </div>
 
@@ -52,8 +114,8 @@ export default function SettingsPage() {
         <TabsList className="glass border-white/10 p-1 rounded-2xl">
           <TabsTrigger value="general" className="rounded-xl px-6">General</TabsTrigger>
           <TabsTrigger value="notifications" className="rounded-xl px-6">Notifications</TabsTrigger>
-          <TabsTrigger value="security" className="rounded-xl px-6">Security</TabsTrigger>
           <TabsTrigger value="billing" className="rounded-xl px-6">Billing</TabsTrigger>
+          <TabsTrigger value="security" className="rounded-xl px-6">Security</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="animate-in fade-in-50 duration-500">
@@ -66,19 +128,37 @@ export default function SettingsPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Church Name</Label>
-                  <Input placeholder="Enter church name" defaultValue="Grace Community Sanctuary" className="bg-white/5 border-white/10" />
+                  <Input 
+                    placeholder="Enter church name" 
+                    value={settings.name} 
+                    onChange={(e) => setSettings({...settings, name: e.target.value})}
+                    className="bg-white/5 border-white/10" 
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Organization Email</Label>
-                  <Input placeholder="email@church.org" defaultValue="admin@gracecommunity.org" className="bg-white/5 border-white/10" />
+                  <Input 
+                    disabled
+                    value={settings.adminEmail} 
+                    className="bg-white/5 border-white/10 opacity-50 cursor-not-allowed" 
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Phone Number</Label>
-                  <Input placeholder="+233..." defaultValue="+233 24 847 2474" className="bg-white/5 border-white/10" />
+                  <Input 
+                    placeholder="+233..." 
+                    value={settings.phone}
+                    onChange={(e) => setSettings({...settings, phone: e.target.value})}
+                    className="bg-white/5 border-white/10" 
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label>Timezone</Label>
-                  <Input defaultValue="GMT+0 (Accra)" className="bg-white/5 border-white/10" />
+                  <Label>Tenant ID (Slug)</Label>
+                  <Input 
+                    disabled
+                    value={currentChurch?.slug || ""} 
+                    className="bg-white/5 border-white/10 opacity-50 font-mono" 
+                  />
                 </div>
               </div>
             </CardContent>
@@ -97,21 +177,30 @@ export default function SettingsPage() {
                   <Label className="text-base">Automated Birthday SMS</Label>
                   <p className="text-sm text-muted-foreground">Send greetings to members on their birthday.</p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={settings.birthdaySmsEnabled} 
+                  onCheckedChange={(checked) => setSettings({...settings, birthdaySmsEnabled: checked})}
+                />
               </div>
               <div className="flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors">
                 <div className="space-y-0.5">
                   <Label className="text-base">Low SMS Credit Alert</Label>
                   <p className="text-sm text-muted-foreground">Notify when credits fall below 500.</p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={settings.lowCreditAlertEnabled} 
+                  onCheckedChange={(checked) => setSettings({...settings, lowCreditAlertEnabled: checked})}
+                />
               </div>
               <div className="flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors">
                 <div className="space-y-0.5">
                   <Label className="text-base">Daily Attendance Reports</Label>
                   <p className="text-sm text-muted-foreground">Email summary of attendance each evening.</p>
                 </div>
-                <Switch />
+                <Switch 
+                  checked={settings.dailyReportsEnabled} 
+                  onCheckedChange={(checked) => setSettings({...settings, dailyReportsEnabled: checked})}
+                />
               </div>
             </CardContent>
           </Card>

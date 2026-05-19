@@ -5,15 +5,10 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   ShieldCheck, 
-  Users, 
   Search, 
   MoreVertical, 
   CheckCircle2, 
-  XCircle, 
   Loader2,
-  Building2,
-  Clock,
-  PlusCircle,
   Pencil,
   UserPlus,
   Trash2,
@@ -51,10 +46,9 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCollection, useFirestore, useUser, useAuth } from "@/firebase";
-import { collection, doc, updateDoc, query, orderBy, Timestamp, addDoc, serverTimestamp, getDocs, where, arrayUnion, arrayRemove } from "firebase/firestore";
+import { collection, doc, updateDoc, query, orderBy, addDoc, serverTimestamp, arrayUnion, arrayRemove } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -81,7 +75,6 @@ export default function SystemAdminPortal() {
   const { toast } = useToast();
   
   const [searchTerm, setSearchTerm] = useState("");
-  const [isSeeding, setIsSeeding] = useState(false);
   
   // Dialog States
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -93,14 +86,13 @@ export default function SystemAdminPortal() {
     name: "",
     slug: "",
     adminEmail: "",
-    plan: "Starter",
-    status: "Pending",
+    plan: "Starter" as const,
+    status: "Pending" as const,
     enabledModules: ["members", "attendance"]
   };
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // Stabilize query to handle server timestamps better
   const churchesQuery = useMemo(() => {
     return query(collection(db, "churches"), orderBy("registeredAt", "desc"));
   }, [db]);
@@ -127,44 +119,6 @@ export default function SystemAdminPortal() {
     }
   };
 
-  const handleSeedDemo = async () => {
-    setIsSeeding(true);
-    const churchesRef = collection(db, "churches");
-    
-    try {
-      const q = query(churchesRef, where("slug", "==", "grace-sanctuary"));
-      const snap = await getDocs(q);
-      
-      if (!snap.empty) {
-        toast({ title: "Ministry exists", description: "Grace Community Sanctuary is already in the directory." });
-        setIsSeeding(false);
-        return;
-      }
-
-      const demoData = {
-        name: "Grace Community Sanctuary",
-        slug: "grace-sanctuary",
-        adminEmail: "admin@gracecommunity.org",
-        adminEmails: ["admin@gracecommunity.org", ...SUPER_ADMINS],
-        enabledModules: ["members", "attendance", "finances", "events", "communication", "insights", "reports"],
-        status: "Approved",
-        plan: "Premium",
-        registeredAt: serverTimestamp()
-      };
-
-      await addDoc(churchesRef, demoData);
-      toast({ title: "Ministry Seeded!", description: "Grace Community Sanctuary is live." });
-    } catch (error: any) {
-      const permissionError = new FirestorePermissionError({
-        path: churchesRef.path,
-        operation: 'create',
-      });
-      errorEmitter.emit('permission-error', permissionError);
-    } finally {
-      setIsSeeding(false);
-    }
-  };
-
   const generateSlug = (name: string) => {
     return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   };
@@ -180,11 +134,15 @@ export default function SystemAdminPortal() {
     const churchData = {
       ...newChurch,
       slug: slug,
-      adminEmails: [newChurch.adminEmail, ...SUPER_ADMINS], // Ensure super admins can see it
-      registeredAt: serverTimestamp()
+      adminEmails: [newChurch.adminEmail, ...SUPER_ADMINS],
+      registeredAt: serverTimestamp(),
+      settings: {
+        birthdaySmsEnabled: true,
+        lowCreditAlertEnabled: true,
+        dailyReportsEnabled: false
+      }
     };
 
-    // Closing the dialog and resetting form immediately for snappiness
     setIsAddDialogOpen(false);
     setNewChurch(initialChurchState);
 
@@ -338,15 +296,6 @@ export default function SystemAdminPortal() {
             <Plus className="mr-2 h-4 w-4" />
             Add New Ministry
           </Button>
-          <Button 
-            variant="outline" 
-            onClick={handleSeedDemo} 
-            disabled={isSeeding}
-            className="glass border-primary/20 hover:bg-primary/10 text-primary"
-          >
-            {isSeeding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-            Seed Grace Community
-          </Button>
           <Button variant="outline" onClick={handleLogout} className="glass border-white/10 text-destructive hover:bg-destructive/10">
             <LogOut className="mr-2 h-4 w-4" />
             Logout
@@ -433,6 +382,13 @@ export default function SystemAdminPortal() {
                     </TableCell>
                   </TableRow>
                 ))}
+                {filteredChurches.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
+                      No organizations registered yet.
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           )}
