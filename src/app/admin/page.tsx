@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -101,7 +100,7 @@ export default function SystemAdminPortal() {
   // Dialog States
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingChurch, setEditingChurch] = useState<any>(null);
-  const [managingUsers, setManagingUsers] = useState<any>(null);
+  const [managingUsersId, setManagingUsersId] = useState<string | null>(null);
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [otpDialog, setOtpDialog] = useState<{ isOpen: boolean, password: string, email: string } | null>(null);
   const [adminToRemove, setAdminToRemove] = useState<string | null>(null);
@@ -117,11 +116,10 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // Directory query: Filter by global admin identity
+  // Directory query: Filter by global admin identity to satisfy rules and fetch relevant data
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
     const email = user.email.toLowerCase().trim();
-    // For Super Admins, we show everything they are authorized for
     return query(collection(db, "churches"), where("adminEmails", "array-contains", email));
   }, [db, user?.email]);
 
@@ -142,6 +140,11 @@ export default function SystemAdminPortal() {
       return dateB.getTime() - dateA.getTime();
     });
   }, [rawChurches, searchTerm]);
+
+  // The specific church currently being managed for users
+  const managingUsers = useMemo(() => {
+    return sortedChurches.find(c => c.id === managingUsersId) || null;
+  }, [sortedChurches, managingUsersId]);
 
   useEffect(() => {
     if (!userLoading) {
@@ -213,7 +216,7 @@ export default function SystemAdminPortal() {
     try {
       await setDoc(churchDocRef, churchData);
 
-      // Create Auth user with OTP
+      // Create Auth user with OTP using secondary app to avoid side-effects on current session
       const secondaryApp = initializeApp(firebaseConfig, `AuthCreation-${Date.now()}`);
       const secondaryAuth = getAuth(secondaryApp);
       
@@ -222,7 +225,7 @@ export default function SystemAdminPortal() {
         await authSignOut(secondaryAuth);
       } catch (authError: any) {
         if (authError.code !== 'auth/email-already-in-use') {
-          toast({ title: "Auth Notification", description: "Church linked to an existing account." });
+          console.error("Auth creation failed:", authError);
         }
       } finally {
         await deleteApp(secondaryApp);
@@ -304,11 +307,6 @@ export default function SystemAdminPortal() {
     })
     .then(() => {
       setNewAdminEmail("");
-      const updatedEmails = Array.from(new Set([...(managingUsers.adminEmails || []), normalizedEmail]));
-      setManagingUsers({
-        ...managingUsers,
-        adminEmails: updatedEmails
-      });
       toast({ title: "Admin user added" });
     })
     .catch(async (error) => {
@@ -329,10 +327,6 @@ export default function SystemAdminPortal() {
       adminEmails: arrayRemove(email)
     })
     .then(() => {
-      setManagingUsers({
-        ...managingUsers,
-        adminEmails: (managingUsers.adminEmails || []).filter((e: string) => e !== email)
-      });
       setAdminToRemove(null);
       toast({ title: "Admin user removed" });
     })
@@ -482,7 +476,7 @@ export default function SystemAdminPortal() {
                           <DropdownMenuItem onClick={() => setEditingChurch(church)}>
                             <Pencil className="mr-2 h-4 w-4" /> Edit Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setManagingUsers(church)}>
+                          <DropdownMenuItem onClick={() => setManagingUsersId(church.id)}>
                             <UserPlus className="mr-2 h-4 w-4" /> Manage Admins
                           </DropdownMenuItem>
                           <DropdownMenuSeparator className="bg-white/5" />
@@ -669,7 +663,7 @@ export default function SystemAdminPortal() {
       </Dialog>
 
       {/* Manage Admins Dialog */}
-      <Dialog open={!!managingUsers} onOpenChange={(open) => !open && setManagingUsers(null)}>
+      <Dialog open={!!managingUsersId} onOpenChange={(open) => !open && setManagingUsersId(null)}>
         <DialogContent className="glass max-w-md">
           <DialogHeader>
             <DialogTitle>Authorized Administrators</DialogTitle>
@@ -735,7 +729,7 @@ export default function SystemAdminPortal() {
             </div>
           </div>
           <DialogFooter>
-            <Button className="w-full" onClick={() => setManagingUsers(null)}>Done</Button>
+            <Button className="w-full" onClick={() => setManagingUsersId(null)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -763,4 +757,3 @@ export default function SystemAdminPortal() {
     </div>
   );
 }
-
