@@ -50,7 +50,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCollection, useFirestore, useUser, useAuth } from "@/firebase";
-import { collection, doc, updateDoc, query, addDoc, serverTimestamp, arrayUnion, arrayRemove } from "firebase/firestore";
+import { collection, doc, updateDoc, query, addDoc, serverTimestamp, arrayUnion, arrayRemove, where } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -96,10 +96,14 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // Simple query for reliability
+  // Use a filtered query to satisfy Firestore security rules (queries are not filters)
   const churchesQuery = useMemo(() => {
-    return collection(db, "churches");
-  }, [db]);
+    if (!user?.email) return null;
+    return query(
+      collection(db, "churches"), 
+      where("adminEmails", "array-contains", user.email)
+    );
+  }, [db, user?.email]);
 
   const { data: rawChurches, loading: collectionLoading, error: collectionError } = useCollection(churchesQuery);
 
@@ -149,7 +153,7 @@ export default function SystemAdminPortal() {
     const churchData = {
       ...newChurch,
       slug: slug,
-      adminEmails: Array.from(new Set([newChurch.adminEmail, ...SUPER_ADMINS])),
+      adminEmails: Array.from(new Set([newChurch.adminEmail.toLowerCase().trim(), ...SUPER_ADMINS])),
       registeredAt: serverTimestamp(),
       settings: {
         birthdaySmsEnabled: true,

@@ -106,9 +106,9 @@ function LoginContent() {
       const churchData = {
         name: churchName,
         slug: slug,
-        adminEmail: email,
+        adminEmail: email.toLowerCase().trim(),
         adminUid: userCredential.user.uid,
-        adminEmails: [email, ...SUPER_ADMINS], // Crucial: Include super admins for platform-wide visibility
+        adminEmails: Array.from(new Set([email.toLowerCase().trim(), ...SUPER_ADMINS])),
         enabledModules: selectedModules,
         status: "Pending",
         plan: "Starter",
