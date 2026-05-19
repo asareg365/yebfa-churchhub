@@ -1,12 +1,31 @@
-
 "use client";
 
-import { Bell, Search, User } from "lucide-react";
+import { useMemo } from "react";
+import { Bell, Search, User, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import { MOCK_CHURCH } from "@/app/lib/mock-data";
+import { useUser, useCollection, useFirestore } from "@/firebase";
+import { collection, query, where, limit } from "firebase/firestore";
 
 export function Header() {
+  const { user } = useUser();
+  const db = useFirestore();
+
+  const churchQuery = useMemo(() => {
+    if (!user?.email) return null;
+    return query(
+      collection(db, "churches"),
+      where("adminEmails", "array-contains", user.email),
+      limit(1)
+    );
+  }, [db, user?.email]);
+
+  const { data: churches, loading } = useCollection(churchQuery);
+  const currentChurch = churches?.[0];
+
+  const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+  const isSuperAdmin = user?.email && SUPER_ADMINS.includes(user.email);
+
   return (
     <header className="sticky top-0 z-40 w-full glass border-b border-white/5 py-3 px-8 mb-6 rounded-2xl flex items-center justify-between">
       <div className="flex items-center gap-4 flex-1 max-w-xl">
@@ -27,11 +46,21 @@ export function Header() {
 
         <div className="flex items-center gap-3 pl-4 border-l border-white/5">
           <div className="text-right hidden sm:block">
-            <p className="text-sm font-semibold">{MOCK_CHURCH.name}</p>
-            <p className="text-xs text-muted-foreground">{MOCK_CHURCH.plan} Plan</p>
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-primary ml-auto" />
+            ) : (
+              <>
+                <p className="text-sm font-semibold">
+                  {isSuperAdmin ? "System Administrator" : (currentChurch?.name || "My Ministry")}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {isSuperAdmin ? "Global Access" : `${currentChurch?.plan || "Starter"} Plan`}
+                </p>
+              </>
+            )}
           </div>
           <Avatar className="h-10 w-10 border-2 border-primary/20 p-0.5">
-            <AvatarImage src={MOCK_CHURCH.logo} />
+            <AvatarImage src={currentChurch?.logo} />
             <AvatarFallback><User className="w-5 h-5" /></AvatarFallback>
           </Avatar>
         </div>

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { 
@@ -16,7 +15,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MOCK_CHURCH, MOCK_ATTENDANCE } from "@/app/lib/mock-data";
+import { MOCK_ATTENDANCE } from "@/app/lib/mock-data";
 import {
   XAxis,
   YAxis,
@@ -26,13 +25,27 @@ import {
   Area
 } from "recharts";
 import { cn } from "@/lib/utils";
-import { useCollection, useFirestore } from "@/firebase";
-import { collection, query, orderBy, limit } from "firebase/firestore";
+import { useCollection, useFirestore, useUser } from "@/firebase";
+import { collection, query, orderBy, limit, where } from "firebase/firestore";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useMemo } from "react";
 
 export default function DashboardPage() {
   const db = useFirestore();
+  const { user } = useUser();
+
+  const churchQuery = useMemo(() => {
+    if (!user?.email) return null;
+    return query(
+      collection(db, "churches"),
+      where("adminEmails", "array-contains", user.email),
+      limit(1)
+    );
+  }, [db, user?.email]);
+
+  const { data: churches } = useCollection(churchQuery);
+  const currentChurch = churches?.[0];
+
   const { data: members, loading: membersLoading } = useCollection(collection(db, "members"));
   const { data: attendance, loading: attendanceLoading } = useCollection(
     query(collection(db, "attendance"), orderBy("date", "desc"), limit(10))
@@ -67,7 +80,9 @@ export default function DashboardPage() {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold tracking-tight mb-1">Welcome back, Admin</h2>
-          <p className="text-muted-foreground">Here's what's happening at {MOCK_CHURCH.name} today.</p>
+          <p className="text-muted-foreground">
+            Here's what's happening at {currentChurch?.name || "your ministry"} today.
+          </p>
         </div>
         <div className="glass px-4 py-2 rounded-xl border-primary/20 text-xs font-semibold text-primary uppercase tracking-wider">
           System Live
