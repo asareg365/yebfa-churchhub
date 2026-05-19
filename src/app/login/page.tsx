@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Church, Mail, Lock, ShieldCheck } from "lucide-react";
+import { Loader2, Church, Mail, Lock, ShieldCheck, Hash } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -41,6 +41,7 @@ function LoginContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [churchName, setChurchName] = useState("");
+  const [slug, setSlug] = useState("");
   const [selectedModules, setSelectedModules] = useState<string[]>(["members", "attendance"]);
   const [isLoading, setIsLoading] = useState(false);
   const [activeChurch, setActiveChurch] = useState<any>(null);
@@ -84,6 +85,10 @@ function LoginContent() {
     }
   };
 
+  const generateSlug = (name: string) => {
+    return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').trim();
+  };
+
   const handleModuleToggle = (moduleId: string) => {
     setSelectedModules(prev => 
       prev.includes(moduleId) 
@@ -94,17 +99,18 @@ function LoginContent() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!churchName || !email || !password) {
-       toast({ title: "Required fields", description: "Please fill in all fields.", variant: "destructive" });
+    const finalSlug = slug || generateSlug(churchName);
+    
+    if (!churchName || !email || !password || !finalSlug) {
+       toast({ title: "Required fields", description: "Please fill in all fields including Tenant ID.", variant: "destructive" });
        return;
     }
+
     setIsLoading(true);
     try {
       const normalizedEmail = email.toLowerCase().trim();
-      const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+      await createUserWithEmailAndPassword(auth, normalizedEmail, password);
       
-      const slug = churchName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-      // CRITICAL: Always include all super admins in the authorized list for global visibility
       const authorizedEmails = Array.from(new Set([
         normalizedEmail, 
         ...SUPER_ADMINS.map(email => email.toLowerCase().trim())
@@ -112,13 +118,13 @@ function LoginContent() {
 
       const churchData = {
         name: churchName,
-        slug: slug,
+        slug: finalSlug,
         adminEmail: normalizedEmail,
-        adminUid: userCredential.user.uid,
         adminEmails: authorizedEmails,
         enabledModules: selectedModules,
         status: "Pending",
         plan: "Starter",
+        mustChangePassword: false,
         registeredAt: serverTimestamp(),
         settings: {
           birthdaySmsEnabled: true,
@@ -132,7 +138,7 @@ function LoginContent() {
         .then(() => {
           toast({ 
             title: "Ministry Onboarded!", 
-            description: `Tenant ID: ${slug}. Please save this ID for future logins.` 
+            description: `Tenant ID: ${finalSlug}. Account created successfully.` 
           });
           router.push("/dashboard");
         })
@@ -151,7 +157,6 @@ function LoginContent() {
         description: error.message, 
         variant: "destructive" 
       });
-    } finally {
       setIsLoading(false);
     }
   };
@@ -259,7 +264,25 @@ function LoginContent() {
                         placeholder="Grace Community Sanctuary" 
                         className="pl-10 bg-white/5" 
                         value={churchName}
-                        onChange={(e) => setChurchName(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setChurchName(val);
+                          setSlug(generateSlug(val));
+                        }}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-slug">Tenant ID (Slug)</Label>
+                    <div className="relative">
+                      <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        id="signup-slug" 
+                        placeholder="grace-sanctuary" 
+                        className="pl-10 bg-white/5 font-mono" 
+                        value={slug}
+                        onChange={(e) => setSlug(generateSlug(e.target.value))}
                         required
                       />
                     </div>

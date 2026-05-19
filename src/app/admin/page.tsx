@@ -105,9 +105,6 @@ export default function SystemAdminPortal() {
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
     const email = user.email.toLowerCase().trim();
-    // Security rules for 'list' require a filtered query.
-    // Since super admins are added to every church's adminEmails array, 
-    // this query satisfies the rule while returning all permitted organizations.
     return query(collection(db, "churches"), where("adminEmails", "array-contains", email));
   }, [db, user?.email]);
 
@@ -179,10 +176,13 @@ export default function SystemAdminPortal() {
     ]));
 
     const churchData = {
-      ...newChurch,
+      name: newChurch.name,
       slug: slug,
       adminEmail: normalizedAdminEmail,
       adminEmails: authorizedEmails,
+      plan: newChurch.plan,
+      status: newChurch.status,
+      enabledModules: newChurch.enabledModules,
       mustChangePassword: true,
       registeredAt: serverTimestamp(),
       settings: {
