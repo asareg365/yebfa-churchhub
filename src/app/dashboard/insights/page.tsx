@@ -20,14 +20,24 @@ export default function InsightsPage() {
 
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
-    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email), limit(1));
+    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
   }, [db, user?.email]);
 
   const { data: churches } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
-  const { data: attendance } = useCollection(collection(db, "attendance"));
-  const { data: finances } = useCollection(collection(db, "finances"));
+  const attendanceRef = useMemo(() => {
+    if (!currentChurch?.id) return null;
+    return collection(db, "churches", currentChurch.id, "attendance");
+  }, [db, currentChurch?.id]);
+
+  const financesRef = useMemo(() => {
+    if (!currentChurch?.id) return null;
+    return collection(db, "churches", currentChurch.id, "finances");
+  }, [db, currentChurch?.id]);
+
+  const { data: attendance } = useCollection(attendanceRef);
+  const { data: finances } = useCollection(financesRef);
 
   const runAnalysis = async () => {
     if (!currentChurch) {
@@ -62,7 +72,7 @@ export default function InsightsPage() {
         </div>
         <Button 
           onClick={runAnalysis} 
-          disabled={isAnalyzing}
+          disabled={isAnalyzing || !currentChurch}
           className="bg-primary hover:bg-primary/80 text-primary-foreground shadow-lg shadow-primary/20 px-8 h-12 rounded-2xl"
         >
           {isAnalyzing ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <BrainCircuit className="mr-2 h-5 w-5" />}

@@ -74,7 +74,7 @@ export default function DashboardPage() {
   const { data: finances } = useCollection(financesRef);
 
   const stats = [
-    { label: "Total Members", value: members?.length || 0, icon: Users, trend: members?.length > 0 ? "+1" : "N/A", trendUp: true },
+    { label: "Total Members", value: members?.length || 0, icon: Users, trend: (members?.length || 0) > 0 ? "+1" : "N/A", trendUp: true },
     { label: "Upcoming Birthdays", value: members?.filter(m => {
       if (!m.dateOfBirth) return false;
       const birthDate = new Date(m.dateOfBirth);
@@ -162,7 +162,7 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="h-[300px]">
-              {attendance?.length > 0 ? (
+              {attendance?.length ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={[...attendance].reverse()}>
                     <defs>

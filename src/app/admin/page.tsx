@@ -102,7 +102,7 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // Filter query to match security rules requirements - Super Admins should see everything they are in adminEmails for
+  // Use a stable query to avoid permission errors
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
     const email = user.email.toLowerCase().trim();
@@ -412,7 +412,7 @@ export default function SystemAdminPortal() {
               </TableHeader>
               <TableBody>
                 {sortedChurches.map((church) => (
-                  <TableRow key={church.id} className="border-white/5 hover:bg-white/5 transition-colors border-white/5">
+                  <TableRow key={church.id} className="border-white/5 hover:bg-white/5 transition-colors">
                     <TableCell className="font-bold">{church.name}</TableCell>
                     <TableCell>
                       <code className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-bold">
