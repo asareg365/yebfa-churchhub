@@ -70,7 +70,7 @@ function LoginContent() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, email.toLowerCase().trim(), password);
       router.push("/dashboard");
       toast({ title: "Access Granted", description: activeChurch ? `Logged into ${activeChurch.name}` : "Welcome back!" });
     } catch (error: any) {
@@ -100,15 +100,21 @@ function LoginContent() {
     }
     setIsLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const normalizedEmail = email.toLowerCase().trim();
+      const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
       
       const slug = churchName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const authorizedEmails = Array.from(new Set([
+        normalizedEmail, 
+        ...SUPER_ADMINS.map(email => email.toLowerCase().trim())
+      ]));
+
       const churchData = {
         name: churchName,
         slug: slug,
-        adminEmail: email.toLowerCase().trim(),
+        adminEmail: normalizedEmail,
         adminUid: userCredential.user.uid,
-        adminEmails: Array.from(new Set([email.toLowerCase().trim(), ...SUPER_ADMINS])),
+        adminEmails: authorizedEmails,
         enabledModules: selectedModules,
         status: "Pending",
         plan: "Starter",

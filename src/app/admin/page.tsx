@@ -96,18 +96,18 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // Use a filtered query to satisfy Firestore security rules (queries are not filters)
+  // Use a filtered query with lowercase email to satisfy Firestore security and matching
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
     return query(
       collection(db, "churches"), 
-      where("adminEmails", "array-contains", user.email)
+      where("adminEmails", "array-contains", user.email.toLowerCase().trim())
     );
   }, [db, user?.email]);
 
   const { data: rawChurches, loading: collectionLoading, error: collectionError } = useCollection(churchesQuery);
 
-  // Client-side sorting for immediate feedback and to avoid composite index requirements
+  // Client-side sorting for immediate feedback
   const sortedChurches = useMemo(() => {
     if (!rawChurches) return [];
     return [...rawChurches].sort((a: any, b: any) => {
@@ -121,7 +121,7 @@ export default function SystemAdminPortal() {
     if (!userLoading) {
       if (!user) {
         router.push("/admin/login");
-      } else if (!SUPER_ADMINS.includes(user.email || "")) {
+      } else if (!SUPER_ADMINS.includes(user.email.toLowerCase() || "")) {
         router.push("/dashboard");
       }
     }
@@ -150,10 +150,18 @@ export default function SystemAdminPortal() {
     const churchesRef = collection(db, "churches");
     const slug = newChurch.slug || generateSlug(newChurch.name);
     
+    // Ensure all emails are lowercase for consistent querying
+    const normalizedAdminEmail = newChurch.adminEmail.toLowerCase().trim();
+    const authorizedEmails = Array.from(new Set([
+      normalizedAdminEmail, 
+      ...SUPER_ADMINS.map(email => email.toLowerCase().trim())
+    ]));
+
     const churchData = {
       ...newChurch,
       slug: slug,
-      adminEmails: Array.from(new Set([newChurch.adminEmail.toLowerCase().trim(), ...SUPER_ADMINS])),
+      adminEmail: normalizedAdminEmail,
+      adminEmails: authorizedEmails,
       registeredAt: serverTimestamp(),
       settings: {
         birthdaySmsEnabled: true,
@@ -232,15 +240,16 @@ export default function SystemAdminPortal() {
   const handleAddAdmin = () => {
     if (!managingUsers || !newAdminEmail || !newAdminEmail.includes('@')) return;
     const churchDoc = doc(db, "churches", managingUsers.id);
+    const normalizedEmail = newAdminEmail.toLowerCase().trim();
     
     updateDoc(churchDoc, {
-      adminEmails: arrayUnion(newAdminEmail.toLowerCase().trim())
+      adminEmails: arrayUnion(normalizedEmail)
     })
     .then(() => {
       setNewAdminEmail("");
       setManagingUsers({
         ...managingUsers,
-        adminEmails: [...(managingUsers.adminEmails || []), newAdminEmail.toLowerCase().trim()]
+        adminEmails: [...(managingUsers.adminEmails || []), normalizedEmail]
       });
       toast({ title: "Admin user added" });
     })
@@ -248,7 +257,7 @@ export default function SystemAdminPortal() {
       const permissionError = new FirestorePermissionError({
         path: churchDoc.path,
         operation: 'update',
-        requestResourceData: { adminEmails: newAdminEmail },
+        requestResourceData: { adminEmails: normalizedEmail },
       });
       errorEmitter.emit('permission-error', permissionError);
     });
@@ -327,7 +336,7 @@ export default function SystemAdminPortal() {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Synchronization Error</AlertTitle>
           <AlertDescription>
-            Could not retrieve tenant data. Ensure you have proper administrative permissions.
+            Could not retrieve tenant data. Ensure you have proper administrative permissions and try again.
           </AlertDescription>
         </Alert>
       )}
@@ -416,7 +425,7 @@ export default function SystemAdminPortal() {
                 {!collectionLoading && filteredChurches.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
-                      No organizations found.
+                      No organizations found. Try re-adding your ministry if it was missing.
                     </TableCell>
                   </TableRow>
                 )}
