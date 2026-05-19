@@ -1,8 +1,7 @@
-
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, Search, Filter, Download, MoreVertical, QrCode, Mail, Phone, Loader2, Users as UsersIcon, Cake } from "lucide-react";
+import { Plus, Search, Filter, Download, MoreVertical, QrCode, Mail, Phone, Loader2, Users as UsersIcon, Cake, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -17,7 +16,8 @@ import {
   DropdownMenu, 
   DropdownMenuContent, 
   DropdownMenuItem, 
-  DropdownMenuTrigger 
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { 
   Dialog, 
@@ -27,6 +27,16 @@ import {
   DialogTrigger,
   DialogFooter
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Label } from "@/components/ui/label";
@@ -34,7 +44,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useCollection, useFirestore } from "@/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, deleteDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -43,6 +53,7 @@ export default function MembersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusTab, setStatusTab] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [memberToDelete, setMemberToDelete] = useState<any>(null);
   const db = useFirestore();
   const { toast } = useToast();
   
@@ -67,9 +78,11 @@ export default function MembersPage() {
       photo: `https://picsum.photos/seed/${Math.random()}/100/100`
     };
 
+    // Close dialog immediately for better UX
+    setIsAddDialogOpen(false);
+
     addDoc(membersRef, memberData)
       .then(() => {
-        setIsAddDialogOpen(false);
         setNewMember({ name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "" });
         toast({ title: "Member added successfully" });
       })
@@ -78,6 +91,24 @@ export default function MembersPage() {
           path: membersRef.path,
           operation: 'create',
           requestResourceData: memberData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
+  };
+
+  const handleDeleteMember = () => {
+    if (!memberToDelete) return;
+
+    const docRef = doc(db, "members", memberToDelete.id);
+    deleteDoc(docRef)
+      .then(() => {
+        setMemberToDelete(null);
+        toast({ title: "Member removed from directory" });
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'delete',
         });
         errorEmitter.emit('permission-error', permissionError);
       });
@@ -249,6 +280,13 @@ export default function MembersPage() {
                             <DropdownMenuItem className="cursor-pointer">
                               <Phone className="mr-2 h-4 w-4" /> Send SMS
                             </DropdownMenuItem>
+                            <DropdownMenuSeparator className="bg-white/5" />
+                            <DropdownMenuItem 
+                              className="cursor-pointer text-destructive focus:text-destructive"
+                              onClick={() => setMemberToDelete(member)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Delete Member
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -270,6 +308,27 @@ export default function MembersPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!memberToDelete} onOpenChange={(open) => !open && setMemberToDelete(null)}>
+        <AlertDialogContent className="glass">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove <strong>{memberToDelete?.name}</strong> from your congregation directory. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteMember}
+              className="bg-destructive hover:bg-destructive/90 text-white"
+            >
+              Remove Member
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
