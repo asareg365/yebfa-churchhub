@@ -98,7 +98,8 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // Use a query that matches security rules: email in adminEmails array
+  // CRITICAL: Queries must match security rules. For Super Admins to see documents, 
+  // we must query where their normalized email is present in the adminEmails array.
   const churchesQuery = useMemo(() => {
     if (!user?.email) return null;
     const normalizedEmail = user.email.toLowerCase().trim();
@@ -110,7 +111,7 @@ export default function SystemAdminPortal() {
 
   const { data: rawChurches, loading: collectionLoading, error: collectionError } = useCollection(churchesQuery);
 
-  // Client-side filtering and sorting
+  // Client-side filtering and sorting for performance and reliability
   const sortedChurches = useMemo(() => {
     if (!rawChurches) return [];
     
@@ -160,6 +161,7 @@ export default function SystemAdminPortal() {
     const churchesRef = collection(db, "churches");
     const slug = newChurch.slug || generateSlug(newChurch.name);
     
+    // Ensure all admin emails are lowercased for matching
     const normalizedAdminEmail = newChurch.adminEmail.toLowerCase().trim();
     const authorizedEmails = Array.from(new Set([
       normalizedAdminEmail, 
@@ -356,7 +358,7 @@ export default function SystemAdminPortal() {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Synchronization Error</AlertTitle>
           <AlertDescription>
-            Could not retrieve tenant data. Error: {collectionError.message}
+            Could not retrieve tenant data. This may be due to Firestore permissions or missing indexes.
           </AlertDescription>
         </Alert>
       )}

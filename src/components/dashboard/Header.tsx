@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo } from "react";
@@ -13,9 +14,10 @@ export function Header() {
 
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
+    const normalizedEmail = user.email.toLowerCase().trim();
     return query(
       collection(db, "churches"),
-      where("adminEmails", "array-contains", user.email),
+      where("adminEmails", "array-contains", normalizedEmail),
       limit(1)
     );
   }, [db, user?.email]);
@@ -24,7 +26,7 @@ export function Header() {
   const currentChurch = churches?.[0];
 
   const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
-  const isSuperAdmin = user?.email && SUPER_ADMINS.includes(user.email);
+  const isSuperAdmin = user?.email && SUPER_ADMINS.includes(user.email.toLowerCase().trim());
 
   return (
     <header className="sticky top-0 z-40 w-full glass border-b border-white/5 py-3 px-8 mb-6 rounded-2xl flex items-center justify-between">
