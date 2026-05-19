@@ -127,13 +127,13 @@ export default function SettingsPage() {
       if (auth.currentUser) {
         await updatePassword(auth.currentUser, passwords.new);
         
-        // If they were forced to change, update the flag in Firestore
-        if (currentChurch?.mustChangePassword) {
+        // If they were forced to change, update the flag in Firestore to "unlock" the system
+        if (currentChurch?.id) {
           const docRef = doc(db, "churches", currentChurch.id);
           await updateDoc(docRef, { mustChangePassword: false });
         }
 
-        toast({ title: "Password changed", description: "Your security credentials have been updated." });
+        toast({ title: "Password changed", description: "Your security credentials have been updated. The ministry portal is now unlocked." });
         setPasswords({ new: "", confirm: "" });
       }
     } catch (error: any) {

@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 export default function DashboardLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.Node;
 }) {
   const { user, loading } = useUser();
   const db = useFirestore();
@@ -40,15 +40,6 @@ export default function DashboardLayout({
     }
   }, [user, loading, router]);
 
-  useEffect(() => {
-    if (
-      currentChurch?.mustChangePassword &&
-      pathname !== '/dashboard/settings'
-    ) {
-      router.push('/dashboard/settings?force=true');
-    }
-  }, [currentChurch, pathname, router]);
-
   if (loading || churchLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -64,14 +55,16 @@ export default function DashboardLayout({
     return null;
   }
 
+  const isChangingPassword = pathname === '/dashboard/settings';
+  const forcePasswordChange = currentChurch?.mustChangePassword && !isChangingPassword;
+
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar />
       <main className="flex-1 ml-72 p-4 flex flex-col">
         <Header />
         <div className="flex-1">
-          {currentChurch?.mustChangePassword &&
-          pathname !== '/dashboard/settings' ? (
+          {forcePasswordChange ? (
             <div className="flex items-center justify-center h-full p-8">
               <Card className="glass border-primary/30 max-w-md w-full shadow-2xl">
                 <CardHeader>
