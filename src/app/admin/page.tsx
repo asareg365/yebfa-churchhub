@@ -18,7 +18,9 @@ import {
   Hash,
   LogOut,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Database,
+  User
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,7 +52,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCollection, useFirestore, useUser, useAuth } from "@/firebase";
-import { collection, doc, updateDoc, query, addDoc, serverTimestamp, arrayUnion, arrayRemove, where } from "firebase/firestore";
+import { collection, doc, updateDoc, query, addDoc, serverTimestamp, arrayUnion, arrayRemove, where, onSnapshot } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -96,32 +98,35 @@ export default function SystemAdminPortal() {
 
   const [newChurch, setNewChurch] = useState(initialChurchState);
 
-  // Use a filtered query with lowercase email to satisfy Firestore security and matching
-  const churchesQuery = useMemo(() => {
-    if (!user?.email) return null;
-    return query(
-      collection(db, "churches"), 
-      where("adminEmails", "array-contains", user.email.toLowerCase().trim())
-    );
-  }, [db, user?.email]);
+  // For System Admins, we fetch the entire collection. 
+  // Security rules are expected to allow global read for super-admin emails.
+  const churchesRef = useMemo(() => collection(db, "churches"), [db]);
+  const { data: rawChurches, loading: collectionLoading, error: collectionError } = useCollection(churchesRef);
 
-  const { data: rawChurches, loading: collectionLoading, error: collectionError } = useCollection(churchesQuery);
-
-  // Client-side sorting for immediate feedback
+  // Client-side filtering and sorting
   const sortedChurches = useMemo(() => {
     if (!rawChurches) return [];
-    return [...rawChurches].sort((a: any, b: any) => {
+    
+    // First, filter by the search term
+    const filtered = rawChurches.filter(c => 
+      c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.adminEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.slug?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    // Then sort by registration date (descending)
+    return [...filtered].sort((a: any, b: any) => {
       const dateA = a.registeredAt?.toDate?.() || new Date(0);
       const dateB = b.registeredAt?.toDate?.() || new Date(0);
       return dateB.getTime() - dateA.getTime();
     });
-  }, [rawChurches]);
+  }, [rawChurches, searchTerm]);
 
   useEffect(() => {
     if (!userLoading) {
       if (!user) {
         router.push("/admin/login");
-      } else if (!SUPER_ADMINS.includes(user.email.toLowerCase() || "")) {
+      } else if (!SUPER_ADMINS.includes(user.email?.toLowerCase() || "")) {
         router.push("/dashboard");
       }
     }
@@ -150,7 +155,6 @@ export default function SystemAdminPortal() {
     const churchesRef = collection(db, "churches");
     const slug = newChurch.slug || generateSlug(newChurch.name);
     
-    // Ensure all emails are lowercase for consistent querying
     const normalizedAdminEmail = newChurch.adminEmail.toLowerCase().trim();
     const authorizedEmails = Array.from(new Set([
       normalizedAdminEmail, 
@@ -300,12 +304,6 @@ export default function SystemAdminPortal() {
     );
   }
 
-  const filteredChurches = sortedChurches.filter(c => 
-    c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.adminEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.slug?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   return (
     <div className="min-h-screen bg-background p-8 space-y-8 animate-in fade-in duration-700">
       <div className="flex justify-between items-center">
@@ -331,12 +329,29 @@ export default function SystemAdminPortal() {
         </div>
       </div>
 
+      <div className="grid gap-6 md:grid-cols-2">
+         <Alert className="glass border-primary/20 bg-primary/5">
+            <User className="h-4 w-4 text-primary" />
+            <AlertTitle>Admin Identity</AlertTitle>
+            <AlertDescription className="text-xs font-mono">
+              Logged in as: {user?.email}
+            </AlertDescription>
+         </Alert>
+         <Alert className="glass border-accent/20 bg-accent/5">
+            <Database className="h-4 w-4 text-accent" />
+            <AlertTitle>Directory Status</AlertTitle>
+            <AlertDescription className="text-xs">
+              Live synchronization active. Showing {sortedChurches.length} organizations.
+            </AlertDescription>
+         </Alert>
+      </div>
+
       {collectionError && (
         <Alert variant="destructive" className="glass border-destructive/50">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Synchronization Error</AlertTitle>
           <AlertDescription>
-            Could not retrieve tenant data. Ensure you have proper administrative permissions and try again.
+            Could not retrieve tenant data. Error: {collectionError.message}
           </AlertDescription>
         </Alert>
       )}
@@ -372,7 +387,7 @@ export default function SystemAdminPortal() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredChurches.map((church) => (
+                {sortedChurches.map((church) => (
                   <TableRow key={church.id} className="border-white/5 hover:bg-white/5 transition-colors">
                     <TableCell className="font-bold">{church.name}</TableCell>
                     <TableCell>
@@ -422,10 +437,10 @@ export default function SystemAdminPortal() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {!collectionLoading && filteredChurches.length === 0 && (
+                {!collectionLoading && sortedChurches.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
-                      No organizations found. Try re-adding your ministry if it was missing.
+                      No organizations found in the directory.
                     </TableCell>
                   </TableRow>
                 )}
