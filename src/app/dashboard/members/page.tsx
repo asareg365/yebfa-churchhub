@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -43,8 +44,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { useCollection, useFirestore } from "@/firebase";
-import { collection, addDoc, serverTimestamp, doc, deleteDoc } from "firebase/firestore";
+import { useCollection, useFirestore, useUser } from "@/firebase";
+import { collection, addDoc, serverTimestamp, doc, deleteDoc, query, where, limit, getDocs } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -55,9 +56,23 @@ export default function MembersPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [memberToDelete, setMemberToDelete] = useState<any>(null);
   const db = useFirestore();
+  const { user } = useUser();
   const { toast } = useToast();
   
-  const membersRef = collection(db, "members");
+  // Get current church context
+  const churchQuery = useMemo(() => {
+    if (!user?.email) return null;
+    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
+  }, [db, user?.email]);
+  
+  const { data: churches } = useCollection(churchQuery);
+  const currentChurch = churches?.[0];
+
+  const membersRef = useMemo(() => {
+    if (!currentChurch?.id) return null;
+    return collection(db, "churches", currentChurch.id, "members");
+  }, [db, currentChurch?.id]);
+
   const { data: members, loading } = useCollection(membersRef);
 
   const [newMember, setNewMember] = useState({
@@ -69,7 +84,7 @@ export default function MembersPage() {
   });
 
   const handleAddMember = () => {
-    if (!newMember.name) return;
+    if (!newMember.name || !membersRef) return;
     
     const memberData = {
       ...newMember,
@@ -78,7 +93,6 @@ export default function MembersPage() {
       photo: `https://picsum.photos/seed/${Math.random()}/100/100`
     };
 
-    // Close dialog immediately for better UX
     setIsAddDialogOpen(false);
 
     addDoc(membersRef, memberData)
@@ -86,7 +100,7 @@ export default function MembersPage() {
         setNewMember({ name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "" });
         toast({ title: "Member added successfully" });
       })
-      .catch(async (serverError) => {
+      .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
           path: membersRef.path,
           operation: 'create',
@@ -97,9 +111,9 @@ export default function MembersPage() {
   };
 
   const handleDeleteMember = () => {
-    if (!memberToDelete) return;
+    if (!memberToDelete || !membersRef) return;
 
-    const docRef = doc(db, "members", memberToDelete.id);
+    const docRef = doc(db, "churches", currentChurch.id, "members", memberToDelete.id);
     deleteDoc(docRef)
       .then(() => {
         setMemberToDelete(null);
@@ -123,12 +137,20 @@ export default function MembersPage() {
     });
   }, [members, searchTerm, statusTab]);
 
+  if (!currentChurch && !loading) {
+    return (
+      <div className="p-12 text-center glass rounded-3xl">
+        <p className="text-muted-foreground">Please ensure your ministry is approved to manage members.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight mb-1">Members</h2>
-          <p className="text-muted-foreground">Manage your congregation records and growth analytics.</p>
+          <p className="text-muted-foreground">Managing directory for {currentChurch?.name}.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
           <Button variant="outline" className="flex-1 md:flex-none glass border-white/10">
@@ -137,7 +159,7 @@ export default function MembersPage() {
           
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="flex-1 md:flex-none bg-primary hover:bg-primary/80">
+              <Button className="flex-1 md:flex-none bg-primary hover:bg-primary/80" disabled={!currentChurch}>
                 <Plus className="mr-2 h-4 w-4" /> Add Member
               </Button>
             </DialogTrigger>
@@ -309,7 +331,6 @@ export default function MembersPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!memberToDelete} onOpenChange={(open) => !open && setMemberToDelete(null)}>
         <AlertDialogContent className="glass">
           <AlertDialogHeader>

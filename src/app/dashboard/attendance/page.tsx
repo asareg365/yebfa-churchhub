@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { CheckCircle2, Clock, Users, Plus, Loader2, Calendar as CalendarIcon, History, BarChart3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useCollection, useFirestore } from "@/firebase";
-import { collection, addDoc, serverTimestamp, query, orderBy, limit } from "firebase/firestore";
+import { useCollection, useFirestore, useUser } from "@/firebase";
+import { collection, addDoc, serverTimestamp, query, orderBy, limit, where } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -27,11 +27,28 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "rec
 
 export default function AttendancePage() {
   const db = useFirestore();
+  const { user } = useUser();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
-  const attendanceRef = collection(db, "attendance");
-  const attendanceQuery = query(attendanceRef, orderBy("date", "desc"), limit(50));
+  const churchQuery = useMemo(() => {
+    if (!user?.email) return null;
+    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
+  }, [db, user?.email]);
+  
+  const { data: churches } = useCollection(churchQuery);
+  const currentChurch = churches?.[0];
+
+  const attendanceRef = useMemo(() => {
+    if (!currentChurch?.id) return null;
+    return collection(db, "churches", currentChurch.id, "attendance");
+  }, [db, currentChurch?.id]);
+
+  const attendanceQuery = useMemo(() => {
+    if (!attendanceRef) return null;
+    return query(attendanceRef, orderBy("date", "desc"), limit(50));
+  }, [attendanceRef]);
+
   const { data: attendance, loading } = useCollection(attendanceQuery);
 
   const [newRecord, setNewRecord] = useState({
@@ -41,7 +58,7 @@ export default function AttendancePage() {
   });
 
   const handleAddRecord = () => {
-    if (newRecord.count <= 0) return;
+    if (newRecord.count <= 0 || !attendanceRef) return;
     
     const recordData = {
       ...newRecord,
@@ -59,7 +76,7 @@ export default function AttendancePage() {
         });
         toast({ title: "Attendance record saved" });
       })
-      .catch(async (serverError) => {
+      .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
           path: attendanceRef.path,
           operation: 'create',
@@ -69,7 +86,7 @@ export default function AttendancePage() {
       });
   };
 
-  const chartData = [...(attendance || [])].reverse();
+  const chartData = useMemo(() => [...(attendance || [])].reverse(), [attendance]);
   const lastSunday = attendance?.[0]?.count || 0;
 
   return (
@@ -77,11 +94,11 @@ export default function AttendancePage() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold tracking-tight mb-1">Attendance</h2>
-          <p className="text-muted-foreground">Monitor congregation presence and service trends.</p>
+          <p className="text-muted-foreground">Monitor service trends for {currentChurch?.name}.</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-primary">
+            <Button className="bg-primary" disabled={!currentChurch}>
               <Plus className="mr-2 h-4 w-4" /> Record Attendance
             </Button>
           </DialogTrigger>

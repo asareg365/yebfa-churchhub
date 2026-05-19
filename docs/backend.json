@@ -89,25 +89,25 @@
     "providers": ["google.com", "password"]
   },
   "firestore": {
-    "/members/{memberId}": {
-      "schema": "Member",
-      "description": "Collection of church members."
-    },
-    "/attendance/{attendanceId}": {
-      "schema": "Attendance",
-      "description": "Collection of attendance records."
-    },
-    "/finances/{financeId}": {
-      "schema": "Finance",
-      "description": "Collection of financial records."
-    },
-    "/events/{eventId}": {
-      "schema": "Event",
-      "description": "Collection of church events."
-    },
     "/churches/{churchId}": {
       "schema": "Church",
       "description": "Collection of all registered churches."
+    },
+    "/churches/{churchId}/members/{memberId}": {
+      "schema": "Member",
+      "description": "Isolated collection of church members per tenant."
+    },
+    "/churches/{churchId}/attendance/{attendanceId}": {
+      "schema": "Attendance",
+      "description": "Isolated collection of attendance records per tenant."
+    },
+    "/churches/{churchId}/finances/{financeId}": {
+      "schema": "Finance",
+      "description": "Isolated collection of financial records per tenant."
+    },
+    "/churches/{churchId}/events/{eventId}": {
+      "schema": "Event",
+      "description": "Isolated collection of church events per tenant."
     }
   }
 }
