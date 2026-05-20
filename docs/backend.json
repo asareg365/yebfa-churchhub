@@ -102,7 +102,17 @@
           "type": "array",
           "items": { "type": "string" }
         },
-        "plan": { "type": "string", "enum": ["Starter", "Growth", "Premium"] },
+        "plan": { "type": "string", "enum": ["Basic", "Standard", "Premium"] },
+        "subscription": {
+          "type": "object",
+          "properties": {
+            "plan": { "type": "string" },
+            "smsCredits": { "type": "number" },
+            "smsUsed": { "type": "number" },
+            "status": { "type": "string" },
+            "renewalDate": { "type": "string", "format": "date" }
+          }
+        },
         "status": { "type": "string", "enum": ["Pending", "Approved", "Suspended"] },
         "mustChangePassword": { "type": "boolean" },
         "settings": {

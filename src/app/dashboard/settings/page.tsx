@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -176,9 +177,9 @@ export default function SettingsPage() {
   };
 
   const plans = [
-    { name: "Starter", price: "200", description: "Essential tools for small congregations.", features: ["Up to 200 members", "Attendance tracking", "Basic reports"], current: currentChurch?.plan === "Starter" },
-    { name: "Growth", price: "500", description: "Advanced features for growing ministries.", features: ["Up to 1,000 members", "Finance management", "AI Insights Lite"], current: currentChurch?.plan === "Growth" },
-    { name: "Premium", price: "1,200", description: "Full suite for enterprise organizations.", features: ["Unlimited members", "Full AI Suite", "Bulk SMS engine"], current: currentChurch?.plan === "Premium" }
+    { name: "Basic", price: "99", description: "Essential tools for small congregations.", features: ["100 SMS/month", "1 church admin", "Basic attendance", "Member management"], current: currentChurch?.plan === "Basic" },
+    { name: "Standard", price: "299", description: "Advanced features for growing ministries.", features: ["1,000 SMS/month", "Unlimited members", "Finance management", "AI Insights Lite"], current: currentChurch?.plan === "Standard" },
+    { name: "Premium", price: "599", description: "Full suite for enterprise organizations.", features: ["Unlimited SMS", "Multiple branches", "Advanced analytics", "Dedicated manager"], current: currentChurch?.plan === "Premium" }
   ];
 
   if (churchLoading) {
@@ -359,11 +360,11 @@ export default function SettingsPage() {
         <TabsContent value="billing" className="space-y-6 animate-in fade-in-50 duration-500">
           <Alert className="glass-primary border-primary/30 py-6 rounded-3xl">
             <Smartphone className="h-6 w-6 text-primary" />
-            <AlertTitle className="text-primary font-bold text-lg ml-2">Payment Instructions</AlertTitle>
+            <AlertTitle className="text-primary font-bold text-lg ml-2">How to Pay (Subscription Renewal)</AlertTitle>
             <AlertDescription className="mt-2 text-foreground/90 ml-2 text-base">
-              To activate or renew your plan, please MoMo the plan cost to 
+              To activate or renew your plan and recharge SMS credits, please MoMo the plan cost to 
               <span className="font-bold text-primary mx-1">0248472474</span>. 
-              Use your <span className="font-bold underline">Church Name</span> as the reference.
+              Use your <span className="font-bold underline italic">Church Name</span> as the reference.
             </AlertDescription>
           </Alert>
 

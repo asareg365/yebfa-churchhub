@@ -5,7 +5,6 @@ import { useState, useMemo } from 'react';
 import { 
   Send, 
   Sparkles, 
-  Users, 
   MessageSquare, 
   Megaphone, 
   Loader2, 
@@ -36,7 +35,7 @@ import { Badge } from '@/components/ui/badge';
 import { aiCommunicationAssistant } from '@/ai/flows/ai-communication-assistant';
 import { useToast } from '@/hooks/use-toast';
 import { useCollection, useFirestore, useUser } from '@/firebase';
-import { collection, query, where, limit, addDoc, serverTimestamp, deleteDoc, doc, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, where, limit, addDoc, serverTimestamp, deleteDoc, doc, orderBy } from 'firebase/firestore';
 import { sendAndLogSMS, processBirthdaysToday } from '@/services/sms-service';
 import { format, startOfDay, startOfMonth } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -75,17 +74,19 @@ export default function CommunicationPage() {
 
   // Derived Stats
   const stats = useMemo(() => {
-    if (!allLogs) return { today: 0, failed: 0, monthly: 0, remaining: 2500 }; // Remaining is placeholder
+    if (!allLogs || !currentChurch) return { today: 0, failed: 0, monthly: 0, remaining: 0 };
     const today = startOfDay(new Date());
     const month = startOfMonth(new Date());
+
+    const sub = currentChurch.subscription || { smsCredits: 0, smsUsed: 0 };
 
     return {
       today: allLogs.filter(l => l.createdAt?.toDate() >= today && l.status === 'sent').length,
       failed: allLogs.filter(l => l.createdAt?.toDate() >= today && l.status === 'failed').length,
       monthly: allLogs.filter(l => l.createdAt?.toDate() >= month && l.status === 'sent').length,
-      remaining: 2500 - allLogs.length // Simple simulation
+      remaining: Math.max(0, sub.smsCredits - sub.smsUsed)
     };
-  }, [allLogs]);
+  }, [allLogs, currentChurch]);
 
   // Filtered Logs for Table
   const filteredLogs = useMemo(() => {
@@ -127,9 +128,11 @@ export default function CommunicationPage() {
       });
       if (outcome.success) {
         toast({ title: 'Test SMS queued', description: 'Check logs for status.' });
+      } else {
+        toast({ title: 'Delivery failed', description: outcome.error, variant: 'destructive' });
       }
-    } catch (error) {
-      toast({ title: 'Failed to send test', variant: 'destructive' });
+    } catch (error: any) {
+      toast({ title: 'Failed to send test', description: error.message, variant: 'destructive' });
     } finally {
       setIsSending(false);
     }
@@ -158,8 +161,8 @@ export default function CommunicationPage() {
         title: 'Birthday check complete', 
         description: `Sent: ${results.sent}, Failed: ${results.failed}, Skipped: ${results.skipped}` 
       });
-    } catch (error) {
-      toast({ title: 'Birthday process failed', variant: 'destructive' });
+    } catch (error: any) {
+      toast({ title: 'Birthday process failed', description: error.message, variant: 'destructive' });
     } finally {
       setIsProcessingBirthdays(false);
     }

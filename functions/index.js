@@ -1,3 +1,4 @@
+
 const admin = require("firebase-admin");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onRequest } = require("firebase-functions/v2/https");
@@ -26,7 +27,7 @@ function normalizePhone(phone) {
 const axios = require("axios");
 
 /**
- * Modern mNotify SMS function with detailed logging
+ * Modern mNotify SMS function with detailed logging and credit tracking
  */
 async function sendMNotifySMS(phone, message, churchData) {
   const apiKey = MNOTIFY_API_KEY.value();
@@ -36,9 +37,6 @@ async function sendMNotifySMS(phone, message, churchData) {
   const senderId = (churchData && churchData.settings && churchData.settings.senderId) || 
                    defaultSenderId || 
                    "ChurchHub";
-
-  console.log("API KEY (masked):", apiKey.substring(0, 4) + "...");
-  console.log("SENDER ID:", senderId);
 
   const response = await axios.post(
     "https://api.mnotify.com/api/sms/quick",
@@ -93,6 +91,13 @@ exports.sendBirthdaySMS = onSchedule(
         continue;
       }
 
+      // CREDIT CHECK
+      const sub = churchData.subscription || { smsCredits: 0, smsUsed: 0 };
+      if (sub.smsUsed >= sub.smsCredits) {
+        console.log(`[${churchId}] SMS credit exhausted. Skipping birthday messages.`);
+        continue;
+      }
+
       const membersSnap = await db
         .collection("churches")
         .doc(churchId)
@@ -109,6 +114,11 @@ exports.sendBirthdaySMS = onSchedule(
 
         if (mMonth === month && mDay === day) {
           try {
+            // Re-check credits before each send if in the same batch
+            const currentSubSnap = await db.collection("churches").doc(churchId).get();
+            const currentSub = currentSubSnap.data().subscription || { smsCredits: 0, smsUsed: 0 };
+            if (currentSub.smsUsed >= currentSub.smsCredits) break;
+
             // Duplicate prevention: check if already sent today
             const existingLogs = await db.collection("churches")
               .doc(churchId)
@@ -125,8 +135,10 @@ exports.sendBirthdaySMS = onSchedule(
             const message = `Happy Birthday ${m.name}! God bless your new age. — ${churchData.name || 'Our Church'}`;
             const phone = normalizePhone(m.phone);
 
-            await sendMNotifySMS(phone, message, churchData);
+            console.log(`Birthday match found for ${m.name}`);
+            const result = await sendMNotifySMS(phone, message, churchData);
             
+            // Log successfully and increment credits
             await db.collection("churches").doc(churchId).collection("smsLogs").add({
               phone,
               message,
@@ -136,6 +148,11 @@ exports.sendBirthdaySMS = onSchedule(
               memberName: m.name,
               createdAt: admin.firestore.FieldValue.serverTimestamp(),
             });
+
+            await db.collection("churches").doc(churchId).update({
+              "subscription.smsUsed": admin.firestore.FieldValue.increment(1)
+            });
+
           } catch (error) {
             console.error(`[${churchId}] Failed SMS to ${m.name}:`, error.message);
           }

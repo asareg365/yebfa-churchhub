@@ -9,7 +9,9 @@ import {
   query,
   getDocs,
   doc,
-  getDoc
+  getDoc,
+  updateDoc,
+  increment
 } from 'firebase/firestore';
 import axios from 'axios';
 
@@ -76,6 +78,7 @@ async function sendSMSViaProvider(phone: string, message: string, senderId: stri
 
 /**
  * Sends an SMS and logs the transaction in Firestore with tenant isolation.
+ * Now includes credit check and incrementing.
  */
 export async function sendAndLogSMS(
   db: Firestore,
@@ -93,9 +96,16 @@ export async function sendAndLogSMS(
   const normalizedPhone = normalizePhone(payload.phone);
   
   try {
-    // Fetch church settings for senderId
+    // Fetch church settings for senderId and subscription
     const churchSnap = await getDoc(churchRef);
     const churchData = churchSnap.data();
+    
+    // CREDIT CHECK
+    const sub = churchData?.subscription || { smsCredits: 0, smsUsed: 0 };
+    if (sub.smsUsed >= sub.smsCredits) {
+      throw new Error("SMS credit exhausted. Please renew your plan.");
+    }
+
     const senderId = churchData?.settings?.senderId || "ChurchHub";
 
     // 1. Attempt to send
@@ -115,9 +125,17 @@ export async function sendAndLogSMS(
     };
 
     await addDoc(logsRef, logData);
-    return { success: outcome.success };
+
+    if (outcome.success) {
+      // 3. Increment credits used
+      await updateDoc(churchRef, {
+        "subscription.smsUsed": increment(1)
+      });
+    }
+
+    return { success: outcome.success, error: outcome.success ? undefined : (outcome as any).error };
   } catch (error: any) {
-    // 3. Log failure
+    // 4. Log failure
     await addDoc(logsRef, {
       churchId,
       memberId: payload.memberId,
@@ -138,17 +156,11 @@ export async function sendAndLogSMS(
  */
 export async function processBirthdaysToday(db: Firestore, churchId: string) {
   const membersRef = collection(db, 'churches', churchId, 'members');
-  const churchRef = doc(db, 'churches', churchId);
   const today = new Date();
   const currentMonth = today.getMonth() + 1;
   const currentDay = today.getDate();
 
-  const [membersSnap, churchSnap] = await Promise.all([
-    getDocs(membersRef),
-    getDoc(churchRef)
-  ]);
-
-  const churchData = churchSnap.data();
+  const membersSnap = await getDocs(membersRef);
   const results = { sent: 0, failed: 0, skipped: 0 };
 
   for (const doc of membersSnap.docs) {
@@ -162,10 +174,9 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
     const [year, month, day] = member.dateOfBirth.split('-').map(Number);
     
     if (month === currentMonth && day === currentDay) {
-      const message = `Happy Birthday ${member.name}! God bless your new age. — ${churchData?.name || 'Our Church'}`;
       const outcome = await sendAndLogSMS(db, churchId, {
         phone: member.phone,
-        message,
+        message: `Happy Birthday ${member.name}! God bless your new age.`,
         type: 'birthday',
         memberId: doc.id,
         memberName: member.name

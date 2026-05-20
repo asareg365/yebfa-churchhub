@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
@@ -138,7 +139,14 @@ function LoginContent() {
         adminEmails: authorizedEmails,
         enabledModules: selectedModules,
         status: "Pending",
-        plan: "Starter",
+        plan: "Basic",
+        subscription: {
+          plan: "Basic",
+          smsCredits: 100,
+          smsUsed: 0,
+          status: "Active",
+          renewalDate: format(new Date(new Date().setMonth(new Date().getMonth() + 1)), 'yyyy-MM-dd')
+        },
         mustChangePassword: false,
         registeredAt: serverTimestamp(),
         settings: {
