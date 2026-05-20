@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -19,7 +18,10 @@ import {
   KeyRound,
   ShieldAlert,
   Lock,
-  MessageSquare
+  MessageSquare,
+  Sun,
+  Moon,
+  Laptop
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,12 +31,14 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useUser, useFirestore, useCollection, useAuth } from "@/firebase";
 import { doc, updateDoc, query, collection, where, limit } from "firebase/firestore";
 import { updatePassword } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
+import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
   const { user } = useUser();
@@ -47,6 +51,7 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [activeTab, setActiveTab] = useState(isForced ? "security" : "general");
+  const [currentTheme, setCurrentTheme] = useState<"light" | "dark" | "system">("dark");
 
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
@@ -63,7 +68,8 @@ export default function SettingsPage() {
     birthdaySmsEnabled: true,
     lowCreditAlertEnabled: true,
     dailyReportsEnabled: false,
-    senderId: ""
+    senderId: "",
+    theme: "dark" as "light" | "dark" | "system"
   });
 
   const [passwords, setPasswords] = useState({
@@ -73,6 +79,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (currentChurch) {
+      const dbTheme = currentChurch.settings?.theme || "dark";
       setSettings({
         name: currentChurch.name || "",
         adminEmail: currentChurch.adminEmail || "",
@@ -80,10 +87,25 @@ export default function SettingsPage() {
         birthdaySmsEnabled: currentChurch.settings?.birthdaySmsEnabled ?? true,
         lowCreditAlertEnabled: currentChurch.settings?.lowCreditAlertEnabled ?? true,
         dailyReportsEnabled: currentChurch.settings?.dailyReportsEnabled ?? false,
-        senderId: currentChurch.settings?.senderId || ""
+        senderId: currentChurch.settings?.senderId || "",
+        theme: dbTheme
       });
+      setCurrentTheme(dbTheme);
+      applyTheme(dbTheme);
     }
   }, [currentChurch]);
+
+  const applyTheme = (theme: "light" | "dark" | "system") => {
+    const root = window.document.documentElement;
+    root.classList.remove("light", "dark");
+
+    if (theme === "system") {
+      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      root.classList.add(systemTheme);
+    } else {
+      root.classList.add(theme);
+    }
+  };
 
   const handleSave = () => {
     if (!currentChurch) return;
@@ -97,12 +119,14 @@ export default function SettingsPage() {
         birthdaySmsEnabled: settings.birthdaySmsEnabled,
         lowCreditAlertEnabled: settings.lowCreditAlertEnabled,
         dailyReportsEnabled: settings.dailyReportsEnabled,
-        senderId: settings.senderId
+        senderId: settings.senderId,
+        theme: settings.theme
       }
     };
 
     updateDoc(docRef, updateData)
       .then(() => {
+        applyTheme(settings.theme);
         toast({ title: "Settings updated", description: "Your changes have been saved successfully." });
       })
       .catch(async (error) => {
@@ -183,6 +207,7 @@ export default function SettingsPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="glass border-white/10 p-1 rounded-2xl">
           <TabsTrigger value="general" className="rounded-xl px-6" disabled={isForced}>General</TabsTrigger>
+          <TabsTrigger value="display" className="rounded-xl px-6" disabled={isForced}>Display</TabsTrigger>
           <TabsTrigger value="notifications" className="rounded-xl px-6" disabled={isForced}>Notifications</TabsTrigger>
           <TabsTrigger value="billing" className="rounded-xl px-6" disabled={isForced}>Billing</TabsTrigger>
           <TabsTrigger value="security" className="rounded-xl px-6">Security</TabsTrigger>
@@ -222,14 +247,6 @@ export default function SettingsPage() {
                     className="bg-white/5 border-white/10" 
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Tenant ID (Slug)</Label>
-                  <Input 
-                    disabled
-                    value={currentChurch?.slug || ""} 
-                    className="bg-white/5 border-white/10 opacity-50 font-mono" 
-                  />
-                </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label className="flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 text-primary" />
@@ -244,6 +261,56 @@ export default function SettingsPage() {
                   <p className="text-[10px] text-muted-foreground italic">Must be pre-approved on your mNotify account. Max 11 characters.</p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="display" className="animate-in fade-in-50 duration-500">
+          <Card className="glass">
+            <CardHeader>
+              <CardTitle>Appearance</CardTitle>
+              <CardDescription>Choose how ChurchHub looks on your screen.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <RadioGroup 
+                value={settings.theme} 
+                onValueChange={(v: any) => setSettings({...settings, theme: v})}
+                className="grid grid-cols-1 md:grid-cols-3 gap-4"
+              >
+                <Label
+                  htmlFor="theme-light"
+                  className={cn(
+                    "flex flex-col items-center justify-between rounded-2xl border-2 border-muted bg-white/5 p-4 hover:bg-white/10 cursor-pointer",
+                    settings.theme === "light" && "border-primary"
+                  )}
+                >
+                  <RadioGroupItem value="light" id="theme-light" className="sr-only" />
+                  <Sun className="mb-3 h-6 w-6" />
+                  <span className="text-sm font-semibold">Light</span>
+                </Label>
+                <Label
+                  htmlFor="theme-dark"
+                  className={cn(
+                    "flex flex-col items-center justify-between rounded-2xl border-2 border-muted bg-white/5 p-4 hover:bg-white/10 cursor-pointer",
+                    settings.theme === "dark" && "border-primary"
+                  )}
+                >
+                  <RadioGroupItem value="dark" id="theme-dark" className="sr-only" />
+                  <Moon className="mb-3 h-6 w-6" />
+                  <span className="text-sm font-semibold">Dark</span>
+                </Label>
+                <Label
+                  htmlFor="theme-system"
+                  className={cn(
+                    "flex flex-col items-center justify-between rounded-2xl border-2 border-muted bg-white/5 p-4 hover:bg-white/10 cursor-pointer",
+                    settings.theme === "system" && "border-primary"
+                  )}
+                >
+                  <RadioGroupItem value="system" id="theme-system" className="sr-only" />
+                  <Laptop className="mb-3 h-6 w-6" />
+                  <span className="text-sm font-semibold">System</span>
+                </Label>
+              </RadioGroup>
             </CardContent>
           </Card>
         </TabsContent>

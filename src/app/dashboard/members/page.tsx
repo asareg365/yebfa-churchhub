@@ -1,8 +1,7 @@
-
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, Search, Download, MoreVertical, QrCode, Mail, Phone, Loader2, Users as UsersIcon, Trash2 } from "lucide-react";
+import { Plus, Search, Download, MoreVertical, QrCode, Mail, Phone, Loader2, Users as UsersIcon, Trash2, FileUp, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -26,7 +25,8 @@ import {
   DialogHeader, 
   DialogTitle, 
   DialogTrigger,
-  DialogFooter
+  DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -43,18 +43,45 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { useCollection, useFirestore, useUser } from "@/firebase";
-import { collection, addDoc, serverTimestamp, doc, deleteDoc, query, where, limit } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, deleteDoc, query, where, limit, writeBatch } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
+
+const CATHOLIC_SOCIETIES = [
+  "Knights of Columbus",
+  "Catholic Women Association",
+  "Catholic Youth Organization",
+  "Sacred Heart of Jesus",
+  "St. Vincent de Paul",
+  "Legion of Mary",
+  "Charismatic Renewal",
+  "Christian Mothers"
+];
+
+const DEPARTMENTS = [
+  "Music",
+  "Youth",
+  "Media",
+  "Children",
+  "Welfare",
+  "Ushering",
+  "Evangelism"
+];
 
 export default function MembersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusTab, setStatusTab] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [bulkData, setBulkData] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
   const [memberToDelete, setMemberToDelete] = useState<any>(null);
+
   const db = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
@@ -80,8 +107,18 @@ export default function MembersPage() {
     department: "Music",
     status: "Active" as const,
     gender: "Male" as const,
-    dateOfBirth: ""
+    dateOfBirth: "",
+    societies: [] as string[]
   });
+
+  const toggleSociety = (society: string) => {
+    setNewMember(prev => ({
+      ...prev,
+      societies: prev.societies.includes(society)
+        ? prev.societies.filter(s => s !== society)
+        : [...prev.societies, society]
+    }));
+  };
 
   const handleAddMember = () => {
     if (!newMember.name || !membersRef) return;
@@ -96,7 +133,7 @@ export default function MembersPage() {
     addDoc(membersRef, memberData)
       .then(() => {
         setIsAddDialogOpen(false);
-        setNewMember({ name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "" });
+        setNewMember({ name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "", societies: [] });
         toast({ title: "Member added successfully" });
       })
       .catch(async (error) => {
@@ -107,6 +144,46 @@ export default function MembersPage() {
         });
         errorEmitter.emit('permission-error', permissionError);
       });
+  };
+
+  const handleBulkImport = async () => {
+    if (!bulkData || !membersRef) return;
+    setIsImporting(true);
+
+    try {
+      // Basic CSV-like parser (splitting by lines and then commas)
+      const lines = bulkData.trim().split("\n");
+      const batch = writeBatch(db);
+      let count = 0;
+
+      for (const line of lines) {
+        const [name, phone, department, gender] = line.split(",").map(s => s?.trim());
+        if (!name) continue;
+
+        const docRef = doc(membersRef);
+        batch.set(docRef, {
+          name,
+          phone: phone || "",
+          department: department || "Music",
+          gender: (gender as any) || "Male",
+          status: "Active",
+          societies: [],
+          joined: new Date().toISOString().split('T')[0],
+          createdAt: serverTimestamp(),
+          photo: `https://picsum.photos/seed/${Math.random()}/100/100`
+        });
+        count++;
+      }
+
+      await batch.commit();
+      toast({ title: "Import Successful", description: `${count} members have been added.` });
+      setBulkData("");
+      setIsBulkImportOpen(false);
+    } catch (error: any) {
+      toast({ title: "Import Failed", description: "Please check your format and try again.", variant: "destructive" });
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const handleDeleteMember = () => {
@@ -144,8 +221,8 @@ export default function MembersPage() {
           <p className="text-muted-foreground">Managing directory for {currentChurch?.name || "your ministry"}.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
-          <Button variant="outline" className="flex-1 md:flex-none glass border-white/10">
-            <Download className="mr-2 h-4 w-4" /> Export
+          <Button variant="outline" className="flex-1 md:flex-none glass border-white/10" onClick={() => setIsBulkImportOpen(true)}>
+            <FileUp className="mr-2 h-4 w-4" /> Bulk Import
           </Button>
           
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -154,21 +231,38 @@ export default function MembersPage() {
                 <Plus className="mr-2 h-4 w-4" /> Add Member
               </Button>
             </DialogTrigger>
-            <DialogContent className="glass">
+            <DialogContent className="glass max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add New Member</DialogTitle>
+                <DialogDescription>Fill in the details to register a new congregant.</DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Full Name</Label>
-                  <Input 
-                    value={newMember.name} 
-                    onChange={(e) => setNewMember({...newMember, name: e.target.value})}
-                    placeholder="John Doe" 
-                    className="bg-white/5"
-                  />
+              <div className="space-y-6 py-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Full Name</Label>
+                    <Input 
+                      value={newMember.name} 
+                      onChange={(e) => setNewMember({...newMember, name: e.target.value})}
+                      placeholder="John Doe" 
+                      className="bg-white/5"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Gender</Label>
+                    <Select value={newMember.gender} onValueChange={(v: any) => setNewMember({...newMember, gender: v})}>
+                      <SelectTrigger className="bg-white/5">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="glass">
+                        <SelectItem value="Male">Male</SelectItem>
+                        <SelectItem value="Female">Female</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Department</Label>
                     <Select value={newMember.department} onValueChange={(v) => setNewMember({...newMember, department: v})}>
@@ -176,11 +270,9 @@ export default function MembersPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="glass">
-                        <SelectItem value="Music">Music</SelectItem>
-                        <SelectItem value="Youth">Youth</SelectItem>
-                        <SelectItem value="Media">Media</SelectItem>
-                        <SelectItem value="Children">Children</SelectItem>
-                        <SelectItem value="Welfare">Welfare</SelectItem>
+                        {DEPARTMENTS.map(d => (
+                          <SelectItem key={d} value={d}>{d}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -198,6 +290,23 @@ export default function MembersPage() {
                     </Select>
                   </div>
                 </div>
+
+                <div className="space-y-4">
+                  <Label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Societies (Select multiple if applicable)</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {CATHOLIC_SOCIETIES.map(society => (
+                      <div key={society} className="flex items-center space-x-2 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+                        <Checkbox 
+                          id={`society-${society}`} 
+                          checked={newMember.societies.includes(society)} 
+                          onCheckedChange={() => toggleSociety(society)}
+                        />
+                        <label htmlFor={`society-${society}`} className="text-xs cursor-pointer flex-1">{society}</label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label>Date of Birth</Label>
                   <Input 
@@ -216,6 +325,33 @@ export default function MembersPage() {
           </Dialog>
         </div>
       </div>
+
+      {/* Bulk Import Dialog */}
+      <Dialog open={isBulkImportOpen} onOpenChange={setIsBulkImportOpen}>
+        <DialogContent className="glass max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Bulk Member Import</DialogTitle>
+            <DialogDescription>Paste member data separated by commas (one per line). Format: Name, Phone, Department, Gender</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea 
+              className="min-h-[200px] bg-white/5 font-mono text-xs" 
+              placeholder="Example:
+John Doe, 0240000000, Music, Male
+Jane Smith, 0550000000, Youth, Female"
+              value={bulkData}
+              onChange={(e) => setBulkData(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsBulkImportOpen(false)}>Cancel</Button>
+            <Button onClick={handleBulkImport} disabled={isImporting || !bulkData}>
+              {isImporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileUp className="w-4 h-4 mr-2" />}
+              Start Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Tabs defaultValue="all" value={statusTab} onValueChange={setStatusTab} className="space-y-6">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
@@ -247,8 +383,8 @@ export default function MembersPage() {
                     <TableHead className="w-[80px]"></TableHead>
                     <TableHead>Member Name</TableHead>
                     <TableHead>Department</TableHead>
+                    <TableHead>Societies</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Joined Date</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -261,11 +397,24 @@ export default function MembersPage() {
                           <AvatarFallback>{member.name?.charAt(0)}</AvatarFallback>
                         </Avatar>
                       </TableCell>
-                      <TableCell className="font-semibold">{member.name}</TableCell>
+                      <TableCell>
+                        <div className="font-semibold">{member.name}</div>
+                        <div className="text-[10px] text-muted-foreground">{member.phone}</div>
+                      </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="bg-primary/10 text-primary border-0">
                           {member.department}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {member.societies?.map((s: string) => (
+                            <Badge key={s} variant="outline" className="text-[9px] px-1 py-0 h-4 border-accent/20 text-accent">
+                              {s}
+                            </Badge>
+                          ))}
+                          {(!member.societies || member.societies.length === 0) && <span className="text-[10px] text-muted-foreground italic">None</span>}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={cn(
@@ -275,7 +424,6 @@ export default function MembersPage() {
                           {member.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{member.joined}</TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
