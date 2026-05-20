@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -22,6 +23,7 @@ import {
   Info,
   SendHorizontal,
   Lock,
+  Church as ChurchIcon
 } from 'lucide-react';
 import {
   Card,
@@ -68,6 +70,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCollection, useFirestore, useUser, useAuth } from '@/firebase';
 import {
   collection,
@@ -106,6 +109,8 @@ const MODULES = [
   { id: 'reports', label: 'Detailed Reports' },
 ];
 
+const DENOMINATIONS = ["Catholic", "Pentecostal", "Methodist", "Baptist", "Other"];
+
 export default function SystemAdminPortal() {
   const { user, loading: userLoading } = useUser();
   const auth = useAuth();
@@ -130,6 +135,7 @@ export default function SystemAdminPortal() {
   const initialChurchState = {
     name: '',
     slug: '',
+    denomination: 'Pentecostal',
     adminEmail: '',
     adminPassword: '',
     plan: 'Starter' as const,
@@ -233,6 +239,7 @@ export default function SystemAdminPortal() {
     const churchData = {
       name: newChurch.name,
       slug: finalSlug,
+      denomination: newChurch.denomination,
       adminEmail: normalizedAdminEmail,
       adminEmails: authorizedEmails,
       plan: newChurch.plan,
@@ -310,6 +317,7 @@ export default function SystemAdminPortal() {
     const churchDoc = doc(db, 'churches', editingChurch.id);
     const updateData = {
       name: editingChurch.name,
+      denomination: editingChurch.denomination,
       plan: editingChurch.plan,
       status: editingChurch.status,
       enabledModules: editingChurch.enabledModules || [],
@@ -507,6 +515,7 @@ export default function SystemAdminPortal() {
                 <TableRow className="border-white/5">
                   <TableHead>Ministry Name</TableHead>
                   <TableHead>Tenant ID (Slug)</TableHead>
+                  <TableHead>Denomination</TableHead>
                   <TableHead>Registered</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -523,6 +532,11 @@ export default function SystemAdminPortal() {
                       <code className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-bold">
                         {church.slug}
                       </code>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="border-white/10">
+                        {church.denomination || 'Unknown'}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       <div className="flex items-center gap-2">
@@ -629,6 +643,19 @@ export default function SystemAdminPortal() {
                 />
               </div>
             </div>
+            <div className="space-y-2">
+              <Label>Denomination</Label>
+              <Select value={newChurch.denomination} onValueChange={(v) => setNewChurch({...newChurch, denomination: v})}>
+                <SelectTrigger className="bg-white/5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="glass">
+                  {DENOMINATIONS.map(d => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Admin Email</Label>
@@ -720,6 +747,19 @@ export default function SystemAdminPortal() {
                 }
                 className="bg-white/5"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Denomination</Label>
+              <Select value={editingChurch?.denomination || 'Other'} onValueChange={(v) => setEditingChurch({...editingChurch, denomination: v})}>
+                <SelectTrigger className="bg-white/5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="glass">
+                  {DENOMINATIONS.map(d => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-3 pt-4 border-t border-white/5">
               <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">

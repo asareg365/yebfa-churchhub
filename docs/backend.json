@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Member": {
@@ -90,6 +91,7 @@
       "properties": {
         "name": { "type": "string" },
         "slug": { "type": "string" },
+        "denomination": { "type": "string", "enum": ["Catholic", "Pentecostal", "Methodist", "Baptist", "Other"] },
         "adminEmail": { "type": "string" },
         "adminEmails": { 
           "type": "array", 
@@ -114,7 +116,7 @@
         },
         "registeredAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["name", "slug", "adminEmail", "plan", "status"]
+      "required": ["name", "slug", "adminEmail", "plan", "status", "denomination"]
     }
   },
   "auth": {

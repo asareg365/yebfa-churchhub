@@ -1,7 +1,8 @@
+
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, Search, Download, MoreVertical, QrCode, Mail, Phone, Loader2, Users as UsersIcon, Trash2, FileUp, CheckCircle2, AlertCircle } from "lucide-react";
+import { Plus, Search, Download, MoreVertical, QrCode, Mail, Phone, Loader2, Users as UsersIcon, Trash2, FileUp, CheckCircle2, AlertCircle, ChevronDown, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -38,6 +39,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Label } from "@/components/ui/label";
@@ -95,6 +101,8 @@ export default function MembersPage() {
   const { data: churches } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
+  const isCatholic = currentChurch?.denomination === 'Catholic';
+
   const membersRef = useMemo(() => {
     if (!currentChurch?.id) return null;
     return collection(db, "churches", currentChurch.id, "members");
@@ -151,7 +159,6 @@ export default function MembersPage() {
     setIsImporting(true);
 
     try {
-      // Basic CSV-like parser (splitting by lines and then commas)
       const lines = bulkData.trim().split("\n");
       const batch = writeBatch(db);
       let count = 0;
@@ -291,21 +298,51 @@ export default function MembersPage() {
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <Label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Societies (Select multiple if applicable)</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {CATHOLIC_SOCIETIES.map(society => (
-                      <div key={society} className="flex items-center space-x-2 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
-                        <Checkbox 
-                          id={`society-${society}`} 
-                          checked={newMember.societies.includes(society)} 
-                          onCheckedChange={() => toggleSociety(society)}
-                        />
-                        <label htmlFor={`society-${society}`} className="text-xs cursor-pointer flex-1">{society}</label>
-                      </div>
-                    ))}
+                {isCatholic && (
+                  <div className="space-y-2">
+                    <Label>Societies (Multi-select Dropdown)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-between bg-white/5 border-white/10 h-11 px-3 text-left font-normal"
+                        >
+                          <span className="truncate">
+                            {newMember.societies.length > 0 
+                              ? `${newMember.societies.length} Selected: ${newMember.societies.join(", ")}`
+                              : "Select Societies"}
+                          </span>
+                          <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 glass" align="start">
+                        <div className="max-h-[300px] overflow-y-auto p-2 space-y-1">
+                          {CATHOLIC_SOCIETIES.map(society => {
+                            const isSelected = newMember.societies.includes(society);
+                            return (
+                              <div 
+                                key={society} 
+                                className={cn(
+                                  "flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors",
+                                  isSelected ? "bg-primary/20 text-primary" : "hover:bg-white/5"
+                                )}
+                                onClick={() => toggleSociety(society)}
+                              >
+                                <div className={cn(
+                                  "w-4 h-4 border rounded flex items-center justify-center transition-colors",
+                                  isSelected ? "bg-primary border-primary" : "border-white/20"
+                                )}>
+                                  {isSelected && <Check className="h-3 w-3 text-primary-foreground" />}
+                                </div>
+                                <span className="text-sm">{society}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   </div>
-                </div>
+                )}
 
                 <div className="space-y-2">
                   <Label>Date of Birth</Label>
@@ -326,7 +363,6 @@ export default function MembersPage() {
         </div>
       </div>
 
-      {/* Bulk Import Dialog */}
       <Dialog open={isBulkImportOpen} onOpenChange={setIsBulkImportOpen}>
         <DialogContent className="glass max-w-xl">
           <DialogHeader>

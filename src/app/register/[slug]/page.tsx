@@ -13,7 +13,9 @@ import {
   Loader2, 
   ArrowLeft,
   Sparkles,
-  Heart
+  Heart,
+  ChevronDown,
+  Check
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,9 +23,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useFirestore } from "@/firebase";
 import { collection, query, where, getDocs, limit, addDoc, serverTimestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 
 const CATHOLIC_SOCIETIES = [
@@ -116,6 +124,8 @@ export default function PublicRegistrationPage() {
       setIsSubmitting(false);
     }
   };
+
+  const isCatholic = church?.denomination === 'Catholic';
 
   if (isLoading) {
     return (
@@ -258,26 +268,51 @@ export default function PublicRegistrationPage() {
                   </div>
                 </div>
 
-                <div className="space-y-4 pt-4 border-t border-white/5">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                    <Users className="w-3 h-3" />
-                    Societies & Groups
-                  </Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {CATHOLIC_SOCIETIES.map(society => (
-                      <div key={society} className="flex items-center space-x-2 p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
-                        <Checkbox 
-                          id={`pub-society-${society}`} 
-                          checked={formData.societies.includes(society)} 
-                          onCheckedChange={() => toggleSociety(society)}
-                        />
-                        <label htmlFor={`pub-society-${society}`} className="text-[10px] md:text-xs cursor-pointer flex-1 leading-tight">
-                          {society}
-                        </label>
-                      </div>
-                    ))}
+                {isCatholic && (
+                  <div className="space-y-2">
+                    <Label>Societies & Groups (Multi-select Dropdown)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-between bg-white/5 border-white/10 h-11 px-3 text-left font-normal"
+                        >
+                          <span className="truncate">
+                            {formData.societies.length > 0 
+                              ? `${formData.societies.length} Selected` 
+                              : "Select Societies"}
+                          </span>
+                          <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 glass" align="start">
+                        <div className="max-h-[300px] overflow-y-auto p-2 space-y-1">
+                          {CATHOLIC_SOCIETIES.map(society => {
+                            const isSelected = formData.societies.includes(society);
+                            return (
+                              <div 
+                                key={society} 
+                                className={cn(
+                                  "flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors",
+                                  isSelected ? "bg-primary/20 text-primary" : "hover:bg-white/5"
+                                )}
+                                onClick={() => toggleSociety(society)}
+                              >
+                                <div className={cn(
+                                  "w-4 h-4 border rounded flex items-center justify-center transition-colors",
+                                  isSelected ? "bg-primary border-primary" : "border-white/20"
+                                )}>
+                                  {isSelected && <Check className="h-3 w-3 text-primary-foreground" />}
+                                </div>
+                                <span className="text-xs">{society}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   </div>
-                </div>
+                )}
               </div>
             </CardContent>
             <CardFooter className="pt-6">
