@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "studio-5144685696-b496a"
-  }
+    "default": "studio-5144685696-b496a",
+    "church": "studio-5144685696-b496a"
+  },
+  "targets": {},
+  "etags": {}
 }
