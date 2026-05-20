@@ -29,11 +29,24 @@ export interface SMSLog {
 }
 
 /**
+ * Helper to normalize Ghana phone numbers to E.164 format (+233)
+ */
+function normalizePhone(phone: string): string {
+  if (!phone) return "";
+  const cleaned = phone.trim();
+  if (cleaned.startsWith("0")) {
+    return "+233" + cleaned.substring(1);
+  }
+  return cleaned;
+}
+
+/**
  * Sends SMS via mNotify API
  * Note: For client-side, we use public env vars.
  */
 async function sendSMSViaProvider(phone: string, message: string, senderId: string) {
   const apiKey = process.env.NEXT_PUBLIC_MNOTIFY_API_KEY || "4OAnq8qrPzc0T3dxgOrqFXKSt";
+  const normalizedPhone = normalizePhone(phone);
   
   // mNotify Quick SMS Endpoint
   const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
@@ -42,7 +55,7 @@ async function sendSMSViaProvider(phone: string, message: string, senderId: stri
     const response = await axios.post(
       url,
       {
-        recipient: [phone],
+        recipient: [normalizedPhone],
         sender: senderId,
         message: message,
         is_schedule: false
@@ -77,6 +90,7 @@ export async function sendAndLogSMS(
 ) {
   const logsRef = collection(db, 'churches', churchId, 'smsLogs');
   const churchRef = doc(db, 'churches', churchId);
+  const normalizedPhone = normalizePhone(payload.phone);
   
   try {
     // Fetch church settings for senderId
@@ -85,14 +99,14 @@ export async function sendAndLogSMS(
     const senderId = churchData?.settings?.senderId || "ChurchHub";
 
     // 1. Attempt to send
-    const outcome = await sendSMSViaProvider(payload.phone, payload.message, senderId);
+    const outcome = await sendSMSViaProvider(normalizedPhone, payload.message, senderId);
     
     // 2. Log result
     const logData: SMSLog = {
       churchId,
       memberId: payload.memberId,
       memberName: payload.memberName,
-      phone: payload.phone,
+      phone: normalizedPhone,
       message: payload.message,
       status: outcome.success ? 'sent' : 'failed',
       type: payload.type,
@@ -108,7 +122,7 @@ export async function sendAndLogSMS(
       churchId,
       memberId: payload.memberId,
       memberName: payload.memberName,
-      phone: payload.phone,
+      phone: normalizedPhone,
       message: payload.message,
       status: 'failed',
       type: payload.type,
@@ -144,8 +158,10 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
       continue;
     }
 
-    const dob = new Date(member.dateOfBirth);
-    if (dob.getMonth() + 1 === currentMonth && dob.getDate() === currentDay) {
+    // Explicit parsing for YYYY-MM-DD
+    const [year, month, day] = member.dateOfBirth.split('-').map(Number);
+    
+    if (month === currentMonth && day === currentDay) {
       const message = `Happy Birthday ${member.name}! God bless your new age. — ${churchData?.name || 'Our Church'}`;
       const outcome = await sendAndLogSMS(db, churchId, {
         phone: member.phone,

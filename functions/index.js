@@ -6,6 +6,18 @@ const axios = require("axios");
 admin.initializeApp();
 
 /**
+ * Helper to normalize Ghana phone numbers to E.164 format (+233)
+ */
+function normalizePhone(phone) {
+  if (!phone) return "";
+  const cleaned = phone.trim();
+  if (cleaned.startsWith("0")) {
+    return "+233" + cleaned.substring(1);
+  }
+  return cleaned;
+}
+
+/**
  * Multi-Tenant Birthday SMS Cloud Function for mNotify
  * Runs daily at 06:00 AM (Africa/Accra)
  */
@@ -46,7 +58,8 @@ exports.sendBirthdaySMS = functions.pubsub
         
         if (month === currentMonth && day === currentDay) {
           const message = `Happy Birthday ${member.name}! God bless your new age. — ${churchName}`;
-          const phone = member.phone;
+          const rawPhone = member.phone;
+          const phone = normalizePhone(rawPhone);
 
           allSmsPromises.push(
             (async () => {
@@ -88,20 +101,21 @@ exports.sendBirthdaySMS = functions.pubsub
 /**
  * Manual Test Endpoint for Birthday SMS
  * Trigger this to test connectivity immediately.
- * Example: https://<region>-<project>.cloudfunctions.net/testBirthdaySMS?phone=233240000000
+ * Example: https://<region>-<project>.cloudfunctions.net/testBirthdaySMS?phone=0240000000
  */
 exports.testBirthdaySMS = functions.https.onRequest(async (req, res) => {
   try {
-    const testPhone = req.query.phone || "+233240000000";
+    const rawPhone = req.query.phone || "0240000000";
+    const phone = normalizePhone(rawPhone);
     const testSenderId = req.query.sender || "YEBFA";
 
     await sendMNotifySMS(
-      testPhone,
-      "Test SMS from Yebfa ChurchHub manual trigger.",
+      phone,
+      "Test SMS from Yebfa ChurchHub manual trigger with normalization.",
       { settings: { senderId: testSenderId } }
     );
 
-    res.status(200).send(`Test SMS queued to ${testPhone} with sender ${testSenderId}`);
+    res.status(200).send(`Test SMS queued to normalized phone ${phone} with sender ${testSenderId}`);
   } catch (error) {
     console.error("Test SMS Error:", error);
     res.status(500).send(`Manual test failed: ${error.message}`);
