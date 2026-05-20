@@ -44,13 +44,13 @@ export default function LandingPage() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="fixed top-0 w-full z-50 glass border-b border-white/5 py-4 px-8">
+      <header className="fixed top-0 w-full z-50 glass border-b border-border py-4 px-8">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/30">
               <span className="text-primary font-bold">Y</span>
             </div>
-            <span className="font-headline text-sm font-bold tracking-tighter text-white">CHURCHHUB</span>
+            <span className="font-headline text-sm font-bold tracking-tighter text-foreground">CHURCHHUB</span>
           </div>
           <nav className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Features</a>
@@ -72,11 +72,11 @@ export default function LandingPage() {
 
       <main className="flex-1 pt-32">
         <section className="px-8 max-w-7xl mx-auto text-center space-y-8 py-20">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass border-primary/20 text-xs font-bold text-primary uppercase tracking-widest animate-bounce">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass border-primary/20 text-xs font-bold text-primary uppercase tracking-widest">
             <Sparkles className="w-3 h-3" />
             Next-Gen Church Management
           </div>
-          <h1 className="text-5xl md:text-7xl font-headline font-bold text-white tracking-tighter leading-tight max-w-4xl mx-auto">
+          <h1 className="text-5xl md:text-7xl font-headline font-bold text-foreground tracking-tighter leading-tight max-w-4xl mx-auto">
             EMPOWER YOUR <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">MINISTRY</span> WITH INTELLIGENCE
           </h1>
           
@@ -87,7 +87,7 @@ export default function LandingPage() {
               </div>
               <Input 
                 placeholder="Enter your Ministry Slug (e.g. grace-sanctuary)" 
-                className="h-14 pl-12 pr-32 bg-white/5 border-white/10 rounded-2xl text-lg focus:ring-primary/50"
+                className="h-14 pl-12 pr-32 bg-white/50 border-border rounded-2xl text-lg focus:ring-primary/50"
                 value={tenantSlug}
                 onChange={(e) => setTenantSlug(e.target.value)}
               />
@@ -157,7 +157,7 @@ export default function LandingPage() {
                   <p className="text-sm text-muted-foreground leading-relaxed">{plan.description}</p>
                 </div>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-bold text-white">GH₵{plan.price}</span>
+                  <span className="text-4xl font-bold text-foreground">GH₵{plan.price}</span>
                   <span className="text-muted-foreground text-sm">/month</span>
                 </div>
                 <ul className="space-y-4 flex-1">
@@ -171,7 +171,7 @@ export default function LandingPage() {
                   ))}
                 </ul>
                 <Link href="/login?tab=signup" className="block w-full">
-                  <Button className={`w-full h-12 rounded-2xl font-bold ${plan.accent ? 'bg-primary text-primary-foreground' : 'bg-white/10 text-white hover:bg-white/20'}`}>
+                  <Button className={`w-full h-12 rounded-2xl font-bold ${plan.accent ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground hover:bg-secondary/80'}`}>
                     Choose {plan.name}
                   </Button>
                 </Link>
@@ -197,13 +197,13 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="py-12 px-8 border-t border-white/5 glass mt-20">
+      <footer className="py-12 px-8 border-t border-border glass mt-20">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-primary flex items-center justify-center">
               <span className="text-primary-foreground font-bold text-xs">Y</span>
             </div>
-            <span className="font-headline text-xs font-bold text-white">YEBFA CHURCHHUB</span>
+            <span className="font-headline text-xs font-bold text-foreground">YEBFA CHURCHHUB</span>
           </div>
           <p className="text-sm text-muted-foreground">
             © Yebfa Consult 2026. Built for the modern church.
@@ -213,7 +213,7 @@ export default function LandingPage() {
               <ShieldCheck className="w-3 h-3" />
               Admin Access
             </Link>
-            <span className="text-white/10">|</span>
+            <span className="text-border">|</span>
             <a href="#" className="text-muted-foreground hover:text-primary transition-colors text-xs">Twitter</a>
             <a href="#" className="text-muted-foreground hover:text-primary transition-colors text-xs">LinkedIn</a>
           </div>

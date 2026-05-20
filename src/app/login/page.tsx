@@ -110,7 +110,6 @@ function LoginContent() {
     try {
       const normalizedEmail = email.toLowerCase().trim();
       
-      // Create auth account
       await createUserWithEmailAndPassword(auth, normalizedEmail, password);
       
       const authorizedEmails = Array.from(new Set([
@@ -165,7 +164,7 @@ function LoginContent() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-background relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+      <div className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary rounded-full blur-[120px]" />
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent rounded-full blur-[120px]" />
       </div>
@@ -175,7 +174,7 @@ function LoginContent() {
           <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30">
             <span className="text-primary font-bold text-xl">Y</span>
           </div>
-          <span className="font-headline text-lg font-bold tracking-tighter text-white">CHURCHHUB</span>
+          <span className="font-headline text-lg font-bold tracking-tighter text-foreground">CHURCHHUB</span>
         </Link>
         {activeChurch ? (
           <div className="space-y-1">
@@ -190,10 +189,10 @@ function LoginContent() {
         )}
       </div>
 
-      <Card className="w-full max-w-md glass border-white/10 shadow-2xl animate-in zoom-in-95 duration-500">
+      <Card className="w-full max-w-md glass border-border shadow-2xl animate-in zoom-in-95 duration-500">
         <Tabs defaultValue={defaultTab} className="w-full">
           {!activeChurch && (
-            <TabsList className="grid w-full grid-cols-2 bg-white/5 p-1 rounded-t-xl rounded-b-none">
+            <TabsList className="grid w-full grid-cols-2 bg-muted p-1 rounded-t-xl rounded-b-none">
               <TabsTrigger value="login">Login</TabsTrigger>
               <TabsTrigger value="signup">Register Ministry</TabsTrigger>
             </TabsList>
@@ -214,7 +213,7 @@ function LoginContent() {
                       id="email" 
                       type="email" 
                       placeholder="admin@church.org" 
-                      className="pl-10 bg-white/5" 
+                      className="pl-10 bg-muted/50" 
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
@@ -228,7 +227,7 @@ function LoginContent() {
                     <Input 
                       id="password" 
                       type="password" 
-                      className="pl-10 bg-white/5" 
+                      className="pl-10 bg-muted/50" 
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
@@ -264,7 +263,7 @@ function LoginContent() {
                       <Input 
                         id="churchName" 
                         placeholder="Grace Community Sanctuary" 
-                        className="pl-10 bg-white/5" 
+                        className="pl-10 bg-muted/50" 
                         value={churchName}
                         onChange={(e) => {
                           const val = e.target.value;
@@ -282,7 +281,7 @@ function LoginContent() {
                       <Input 
                         id="signup-slug" 
                         placeholder="grace-sanctuary" 
-                        className="pl-10 bg-white/5 font-mono" 
+                        className="pl-10 bg-muted/50 font-mono" 
                         value={slug}
                         onChange={(e) => setSlug(generateSlug(e.target.value))}
                         required
@@ -295,7 +294,7 @@ function LoginContent() {
                       id="signup-email" 
                       type="email" 
                       placeholder="admin@church.org" 
-                      className="bg-white/5" 
+                      className="bg-muted/50" 
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
@@ -306,7 +305,7 @@ function LoginContent() {
                     <Input 
                       id="signup-password" 
                       type="password" 
-                      className="bg-white/5" 
+                      className="bg-muted/50" 
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
@@ -314,11 +313,11 @@ function LoginContent() {
                   </div>
                 </div>
 
-                <div className="space-y-3 pt-4 border-t border-white/5">
+                <div className="space-y-3 pt-4 border-t border-border">
                   <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Features to Enable</Label>
                   <div className="grid gap-2">
                     {AVAILABLE_MODULES.map((module) => (
-                      <div key={module.id} className="flex items-center space-x-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+                      <div key={module.id} className="flex items-center space-x-3 p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors">
                         <Checkbox 
                           id={module.id} 
                           checked={selectedModules.includes(module.id)}

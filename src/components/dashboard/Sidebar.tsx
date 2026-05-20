@@ -59,13 +59,9 @@ export function Sidebar() {
   const currentChurch = churches?.[0];
 
   const filteredMenuItems = useMemo(() => {
-    // Super Admins always see everything in the dashboard
     if (isSuperAdmin) return ALL_MENU_ITEMS;
-    
-    // If still loading church info for regular user, wait
     if (churchLoading) return [];
 
-    // Regular users see base modules + whatever is enabled for their church
     const baseModules = ["dashboard", "settings"];
     const enabledModules = currentChurch?.enabledModules || [];
     
@@ -84,7 +80,7 @@ export function Sidebar() {
   };
 
   return (
-    <div className="fixed left-4 top-4 bottom-4 w-72 glass rounded-3xl z-50 flex flex-col p-6 border border-white/5 shadow-2xl overflow-hidden">
+    <div className="fixed left-4 top-4 bottom-4 w-72 glass rounded-3xl z-50 flex flex-col p-6 border border-border shadow-xl overflow-hidden">
       <div className="mb-8 px-2">
         <h1 className="font-headline text-lg font-bold text-primary flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/30">
@@ -108,7 +104,7 @@ export function Sidebar() {
                   "group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300",
                   isActive 
                     ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
-                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-primary"
                 )}
               >
                 <item.icon className={cn("w-5 h-5 transition-transform group-hover:scale-110", isActive ? "text-primary-foreground" : "text-primary/70")} />
@@ -119,7 +115,7 @@ export function Sidebar() {
         )}
       </nav>
 
-      <div className="pt-6 border-t border-white/5">
+      <div className="pt-6 border-t border-border">
         <button 
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-300"
