@@ -42,7 +42,7 @@ async function sendMNotifySMS(phone, message, churchData) {
 
   const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
 
-  return axios.post(
+  const response = await axios.post(
     url,
     {
       recipient: [phone],
@@ -55,6 +55,9 @@ async function sendMNotifySMS(phone, message, churchData) {
       timeout: 10000,
     }
   );
+
+  console.log("mNotify response:", response.data);
+  return response.data;
 }
 
 /**
@@ -162,13 +165,16 @@ exports.testBirthdaySMS = onRequest(async (req, res) => {
     const phone = normalizePhone(rawPhone);
     const testSenderId = req.query.sender || "YEBFA";
 
-    await sendMNotifySMS(
+    const mNotifyResult = await sendMNotifySMS(
       phone,
       "Test SMS from Yebfa ChurchHub manual v2 trigger.",
       { settings: { senderId: testSenderId } }
     );
 
-    res.status(200).send(`Test SMS sent to ${phone}`);
+    res.status(200).send({
+      message: `Test SMS attempt finished for ${phone}`,
+      mNotifyResult: mNotifyResult
+    });
   } catch (error) {
     res.status(500).send(`Manual test failed: ${error.message}`);
   }
