@@ -19,12 +19,17 @@ function normalizePhone(phone) {
 
 /**
  * Multi-Tenant Birthday SMS Cloud Function for mNotify
- * Runs daily at 06:00 AM (Africa/Accra)
+ * Standardized scheduler with runWith configuration for better performance.
  */
-exports.sendBirthdaySMS = functions.pubsub
-  .schedule("every day 06:00")
+exports.sendBirthdaySMS = functions
+  .runWith({
+    timeoutSeconds: 540,
+    memory: "1GB",
+  })
+  .pubsub
+  .schedule("0 6 * * *")
   .timeZone("Africa/Accra")
-  .onRun(async (context) => {
+  .onRun(async () => {
     const db = admin.firestore();
     
     // Get current date components in Africa/Accra timezone
@@ -47,7 +52,7 @@ exports.sendBirthdaySMS = functions.pubsub
       const churchId = churchDoc.id;
       const churchName = churchData.name || "Our Church";
 
-      // Skip churches with birthday SMS disabled explicitly
+      // SAFER VERSION: Skip churches with birthday SMS disabled explicitly
       if (churchData.settings && churchData.settings.birthdaySmsEnabled === false) {
         continue;
       }
@@ -62,7 +67,7 @@ exports.sendBirthdaySMS = functions.pubsub
         if (!member.dateOfBirth || !member.phone) continue;
 
         // Parse YYYY-MM-DD
-        const [year, month, day] = member.dateOfBirth.split('-').map(Number);
+        const [year, month, day] = member.dateOfBirth.split("-").map(Number);
         
         if (month === currentMonth && day === currentDay) {
           console.log(`[Scheduled Task] Birthday match found for ${member.name} in ${churchName}`);
@@ -124,7 +129,6 @@ exports.sendBirthdaySMS = functions.pubsub
 
 /**
  * Manual Test Endpoint for Birthday SMS
- * Example: https://<region>-<project>.cloudfunctions.net/testBirthdaySMS?phone=0240000000
  */
 exports.testBirthdaySMS = functions.https.onRequest(async (req, res) => {
   try {
@@ -136,11 +140,11 @@ exports.testBirthdaySMS = functions.https.onRequest(async (req, res) => {
 
     await sendMNotifySMS(
       phone,
-      "Test SMS from Yebfa ChurchHub manual trigger with normalization.",
+      "Test SMS from Yebfa ChurchHub manual trigger.",
       { settings: { senderId: testSenderId } }
     );
 
-    res.status(200).send(`Test SMS queued to normalized phone ${phone} with sender ${testSenderId}`);
+    res.status(200).send(`Test SMS sent to ${phone} with sender ${testSenderId}`);
   } catch (error) {
     console.error("[Manual Test] Error:", error);
     res.status(500).send(`Manual test failed: ${error.message}`);
@@ -151,6 +155,7 @@ exports.testBirthdaySMS = functions.https.onRequest(async (req, res) => {
  * Helper function to send SMS via mNotify API
  */
 async function sendMNotifySMS(phone, message, churchData) {
+  // SAFER VERSION: Get config values
   const config = functions.config().mnotify;
   const apiKey = config && config.api_key;
   
