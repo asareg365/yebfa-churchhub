@@ -28,9 +28,15 @@ exports.sendBirthdaySMS = functions.pubsub
     const db = admin.firestore();
     
     // Get current date components in Africa/Accra timezone
-    const today = new Date(new Date().toLocaleString("en-US", {timeZone: "Africa/Accra"}));
+    const now = new Date();
+    const todayStr = now.toLocaleString("en-US", {timeZone: "Africa/Accra"});
+    const today = new Date(todayStr);
     const currentMonth = today.getMonth() + 1;
     const currentDay = today.getDate();
+
+    // Used for duplicate prevention (check logs from today)
+    const startOfToday = new Date(today);
+    startOfToday.setHours(0, 0, 0, 0);
 
     // 1. Get all active churches
     const churchesSnapshot = await db.collection("churches").get();
@@ -46,25 +52,43 @@ exports.sendBirthdaySMS = functions.pubsub
         continue;
       }
 
+      console.log(`[Scheduled Task] Processing birthdays for ${churchName} (${churchId})`);
+
       // 2. Get members for this specific church
       const membersSnapshot = await db.collection("churches").doc(churchId).collection("members").get();
 
-      membersSnapshot.forEach((memberDoc) => {
+      for (const memberDoc of membersSnapshot.docs) {
         const member = memberDoc.data();
-        if (!member.dateOfBirth || !member.phone) return;
+        if (!member.dateOfBirth || !member.phone) continue;
 
         // Parse YYYY-MM-DD
         const [year, month, day] = member.dateOfBirth.split('-').map(Number);
         
         if (month === currentMonth && day === currentDay) {
-          const message = `Happy Birthday ${member.name}! God bless your new age. — ${churchName}`;
-          const rawPhone = member.phone;
-          const phone = normalizePhone(rawPhone);
+          console.log(`[Scheduled Task] Birthday match found for ${member.name} in ${churchName}`);
 
           allSmsPromises.push(
             (async () => {
               try {
+                // DUPLICATE PREVENTION: Check if we already sent a birthday SMS to this member today
+                const existingLogs = await db.collection("churches")
+                  .doc(churchId)
+                  .collection("smsLogs")
+                  .where("memberId", "==", memberDoc.id)
+                  .where("type", "==", "birthday")
+                  .where("createdAt", ">=", admin.firestore.Timestamp.fromDate(startOfToday))
+                  .get();
+
+                if (!existingLogs.empty) {
+                  console.log(`[Scheduled Task] Skipping duplicate birthday SMS for ${member.name}`);
+                  return;
+                }
+
+                const message = `Happy Birthday ${member.name}! God bless your new age. — ${churchName}`;
+                const phone = normalizePhone(member.phone);
+
                 await sendMNotifySMS(phone, message, churchData);
+                
                 // Log in tenant's specific collection
                 await db.collection("churches").doc(churchId).collection("smsLogs").add({
                   phone,
@@ -78,8 +102,8 @@ exports.sendBirthdaySMS = functions.pubsub
               } catch (error) {
                 console.error(`[${churchName}] Failed SMS to ${member.name}:`, error.message);
                 await db.collection("churches").doc(churchId).collection("smsLogs").add({
-                  phone,
-                  message,
+                  phone: normalizePhone(member.phone),
+                  message: `Happy Birthday ${member.name}! God bless your new age. — ${churchName}`,
                   status: "failed",
                   type: "birthday",
                   error: error.message,
@@ -91,7 +115,7 @@ exports.sendBirthdaySMS = functions.pubsub
             })()
           );
         }
-      });
+      }
     }
 
     await Promise.all(allSmsPromises);
@@ -100,7 +124,6 @@ exports.sendBirthdaySMS = functions.pubsub
 
 /**
  * Manual Test Endpoint for Birthday SMS
- * Trigger this to test connectivity immediately.
  * Example: https://<region>-<project>.cloudfunctions.net/testBirthdaySMS?phone=0240000000
  */
 exports.testBirthdaySMS = functions.https.onRequest(async (req, res) => {
@@ -108,6 +131,8 @@ exports.testBirthdaySMS = functions.https.onRequest(async (req, res) => {
     const rawPhone = req.query.phone || "0240000000";
     const phone = normalizePhone(rawPhone);
     const testSenderId = req.query.sender || "YEBFA";
+
+    console.log(`[Manual Test] Triggering test SMS to ${phone} with sender ${testSenderId}`);
 
     await sendMNotifySMS(
       phone,
@@ -117,7 +142,7 @@ exports.testBirthdaySMS = functions.https.onRequest(async (req, res) => {
 
     res.status(200).send(`Test SMS queued to normalized phone ${phone} with sender ${testSenderId}`);
   } catch (error) {
-    console.error("Test SMS Error:", error);
+    console.error("[Manual Test] Error:", error);
     res.status(500).send(`Manual test failed: ${error.message}`);
   }
 });
