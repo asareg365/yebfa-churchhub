@@ -34,6 +34,7 @@
         "memberName": { "type": "string" },
         "memberId": { "type": "string" },
         "error": { "type": "string" },
+        "cost": { "type": "number", "description": "Number of credits used for the SMS." },
         "createdAt": { "type": "string", "format": "date-time" }
       }
     },
@@ -105,7 +106,7 @@
         "status": { "type": "string", "enum": ["Pending", "Approved", "Suspended"] },
         "mustChangePassword": { "type": "boolean" },
         "settings": {
-          "type": "object",
+          "object": "properties",
           "properties": {
             "birthdaySmsEnabled": { "type": "boolean" },
             "lowCreditAlertEnabled": { "type": "boolean" },
