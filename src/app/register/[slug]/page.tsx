@@ -22,7 +22,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Popover,
   PopoverContent,
@@ -60,7 +59,6 @@ export default function PublicRegistrationPage() {
   const slug = params.slug as string;
   const db = useFirestore();
   const { toast } = useToast();
-  const router = useRouter();
 
   const [church, setChurch] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -104,7 +102,10 @@ export default function PublicRegistrationPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.phone || !church) return;
+    if (!formData.name || !formData.phone || !formData.dateOfBirth || !church) {
+      toast({ title: "Validation Error", description: "All fields are required.", variant: "destructive" });
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -117,7 +118,6 @@ export default function PublicRegistrationPage() {
         photo: `https://picsum.photos/seed/${Math.random()}/100/100`
       });
       setIsSuccess(true);
-      toast({ title: "Registration Successful", description: `Welcome to ${church.name}!` });
     } catch (error) {
       toast({ title: "Registration Failed", variant: "destructive" });
     } finally {
@@ -139,7 +139,6 @@ export default function PublicRegistrationPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center">
         <h1 className="text-4xl font-bold mb-4">Ministry Not Found</h1>
-        <p className="text-muted-foreground mb-8">The registration link you followed is invalid.</p>
         <Link href="/">
           <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Home</Button>
         </Link>
@@ -156,13 +155,8 @@ export default function PublicRegistrationPage() {
               <CheckCircle2 className="w-12 h-12 text-accent" />
             </div>
             <h1 className="text-3xl font-bold">Welcome Home!</h1>
-            <p className="text-muted-foreground leading-relaxed">
-              Your registration with <strong>{church.name}</strong> is complete. 
-              We are excited to have you as part of our congregation!
-            </p>
-            <div className="pt-6">
-              <Button onClick={() => window.location.reload()} variant="outline">Register Another Member</Button>
-            </div>
+            <p className="text-muted-foreground">Registration with {church.name} complete.</p>
+            <Button onClick={() => window.location.reload()} variant="outline">Register Another Member</Button>
           </CardContent>
         </Card>
       </div>
@@ -171,58 +165,41 @@ export default function PublicRegistrationPage() {
 
   return (
     <div className="min-h-screen bg-background relative py-12 px-6 overflow-hidden">
-      <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary rounded-full blur-[120px]" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent rounded-full blur-[120px]" />
-      </div>
-
       <div className="max-w-2xl mx-auto relative z-10">
         <div className="text-center mb-10 space-y-4">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass border-primary/20 text-xs font-bold text-primary uppercase tracking-widest">
-            <Sparkles className="w-3 h-3" />
-            New Member Portal
-          </div>
           <h1 className="text-4xl font-bold tracking-tight">{church.name}</h1>
-          <p className="text-muted-foreground">Join our digital congregation and stay connected.</p>
+          <p className="text-muted-foreground">Join our digital congregation.</p>
         </div>
 
         <Card className="glass border-white/10 shadow-2xl">
           <form onSubmit={handleSubmit}>
             <CardHeader>
               <CardTitle>Member Registration</CardTitle>
-              <CardDescription>Please provide your details accurately.</CardDescription>
+              <CardDescription>Enter your details correctly. Birth date format must be YYYY-MM-DD.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="reg-name">Full Name</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      id="reg-name"
-                      placeholder="e.g. Ama Mensah"
-                      className="pl-10 bg-white/5"
-                      value={formData.name}
-                      onChange={(e) => setFormData({...formData, name: e.target.value})}
-                      required
-                    />
-                  </div>
+                  <Label>Full Name</Label>
+                  <Input 
+                    placeholder="e.g. Ama Mensah"
+                    className="bg-white/5"
+                    value={formData.name}
+                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    required
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="reg-phone">Phone Number</Label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input 
-                        id="reg-phone"
-                        placeholder="024XXXXXXX"
-                        className="pl-10 bg-white/5"
-                        value={formData.phone}
-                        onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                        required
-                      />
-                    </div>
+                    <Label>Phone Number</Label>
+                    <Input 
+                      placeholder="024XXXXXXX"
+                      className="bg-white/5"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                      required
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Gender</Label>
@@ -241,17 +218,14 @@ export default function PublicRegistrationPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="reg-dob">Date of Birth</Label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input 
-                        id="reg-dob"
-                        type="date"
-                        className="pl-10 bg-white/5"
-                        value={formData.dateOfBirth}
-                        onChange={(e) => setFormData({...formData, dateOfBirth: e.target.value})}
-                      />
-                    </div>
+                    <Label>Date of Birth</Label>
+                    <Input 
+                      type="date"
+                      className="bg-white/5"
+                      value={formData.dateOfBirth}
+                      onChange={(e) => setFormData({...formData, dateOfBirth: e.target.value})}
+                      required
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Department</Label>
@@ -270,7 +244,7 @@ export default function PublicRegistrationPage() {
 
                 {isCatholic && (
                   <div className="space-y-2">
-                    <Label>Societies & Groups (Multi-select Dropdown)</Label>
+                    <Label>Societies & Groups</Label>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button 
@@ -278,9 +252,7 @@ export default function PublicRegistrationPage() {
                           className="w-full justify-between bg-white/5 border-white/10 h-11 px-3 text-left font-normal"
                         >
                           <span className="truncate">
-                            {formData.societies.length > 0 
-                              ? `${formData.societies.length} Selected` 
-                              : "Select Societies"}
+                            {formData.societies.length > 0 ? `${formData.societies.length} Selected` : "Select Societies"}
                           </span>
                           <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
                         </Button>
@@ -327,10 +299,6 @@ export default function PublicRegistrationPage() {
             </CardFooter>
           </form>
         </Card>
-        
-        <p className="mt-8 text-center text-sm text-muted-foreground">
-          © {new Date().getFullYear()} Yebfa ChurchHub. Secure multi-tenant registration.
-        </p>
       </div>
     </div>
   );

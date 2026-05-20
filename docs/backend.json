@@ -20,7 +20,7 @@
         "phone": { "type": "string" },
         "photo": { "type": "string" }
       },
-      "required": ["name", "department", "status"]
+      "required": ["name", "department", "status", "dateOfBirth"]
     },
     "SMSLog": {
       "title": "SMS Log",
@@ -76,7 +76,7 @@
       "type": "object",
       "properties": {
         "title": { "type": "string" },
-        "date": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
         "time": { "type": "string" },
         "location": { "type": "string" },
         "type": { "type": "string" },

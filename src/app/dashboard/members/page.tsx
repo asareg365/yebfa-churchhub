@@ -50,7 +50,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { useCollection, useFirestore, useUser } from "@/firebase";
 import { collection, addDoc, serverTimestamp, doc, deleteDoc, query, where, limit, writeBatch } from "firebase/firestore";
@@ -116,6 +115,7 @@ export default function MembersPage() {
     status: "Active" as const,
     gender: "Male" as const,
     dateOfBirth: "",
+    phone: "",
     societies: [] as string[]
   });
 
@@ -129,7 +129,10 @@ export default function MembersPage() {
   };
 
   const handleAddMember = () => {
-    if (!newMember.name || !membersRef) return;
+    if (!newMember.name || !newMember.dateOfBirth || !membersRef) {
+      toast({ title: "Validation Error", description: "Name and Date of Birth are required.", variant: "destructive" });
+      return;
+    }
     
     const memberData = {
       ...newMember,
@@ -141,7 +144,7 @@ export default function MembersPage() {
     addDoc(membersRef, memberData)
       .then(() => {
         setIsAddDialogOpen(false);
-        setNewMember({ name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "", societies: [] });
+        setNewMember({ name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "", phone: "", societies: [] });
         toast({ title: "Member added successfully" });
       })
       .catch(async (error) => {
@@ -164,13 +167,14 @@ export default function MembersPage() {
       let count = 0;
 
       for (const line of lines) {
-        const [name, phone, department, gender] = line.split(",").map(s => s?.trim());
-        if (!name) continue;
+        const [name, phone, dob, department, gender] = line.split(",").map(s => s?.trim());
+        if (!name || !dob) continue;
 
         const docRef = doc(membersRef);
         batch.set(docRef, {
           name,
           phone: phone || "",
+          dateOfBirth: dob, // Expected YYYY-MM-DD
           department: department || "Music",
           gender: (gender as any) || "Male",
           status: "Active",
@@ -241,7 +245,7 @@ export default function MembersPage() {
             <DialogContent className="glass max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add New Member</DialogTitle>
-                <DialogDescription>Fill in the details to register a new congregant.</DialogDescription>
+                <DialogDescription>Fill in the details to register a new congregant. Dates must be in YYYY-MM-DD format.</DialogDescription>
               </DialogHeader>
               <div className="space-y-6 py-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -266,6 +270,28 @@ export default function MembersPage() {
                         <SelectItem value="Other">Other</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Phone Number</Label>
+                    <Input 
+                      value={newMember.phone} 
+                      onChange={(e) => setNewMember({...newMember, phone: e.target.value})}
+                      placeholder="0240000000" 
+                      className="bg-white/5"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Date of Birth</Label>
+                    <Input 
+                      type="date"
+                      value={newMember.dateOfBirth} 
+                      onChange={(e) => setNewMember({...newMember, dateOfBirth: e.target.value})}
+                      className="bg-white/5"
+                      required
+                    />
                   </div>
                 </div>
 
@@ -300,7 +326,7 @@ export default function MembersPage() {
 
                 {isCatholic && (
                   <div className="space-y-2">
-                    <Label>Societies (Multi-select Dropdown)</Label>
+                    <Label>Societies</Label>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button 
@@ -309,7 +335,7 @@ export default function MembersPage() {
                         >
                           <span className="truncate">
                             {newMember.societies.length > 0 
-                              ? `${newMember.societies.length} Selected: ${newMember.societies.join(", ")}`
+                              ? `${newMember.societies.length} Selected`
                               : "Select Societies"}
                           </span>
                           <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
@@ -343,16 +369,6 @@ export default function MembersPage() {
                     </Popover>
                   </div>
                 )}
-
-                <div className="space-y-2">
-                  <Label>Date of Birth</Label>
-                  <Input 
-                    type="date"
-                    value={newMember.dateOfBirth} 
-                    onChange={(e) => setNewMember({...newMember, dateOfBirth: e.target.value})}
-                    className="bg-white/5"
-                  />
-                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
@@ -367,14 +383,14 @@ export default function MembersPage() {
         <DialogContent className="glass max-w-xl">
           <DialogHeader>
             <DialogTitle>Bulk Member Import</DialogTitle>
-            <DialogDescription>Paste member data separated by commas (one per line). Format: Name, Phone, Department, Gender</DialogDescription>
+            <DialogDescription>Paste member data separated by commas (one per line). Format: Name, Phone, DOB (YYYY-MM-DD), Department, Gender</DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Textarea 
               className="min-h-[200px] bg-white/5 font-mono text-xs" 
               placeholder="Example:
-John Doe, 0240000000, Music, Male
-Jane Smith, 0550000000, Youth, Female"
+John Doe, 0240000000, 1990-05-15, Music, Male
+Jane Smith, 0550000000, 1995-10-20, Youth, Female"
               value={bulkData}
               onChange={(e) => setBulkData(e.target.value)}
             />
@@ -418,8 +434,8 @@ Jane Smith, 0550000000, Youth, Female"
                   <TableRow>
                     <TableHead className="w-[80px]"></TableHead>
                     <TableHead>Member Name</TableHead>
+                    <TableHead>DOB</TableHead>
                     <TableHead>Department</TableHead>
-                    <TableHead>Societies</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -437,20 +453,11 @@ Jane Smith, 0550000000, Youth, Female"
                         <div className="font-semibold">{member.name}</div>
                         <div className="text-[10px] text-muted-foreground">{member.phone}</div>
                       </TableCell>
+                      <TableCell className="text-xs font-mono">{member.dateOfBirth}</TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="bg-primary/10 text-primary border-0">
                           {member.department}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {member.societies?.map((s: string) => (
-                            <Badge key={s} variant="outline" className="text-[9px] px-1 py-0 h-4 border-accent/20 text-accent">
-                              {s}
-                            </Badge>
-                          ))}
-                          {(!member.societies || member.societies.length === 0) && <span className="text-[10px] text-muted-foreground italic">None</span>}
-                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={cn(
@@ -471,18 +478,8 @@ Jane Smith, 0550000000, Youth, Female"
                             <DropdownMenuItem className="cursor-pointer">
                               <QrCode className="mr-2 h-4 w-4" /> View QR ID
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="cursor-pointer">
-                              <Mail className="mr-2 h-4 w-4" /> Send Email
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="cursor-pointer">
-                              <Phone className="mr-2 h-4 w-4" /> Send SMS
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator className="bg-white/5" />
-                            <DropdownMenuItem 
-                              className="cursor-pointer text-destructive focus:text-destructive"
-                              onClick={() => setMemberToDelete(member)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" /> Delete Member
+                            <DropdownMenuItem className="cursor-pointer" onClick={() => setMemberToDelete(member)}>
+                              <Trash2 className="mr-2 h-4 w-4 text-destructive" /> Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -494,7 +491,7 @@ Jane Smith, 0550000000, Youth, Female"
                       <TableCell colSpan={6} className="text-center py-20">
                         <div className="flex flex-col items-center gap-2 text-muted-foreground">
                           <UsersIcon className="h-10 w-10 opacity-20" />
-                          <p>No members found matching your criteria.</p>
+                          <p>No members found.</p>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -511,7 +508,7 @@ Jane Smith, 0550000000, Youth, Female"
           <AlertDialogHeader>
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently remove <strong>{memberToDelete?.name}</strong> from your congregation directory. This action cannot be undone.
+              This will permanently remove <strong>{memberToDelete?.name}</strong>.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

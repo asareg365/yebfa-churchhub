@@ -15,8 +15,8 @@ exports.sendBirthdaySMS = functions.pubsub
   .onRun(async (context) => {
     const db = admin.firestore();
     
-    // Get current date components
-    const today = new Date();
+    // Get current date components in Africa/Accra timezone
+    const today = new Date(new Date().toLocaleString("en-US", {timeZone: "Africa/Accra"}));
     const currentMonth = today.getMonth() + 1;
     const currentDay = today.getDate();
 
@@ -41,8 +41,10 @@ exports.sendBirthdaySMS = functions.pubsub
         const member = memberDoc.data();
         if (!member.dateOfBirth || !member.phone) return;
 
-        const dob = new Date(member.dateOfBirth);
-        if (dob.getMonth() + 1 === currentMonth && dob.getDate() === currentDay) {
+        // Parse YYYY-MM-DD
+        const [year, month, day] = member.dateOfBirth.split('-').map(Number);
+        
+        if (month === currentMonth && day === currentDay) {
           const message = `Happy Birthday ${member.name}! God bless your new age. — ${churchName}`;
           const phone = member.phone;
 
@@ -86,10 +88,11 @@ exports.sendBirthdaySMS = functions.pubsub
 /**
  * Manual Test Endpoint for Birthday SMS
  * Trigger this to test connectivity immediately.
+ * Example: https://<region>-<project>.cloudfunctions.net/testBirthdaySMS?phone=233240000000
  */
 exports.testBirthdaySMS = functions.https.onRequest(async (req, res) => {
   try {
-    const testPhone = req.query.phone || "+233240000000"; // Can be passed via ?phone=...
+    const testPhone = req.query.phone || "+233240000000";
     const testSenderId = req.query.sender || "YEBFA";
 
     await sendMNotifySMS(
@@ -109,22 +112,18 @@ exports.testBirthdaySMS = functions.https.onRequest(async (req, res) => {
  * Helper function to send SMS via mNotify API
  */
 async function sendMNotifySMS(phone, message, churchData) {
-  // Use Firebase config for the API key (DO NOT HARDCODE)
   const config = functions.config().mnotify;
   const apiKey = config && config.api_key;
   
-  // Use tenant-specific senderId if configured, otherwise use default from config or fallback
   const senderId = (churchData.settings && churchData.settings.senderId) || 
                    (config && config.sender_id) || 
                    "ChurchHub";
 
   if (!apiKey) {
-    // Log simulation if no API key is configured
     console.warn(`[SIMULATED SMS - No API Key] To: ${phone}, Sender: ${senderId}, Msg: ${message}`);
     return Promise.resolve({ success: true, simulated: true });
   }
 
-  // mNotify Quick SMS Endpoint
   const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
 
   return axios.post(
