@@ -179,7 +179,7 @@ export default function SettingsPage() {
   const plans = [
     { name: "Basic", price: "99", description: "Essential tools for small congregations.", features: ["100 SMS/month", "1 church admin", "Basic attendance", "Member management"], current: currentChurch?.plan === "Basic" },
     { name: "Standard", price: "299", description: "Advanced features for growing ministries.", features: ["1,000 SMS/month", "Unlimited members", "Finance management", "AI Insights Lite"], current: currentChurch?.plan === "Standard" },
-    { name: "Premium", price: "599", description: "Full suite for enterprise organizations.", features: ["Unlimited SMS", "Multiple branches", "Advanced analytics", "Dedicated manager"], current: currentChurch?.plan === "Premium" }
+    { name: "Premium", price: "599", description: "Full suite for enterprise organizations.", features: ["Priority Support", "AI Analytics", "Unlimited Branches", "Custom Reports"], current: currentChurch?.plan === "Premium" }
   ];
 
   if (churchLoading) {
@@ -360,11 +360,12 @@ export default function SettingsPage() {
         <TabsContent value="billing" className="space-y-6 animate-in fade-in-50 duration-500">
           <Alert className="glass-primary border-primary/30 py-6 rounded-3xl">
             <Smartphone className="h-6 w-6 text-primary" />
-            <AlertTitle className="text-primary font-bold text-lg ml-2">How to Pay (Subscription Renewal)</AlertTitle>
+            <AlertTitle className="text-primary font-bold text-lg ml-2">Subscription Renewal via MoMo</AlertTitle>
             <AlertDescription className="mt-2 text-foreground/90 ml-2 text-base">
-              To activate or renew your plan and recharge SMS credits, please MoMo the plan cost to 
+              To activate or renew your plan and recharge SMS credits, please send the plan cost via Mobile Money to 
               <span className="font-bold text-primary mx-1">0248472474</span>. 
               Use your <span className="font-bold underline italic">Church Name</span> as the reference.
+              Accounts are typically approved within 1 hour of payment.
             </AlertDescription>
           </Alert>
 

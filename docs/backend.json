@@ -110,7 +110,8 @@
             "smsCredits": { "type": "number" },
             "smsUsed": { "type": "number" },
             "status": { "type": "string" },
-            "renewalDate": { "type": "string", "format": "date" }
+            "renewalDate": { "type": "string", "format": "date" },
+            "paymentProvider": { "type": "string" }
           }
         },
         "status": { "type": "string", "enum": ["Pending", "Approved", "Suspended"] },
@@ -162,6 +163,5 @@
       "schema": "Event",
       "description": "Isolated collection of church events per tenant. Strictly accessible only to church admins."
     }
-  },
-  "notes": "Rules Deployment Trigger: Ensuring strict multi-tenant isolation across all sub-collections."
+  }
 }

@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 import { Checkbox } from "@/components/ui/checkbox";
+import { format } from "date-fns";
 import Link from "next/link";
 
 const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
@@ -140,11 +141,13 @@ function LoginContent() {
         enabledModules: selectedModules,
         status: "Pending",
         plan: "Basic",
+        denomination: "Pentecostal",
         subscription: {
           plan: "Basic",
           smsCredits: 100,
           smsUsed: 0,
-          status: "Active",
+          status: "active",
+          paymentProvider: "Momo",
           renewalDate: format(new Date(new Date().setMonth(new Date().getMonth() + 1)), 'yyyy-MM-dd')
         },
         mustChangePassword: false,
