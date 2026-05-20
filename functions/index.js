@@ -5,9 +5,6 @@ const axios = require("axios");
 
 admin.initializeApp();
 
-// mNotify API Integration Configuration
-const MNOTIFY_API_KEY = "4OAnq8qrPzc0T3dxgOrqFXKSt";
-
 /**
  * Multi-Tenant Birthday SMS Cloud Function for mNotify
  * Runs daily at 06:00 AM (Africa/Accra)
@@ -32,8 +29,10 @@ exports.sendBirthdaySMS = functions.pubsub
       const churchId = churchDoc.id;
       const churchName = churchData.name || "Our Church";
 
-      // Skip churches with birthday SMS disabled
-      if (churchData.settings?.birthdaySmsEnabled === false) continue;
+      // Skip churches with birthday SMS disabled explicitly
+      if (churchData.settings && churchData.settings.birthdaySmsEnabled === false) {
+        continue;
+      }
 
       // 2. Get members for this specific church
       const membersSnapshot = await db.collection("churches").doc(churchId).collection("members").get();
@@ -85,17 +84,44 @@ exports.sendBirthdaySMS = functions.pubsub
   });
 
 /**
+ * Manual Test Endpoint for Birthday SMS
+ * Trigger this to test connectivity immediately.
+ */
+exports.testBirthdaySMS = functions.https.onRequest(async (req, res) => {
+  try {
+    const testPhone = req.query.phone || "+233240000000"; // Can be passed via ?phone=...
+    const testSenderId = req.query.sender || "YEBFA";
+
+    await sendMNotifySMS(
+      testPhone,
+      "Test SMS from Yebfa ChurchHub manual trigger.",
+      { settings: { senderId: testSenderId } }
+    );
+
+    res.status(200).send(`Test SMS queued to ${testPhone} with sender ${testSenderId}`);
+  } catch (error) {
+    console.error("Test SMS Error:", error);
+    res.status(500).send(`Manual test failed: ${error.message}`);
+  }
+});
+
+/**
  * Helper function to send SMS via mNotify API
  */
 async function sendMNotifySMS(phone, message, churchData) {
-  const apiKey = functions.config().mnotify?.api_key || MNOTIFY_API_KEY;
-  // Use tenant-specific senderId if configured, otherwise use default
-  const senderId = churchData.settings?.senderId || functions.config().mnotify?.sender_id || "ChurchHub";
+  // Use Firebase config for the API key (DO NOT HARDCODE)
+  const config = functions.config().mnotify;
+  const apiKey = config && config.api_key;
+  
+  // Use tenant-specific senderId if configured, otherwise use default from config or fallback
+  const senderId = (churchData.settings && churchData.settings.senderId) || 
+                   (config && config.sender_id) || 
+                   "ChurchHub";
 
   if (!apiKey) {
-    // Simulated sending in development/unconfigured states
-    console.log(`[SIMULATED mNotify SMS] To: ${phone}, Sender: ${senderId}, Msg: ${message}`);
-    return Promise.resolve({ success: true });
+    // Log simulation if no API key is configured
+    console.warn(`[SIMULATED SMS - No API Key] To: ${phone}, Sender: ${senderId}, Msg: ${message}`);
+    return Promise.resolve({ success: true, simulated: true });
   }
 
   // mNotify Quick SMS Endpoint

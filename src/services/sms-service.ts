@@ -7,14 +7,11 @@ import {
   serverTimestamp, 
   Firestore,
   query,
-  where,
   getDocs,
   doc,
   getDoc
 } from 'firebase/firestore';
 import axios from 'axios';
-
-const MNOTIFY_API_KEY = "4OAnq8qrPzc0T3dxgOrqFXKSt";
 
 /**
  * Interface for SMS Log entry
@@ -33,10 +30,13 @@ export interface SMSLog {
 
 /**
  * Sends SMS via mNotify API
+ * Note: For client-side, we use public env vars.
  */
 async function sendSMSViaProvider(phone: string, message: string, senderId: string) {
+  const apiKey = process.env.NEXT_PUBLIC_MNOTIFY_API_KEY || "4OAnq8qrPzc0T3dxgOrqFXKSt";
+  
   // mNotify Quick SMS Endpoint
-  const url = `https://api.mnotify.com/api/sms/quick?key=${MNOTIFY_API_KEY}`;
+  const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
 
   try {
     const response = await axios.post(
@@ -103,7 +103,7 @@ export async function sendAndLogSMS(
     await addDoc(logsRef, logData);
     return { success: outcome.success };
   } catch (error: any) {
-    // 3. Log catastrophic failure
+    // 3. Log failure
     await addDoc(logsRef, {
       churchId,
       memberId: payload.memberId,
