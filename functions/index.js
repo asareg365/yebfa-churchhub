@@ -28,6 +28,11 @@ function normalizePhone(phone) {
  */
 async function sendMNotifySMS(phone, message, churchData) {
   const axios = require("axios");
+  
+  // Temporarily log keys for debugging
+  console.log("API KEY:", MNOTIFY_API_KEY.value());
+  console.log("SENDER ID:", MNOTIFY_SENDER_ID.value());
+
   const apiKey = MNOTIFY_API_KEY.value();
   const defaultSenderId = MNOTIFY_SENDER_ID.value();
   
@@ -94,7 +99,6 @@ exports.sendBirthdaySMS = onSchedule(
         .collection("members")
         .get();
 
-      // Use for...of for proper async handling inside loop
       for (const memberDoc of membersSnap.docs) {
         const m = memberDoc.data();
 
