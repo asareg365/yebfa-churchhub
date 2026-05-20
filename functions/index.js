@@ -27,26 +27,22 @@ exports.sendBirthdaySMS = functions.pubsub
   .onRun(async () => {
     console.log("Birthday SMS job started");
     const db = admin.firestore();
-    
-    // Get current date components in Africa/Accra timezone
-    const now = new Date();
-    const todayStr = now.toLocaleString("en-US", {timeZone: "Africa/Accra"});
-    const today = new Date(todayStr);
-    const currentMonth = today.getMonth() + 1;
-    const currentDay = today.getDate();
 
-    // Used for duplicate prevention
-    const startOfToday = new Date(today);
+    const today = new Date();
+    const month = today.getMonth() + 1;
+    const day = today.getDate();
+
+    // Used for duplicate prevention (start of today in Accra)
+    const todayStr = new Date().toLocaleString("en-US", {timeZone: "Africa/Accra"});
+    const startOfToday = new Date(todayStr);
     startOfToday.setHours(0, 0, 0, 0);
 
-    const churchesSnapshot = await db.collection("churches").get();
-    console.log("Churches found:", churchesSnapshot.size);
+    const churches = await db.collection("churches").get();
+    console.log("Churches found:", churches.size);
 
-    const allSmsPromises = [];
-
-    for (const churchDoc of churchesSnapshot.docs) {
-      const churchData = churchDoc.data();
-      const churchId = churchDoc.id;
+    for (const church of churches.docs) {
+      const churchData = church.data();
+      const churchId = church.id;
       const churchName = churchData.name || "Our Church";
 
       // Skip churches with birthday SMS disabled
@@ -54,53 +50,64 @@ exports.sendBirthdaySMS = functions.pubsub
         continue;
       }
 
-      const membersSnapshot = await db.collection("churches").doc(churchId).collection("members").get();
+      console.log(`Processing birthdays for ${churchName}`);
 
-      for (const memberDoc of membersSnapshot.docs) {
-        const member = memberDoc.data();
-        if (!member.dateOfBirth || !member.phone) continue;
+      const members = await db
+        .collection("churches")
+        .doc(churchId)
+        .collection("members")
+        .get();
 
-        const [year, month, day] = member.dateOfBirth.split("-").map(Number);
-        
-        if (month === currentMonth && day === currentDay) {
-          allSmsPromises.push(
-            (async () => {
-              try {
-                // Duplicate prevention
-                const existingLogs = await db.collection("churches")
-                  .doc(churchId)
-                  .collection("smsLogs")
-                  .where("memberId", "==", memberDoc.id)
-                  .where("type", "==", "birthday")
-                  .where("createdAt", ">=", admin.firestore.Timestamp.fromDate(startOfToday))
-                  .get();
+      for (const memberDoc of members.docs) {
+        const m = memberDoc.data();
 
-                if (!existingLogs.empty) return;
+        if (!m.dateOfBirth || !m.phone) continue;
 
-                const message = `Happy Birthday ${member.name}! God bless your new age. — ${churchName}`;
-                const phone = normalizePhone(member.phone);
+        // Use the requested Date comparison logic
+        const dob = new Date(m.dateOfBirth);
 
-                await sendMNotifySMS(phone, message, churchData);
-                
-                await db.collection("churches").doc(churchId).collection("smsLogs").add({
-                  phone,
-                  message,
-                  status: "sent",
-                  type: "birthday",
-                  memberId: memberDoc.id,
-                  memberName: member.name,
-                  createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                });
-              } catch (error) {
-                console.error(`[${churchName}] Failed SMS to ${member.name}:`, error.message);
-              }
-            })()
-          );
+        if (
+          dob.getMonth() + 1 === month &&
+          dob.getDate() === day
+        ) {
+          console.log("Birthday match:", m.name);
+
+          try {
+            // Duplicate prevention: check if already sent today
+            const existingLogs = await db.collection("churches")
+              .doc(churchId)
+              .collection("smsLogs")
+              .where("memberId", "==", memberDoc.id)
+              .where("type", "==", "birthday")
+              .where("createdAt", ">=", admin.firestore.Timestamp.fromDate(startOfToday))
+              .get();
+
+            if (!existingLogs.empty) {
+              console.log(`Already sent today for ${m.name}, skipping.`);
+              continue;
+            }
+
+            const message = `Happy Birthday ${m.name}! God bless your new age. — ${churchName}`;
+            const phone = normalizePhone(m.phone);
+
+            await sendMNotifySMS(phone, message, churchData);
+            
+            await db.collection("churches").doc(churchId).collection("smsLogs").add({
+              phone,
+              message,
+              status: "sent",
+              type: "birthday",
+              memberId: memberDoc.id,
+              memberName: m.name,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          } catch (error) {
+            console.error(`[${churchName}] Failed SMS to ${m.name}:`, error.message);
+          }
         }
       }
     }
 
-    await Promise.all(allSmsPromises);
     console.log("Birthday SMS job finished");
     return null;
   });
