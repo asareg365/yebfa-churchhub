@@ -1,6 +1,7 @@
-
-const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onRequest } = require("firebase-functions/v2/https");
+const functions = require("firebase-functions");
 const axios = require("axios");
 
 admin.initializeApp();
@@ -18,14 +19,47 @@ function normalizePhone(phone) {
 }
 
 /**
- * Multi-Tenant Birthday SMS Cloud Function
- * Using clean v1 syntax as requested.
+ * Helper function to send SMS via mNotify API
  */
-exports.sendBirthdaySMS = functions.pubsub
-  .schedule("0 6 * * *")
-  .timeZone("Africa/Accra")
-  .onRun(async () => {
-    console.log("Birthday SMS job started");
+async function sendMNotifySMS(phone, message, churchData) {
+  const config = functions.config().mnotify;
+  const apiKey = config && config.api_key;
+  const senderId = (churchData && churchData.settings && churchData.settings.senderId) || 
+                   (config && config.sender_id) || 
+                   "ChurchHub";
+
+  if (!apiKey) {
+    console.warn(`[SIMULATED SMS] To: ${phone}, Sender: ${senderId}, Msg: ${message}`);
+    return { success: true, simulated: true };
+  }
+
+  const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
+
+  return axios.post(
+    url,
+    {
+      recipient: [phone],
+      sender: senderId,
+      message: message,
+      is_schedule: false
+    },
+    {
+      headers: { "Content-Type": "application/json" },
+      timeout: 10000,
+    }
+  );
+}
+
+/**
+ * Multi-Tenant Birthday SMS Cloud Function (v2)
+ */
+exports.sendBirthdaySMS = onSchedule(
+  {
+    schedule: "0 6 * * *",
+    timeZone: "Africa/Accra",
+  },
+  async (event) => {
+    console.log("Birthday SMS job started (v2)");
     const db = admin.firestore();
 
     const today = new Date();
@@ -37,33 +71,33 @@ exports.sendBirthdaySMS = functions.pubsub
     const startOfToday = new Date(todayStr);
     startOfToday.setHours(0, 0, 0, 0);
 
-    const churches = await db.collection("churches").get();
-    console.log("Churches found:", churches.size);
+    const churchesSnap = await db.collection("churches").get();
+    console.log("Churches found:", churchesSnap.size);
 
-    for (const church of churches.docs) {
-      const churchData = church.data();
-      const churchId = church.id;
+    for (const churchDoc of churchesSnap.docs) {
+      const churchData = churchDoc.data();
+      const churchId = churchDoc.id;
       const churchName = churchData.name || "Our Church";
 
-      // Skip churches with birthday SMS disabled
+      // Skip churches with birthday SMS explicitly disabled
       if (churchData.settings && churchData.settings.birthdaySmsEnabled === false) {
         continue;
       }
 
       console.log(`Processing birthdays for ${churchName}`);
 
-      const members = await db
+      const membersSnap = await db
         .collection("churches")
         .doc(churchId)
         .collection("members")
         .get();
 
-      for (const memberDoc of members.docs) {
+      // Use for...of for proper async handling inside loop
+      for (const memberDoc of membersSnap.docs) {
         const m = memberDoc.data();
 
         if (!m.dateOfBirth || !m.phone) continue;
 
-        // Use the requested Date comparison logic
         const dob = new Date(m.dateOfBirth);
 
         if (
@@ -110,12 +144,13 @@ exports.sendBirthdaySMS = functions.pubsub
 
     console.log("Birthday SMS job finished");
     return null;
-  });
+  }
+);
 
 /**
- * Manual Test Endpoint for Birthday SMS
+ * Manual Test Endpoint for Birthday SMS (v2)
  */
-exports.testBirthdaySMS = functions.https.onRequest(async (req, res) => {
+exports.testBirthdaySMS = onRequest(async (req, res) => {
   try {
     const rawPhone = req.query.phone || "0240000000";
     const phone = normalizePhone(rawPhone);
@@ -123,7 +158,7 @@ exports.testBirthdaySMS = functions.https.onRequest(async (req, res) => {
 
     await sendMNotifySMS(
       phone,
-      "Test SMS from Yebfa ChurchHub manual trigger.",
+      "Test SMS from Yebfa ChurchHub manual v2 trigger.",
       { settings: { senderId: testSenderId } }
     );
 
@@ -132,35 +167,3 @@ exports.testBirthdaySMS = functions.https.onRequest(async (req, res) => {
     res.status(500).send(`Manual test failed: ${error.message}`);
   }
 });
-
-/**
- * Helper function to send SMS via mNotify API
- */
-async function sendMNotifySMS(phone, message, churchData) {
-  const config = functions.config().mnotify;
-  const apiKey = config && config.api_key;
-  const senderId = (churchData.settings && churchData.settings.senderId) || 
-                   (config && config.sender_id) || 
-                   "ChurchHub";
-
-  if (!apiKey) {
-    console.warn(`[SIMULATED SMS] To: ${phone}, Sender: ${senderId}, Msg: ${message}`);
-    return Promise.resolve({ success: true });
-  }
-
-  const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
-
-  return axios.post(
-    url,
-    {
-      recipient: [phone],
-      sender: senderId,
-      message: message,
-      is_schedule: false
-    },
-    {
-      headers: { "Content-Type": "application/json" },
-      timeout: 10000,
-    }
-  );
-}
