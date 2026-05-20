@@ -1,10 +1,15 @@
 const admin = require("firebase-admin");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onRequest } = require("firebase-functions/v2/https");
-const functions = require("firebase-functions");
-const axios = require("axios");
+const { defineString } = require("firebase-functions/params");
 
 admin.initializeApp();
+
+/**
+ * Define environment variables using the v2 Params API
+ */
+const MNOTIFY_API_KEY = defineString("MNOTIFY_API_KEY");
+const MNOTIFY_SENDER_ID = defineString("MNOTIFY_SENDER_ID");
 
 /**
  * Helper to normalize Ghana phone numbers to E.164 format (+233)
@@ -22,16 +27,13 @@ function normalizePhone(phone) {
  * Helper function to send SMS via mNotify API
  */
 async function sendMNotifySMS(phone, message, churchData) {
-  const config = functions.config().mnotify;
-  const apiKey = config && config.api_key;
+  const axios = require("axios");
+  const apiKey = MNOTIFY_API_KEY.value();
+  const defaultSenderId = MNOTIFY_SENDER_ID.value();
+  
   const senderId = (churchData && churchData.settings && churchData.settings.senderId) || 
-                   (config && config.sender_id) || 
+                   defaultSenderId || 
                    "ChurchHub";
-
-  if (!apiKey) {
-    console.warn(`[SIMULATED SMS] To: ${phone}, Sender: ${senderId}, Msg: ${message}`);
-    return { success: true, simulated: true };
-  }
 
   const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
 
