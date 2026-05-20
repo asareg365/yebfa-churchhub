@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -85,8 +86,8 @@ export default function LandingPage() {
       </header>
 
       <main className="flex-1 pt-32">
-        <section className="px-8 max-w-7xl mx-auto text-center space-y-8 py-20">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-xs font-bold text-primary uppercase tracking-widest">
+        <section className="px-8 max-w-7xl mx-auto text-center space-y-8 py-20 animate-in fade-in duration-1000 slide-in-from-top-4">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-xs font-bold text-primary uppercase tracking-widest animate-float">
             <Sparkles className="w-3 h-3" />
             Next-Gen Church Management
           </div>
