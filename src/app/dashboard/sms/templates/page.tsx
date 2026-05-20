@@ -5,7 +5,8 @@ import {
   Layout, 
   Trash2,
   Copy,
-  Plus
+  Plus,
+  Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,11 +25,16 @@ export default function SMSTemplatesPage() {
     if (!user?.email) return null;
     return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
   }, [db, user?.email]);
-  const { data: churches } = useCollection(churchQuery);
+  
+  const { data: churches, loading: churchLoading } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
-  const templatesRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'smsTemplates') : null, [db, currentChurch?.id]);
-  const { data: templates } = useCollection(templatesRef ? query(templatesRef) : null);
+  const templatesRef = useMemo(() => {
+    if (!currentChurch?.id) return null;
+    return collection(db, 'churches', currentChurch.id, 'smsTemplates');
+  }, [db, currentChurch?.id]);
+
+  const { data: templates, loading: templatesLoading } = useCollection(templatesRef ? query(templatesRef) : null);
 
   const handleDelete = async (id: string) => {
     if (!templatesRef) return;
@@ -41,8 +47,7 @@ export default function SMSTemplatesPage() {
   };
 
   const handleUse = (content: string) => {
-    // Store in session or local storage to pass to dashboard assistant?
-    // For simplicity, we just notify and redirect for now.
+    // In a real app, we might pass this state to the dashboard via a context or search params
     toast({ title: 'Template copied', description: 'Redirecting to workspace...' });
     router.push('/dashboard/sms');
   };
@@ -60,7 +65,9 @@ export default function SMSTemplatesPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        {templates?.map((t) => (
+        {templatesLoading ? (
+          <div className="col-span-full py-20 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+        ) : templates?.map((t) => (
           <Card key={t.id} className="glass hover:border-primary/30 transition-all group">
             <CardHeader>
               <CardTitle className="text-sm font-bold">{t.name}</CardTitle>
@@ -78,7 +85,7 @@ export default function SMSTemplatesPage() {
             </CardFooter>
           </Card>
         ))}
-        {templates?.length === 0 && (
+        {templates?.length === 0 && !templatesLoading && (
           <div className="col-span-full py-20 text-center opacity-40">
             <Layout className="w-12 h-12 mx-auto mb-4" />
             <p>No templates saved yet.</p>

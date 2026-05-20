@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, query, where, limit, orderBy } from 'firebase/firestore';
-import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { sendAndLogSMS } from '@/services/sms-service';
 import { useToast } from '@/hooks/use-toast';
@@ -30,10 +29,15 @@ export default function FailedMessagesPage() {
     if (!user?.email) return null;
     return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
   }, [db, user?.email]);
+  
   const { data: churches } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
-  const logsRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'smsLogs') : null, [db, currentChurch?.id]);
+  const logsRef = useMemo(() => {
+    if (!currentChurch?.id) return null;
+    return collection(db, 'churches', currentChurch.id, 'smsLogs');
+  }, [db, currentChurch?.id]);
+
   const failedQuery = useMemo(() => {
     if (!logsRef) return null;
     return query(logsRef, where('status', '==', 'failed'), orderBy('createdAt', 'desc'));

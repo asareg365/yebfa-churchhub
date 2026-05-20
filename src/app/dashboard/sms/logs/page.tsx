@@ -28,21 +28,32 @@ export default function SMSLogsPage() {
     if (!user?.email) return null;
     return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
   }, [db, user?.email]);
+  
   const { data: churches } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
-  const logsRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'smsLogs') : null, [db, currentChurch?.id]);
-  const { data: allLogs, loading: logsLoading } = useCollection(logsRef ? query(logsRef, orderBy('createdAt', 'desc')) : null);
+  const logsRef = useMemo(() => {
+    if (!currentChurch?.id) return null;
+    return collection(db, 'churches', currentChurch.id, 'smsLogs');
+  }, [db, currentChurch?.id]);
+
+  const logsQuery = useMemo(() => {
+    if (!logsRef) return null;
+    return query(logsRef, orderBy('createdAt', 'desc'), limit(100));
+  }, [logsRef]);
+
+  const { data: allLogs, loading: logsLoading } = useCollection(logsQuery);
 
   const filteredLogs = useMemo(() => {
     if (!allLogs) return [];
     return allLogs.filter(log => {
       const matchesStatus = statusFilter === 'all' || log.status === statusFilter;
       const matchesType = typeFilter === 'all' || log.type === typeFilter;
-      const matchesSearch = log.memberName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                           log.phone?.includes(searchTerm);
+      const matchesSearch = 
+        (log.memberName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+         log.phone?.includes(searchTerm));
       return matchesStatus && matchesType && matchesSearch;
-    }).slice(0, 100);
+    });
   }, [allLogs, statusFilter, typeFilter, searchTerm]);
 
   return (
@@ -137,10 +148,10 @@ export default function SMSLogsPage() {
                     <td className="p-4 text-xs text-muted-foreground text-right">
                       <div className="flex flex-col">
                         <span className="font-bold text-foreground">
-                          {log.createdAt?.toDate ? format(log.createdAt.toDate(), 'MMM d, yyyy') : 'Recently'}
+                          {log.createdAt?.toDate ? format(log.createdAt.toDate(), 'MMM d, yyyy') : '...'}
                         </span>
                         <span>
-                          {log.createdAt?.toDate ? format(log.createdAt.toDate(), 'HH:mm') : ''}
+                          {log.createdAt?.toDate ? format(log.createdAt.toDate(), 'HH:mm') : 'Recently'}
                         </span>
                       </div>
                     </td>

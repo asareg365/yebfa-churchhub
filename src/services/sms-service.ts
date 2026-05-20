@@ -1,4 +1,3 @@
-
 'use client';
 
 import { 
@@ -44,13 +43,10 @@ function normalizePhone(phone: string): string {
 
 /**
  * Sends SMS via mNotify API
- * Note: For client-side, we use public env vars.
  */
 async function sendSMSViaProvider(phone: string, message: string, senderId: string) {
   const apiKey = process.env.NEXT_PUBLIC_MNOTIFY_API_KEY || "4OAnq8qrPzc0T3dxgOrqFXKSt";
   const normalizedPhone = normalizePhone(phone);
-  
-  // mNotify Quick SMS Endpoint
   const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
 
   try {
@@ -63,22 +59,20 @@ async function sendSMSViaProvider(phone: string, message: string, senderId: stri
         is_schedule: false
       },
       {
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         timeout: 10000,
       }
     );
     return { success: response.status === 200, data: response.data };
   } catch (error: any) {
-    console.error("mNotify Client Error:", error.response?.data || error.message);
     return { success: false, error: error.message };
   }
 }
 
 /**
- * Sends an SMS and logs the transaction in Firestore with tenant isolation.
- * Now includes credit check and incrementing.
+ * SMS CREDIT ENGINE: 
+ * 1. Checks limits before send.
+ * 2. Increments usage after successful send.
  */
 export async function sendAndLogSMS(
   db: Firestore,
@@ -96,22 +90,22 @@ export async function sendAndLogSMS(
   const normalizedPhone = normalizePhone(payload.phone);
   
   try {
-    // Fetch church settings for senderId and subscription
+    // 1. FETCH SUBSCRIPTION STATUS
     const churchSnap = await getDoc(churchRef);
     const churchData = churchSnap.data();
-    
-    // CREDIT CHECK
     const sub = churchData?.subscription || { smsCredits: 0, smsUsed: 0 };
+
+    // 2. CREDIT CHECK (PRE-SEND)
     if (sub.smsUsed >= sub.smsCredits) {
-      throw new Error("SMS credit exhausted. Please renew your plan.");
+      throw new Error("SMS credits exhausted. Please recharge your account.");
     }
 
     const senderId = churchData?.settings?.senderId || "ChurchHub";
 
-    // 1. Attempt to send
+    // 3. ATTEMPT DELIVERY
     const outcome = await sendSMSViaProvider(normalizedPhone, payload.message, senderId);
     
-    // 2. Log result
+    // 4. LOG TRANSACTION
     const logData: SMSLog = {
       churchId,
       memberId: payload.memberId,
@@ -126,8 +120,8 @@ export async function sendAndLogSMS(
 
     await addDoc(logsRef, logData);
 
+    // 5. UPDATE USAGE (POST-SEND)
     if (outcome.success) {
-      // 3. Increment credits used
       await updateDoc(churchRef, {
         "subscription.smsUsed": increment(1)
       });
@@ -135,7 +129,7 @@ export async function sendAndLogSMS(
 
     return { success: outcome.success, error: outcome.success ? undefined : (outcome as any).error };
   } catch (error: any) {
-    // 4. Log failure
+    // LOG FAILURE
     await addDoc(logsRef, {
       churchId,
       memberId: payload.memberId,
@@ -151,9 +145,6 @@ export async function sendAndLogSMS(
   }
 }
 
-/**
- * Checks for members with birthdays today and sends them a greeting.
- */
 export async function processBirthdaysToday(db: Firestore, churchId: string) {
   const membersRef = collection(db, 'churches', churchId, 'members');
   const today = new Date();
@@ -170,9 +161,7 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
       continue;
     }
 
-    // Explicit parsing for YYYY-MM-DD
     const [year, month, day] = member.dateOfBirth.split('-').map(Number);
-    
     if (month === currentMonth && day === currentDay) {
       const outcome = await sendAndLogSMS(db, churchId, {
         phone: member.phone,
@@ -181,11 +170,9 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
         memberId: doc.id,
         memberName: member.name
       });
-      
       if (outcome.success) results.sent++;
       else results.failed++;
     }
   }
-
   return results;
 }
