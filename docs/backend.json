@@ -117,7 +117,7 @@
         "status": { "type": "string", "enum": ["Pending", "Approved", "Suspended"] },
         "mustChangePassword": { "type": "boolean" },
         "settings": {
-          "object": "properties",
+          "type": "object",
           "properties": {
             "birthdaySmsEnabled": { "type": "boolean" },
             "lowCreditAlertEnabled": { "type": "boolean" },
@@ -137,31 +137,31 @@
   "firestore": {
     "/churches/{churchId}": {
       "schema": "Church",
-      "description": "Core organization record. Isolated by adminEmails matching request.auth.token.email."
+      "description": "Isolated by adminEmails array containing request.auth.token.email. Primary church record."
     },
     "/churches/{churchId}/members/{memberId}": {
       "schema": "Member",
-      "description": "Isolated members. Accessible only to admins in the parent church adminEmails array."
+      "description": "Isolated members. Accessible only to admins defined in the parent church document's adminEmails array."
     },
     "/churches/{churchId}/smsLogs/{logId}": {
       "schema": "SMSLog",
-      "description": "Isolated logs. Accessible only to admins in the parent church adminEmails array."
+      "description": "Isolated logs. Accessible only to admins defined in the parent church document's adminEmails array."
     },
     "/churches/{churchId}/smsTemplates/{templateId}": {
       "schema": "SMSTemplate",
-      "description": "Isolated templates. Accessible only to admins in the parent church adminEmails array."
+      "description": "Isolated templates. Accessible only to admins defined in the parent church document's adminEmails array."
     },
     "/churches/{churchId}/attendance/{attendanceId}": {
       "schema": "Attendance",
-      "description": "Isolated attendance. Accessible only to admins in the parent church adminEmails array."
+      "description": "Isolated attendance. Accessible only to admins defined in the parent church document's adminEmails array."
     },
     "/churches/{churchId}/finances/{financeId}": {
       "schema": "Finance",
-      "description": "Isolated finances. Accessible only to admins in the parent church adminEmails array."
+      "description": "Isolated finances. Accessible only to admins defined in the parent church document's adminEmails array."
     },
     "/churches/{churchId}/events/{eventId}": {
       "schema": "Event",
-      "description": "Isolated events. Accessible only to admins in the parent church adminEmails array."
+      "description": "Isolated events. Accessible only to admins defined in the parent church document's adminEmails array."
     }
   }
 }
