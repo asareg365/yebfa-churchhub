@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Calendar as CalendarIcon, MapPin, Users, Plus, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,16 +16,32 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useCollection, useFirestore } from "@/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { useCollection, useFirestore, useUser } from "@/firebase";
+import { collection, addDoc, serverTimestamp, query, where, limit } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 export default function EventsPage() {
   const db = useFirestore();
+  const { user } = useUser();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
-  const eventsRef = collection(db, "events");
+  // Resolve current church context
+  const churchQuery = useMemo(() => {
+    if (!user?.email) return null;
+    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
+  }, [db, user?.email]);
+  
+  const { data: churches } = useCollection(churchQuery);
+  const currentChurch = churches?.[0];
+
+  const eventsRef = useMemo(() => {
+    if (!currentChurch?.id) return null;
+    return collection(db, "churches", currentChurch.id, "events");
+  }, [db, currentChurch?.id]);
+
   const { data: events, loading } = useCollection(eventsRef);
 
   const [newEvent, setNewEvent] = useState({
@@ -37,19 +53,28 @@ export default function EventsPage() {
     registrations: 0
   });
 
-  const handleCreateEvent = async () => {
-    if (!newEvent.title) return;
-    try {
-      addDoc(eventsRef, {
-        ...newEvent,
-        createdAt: serverTimestamp()
+  const handleCreateEvent = () => {
+    if (!newEvent.title || !eventsRef) return;
+    
+    const eventData = {
+      ...newEvent,
+      createdAt: serverTimestamp()
+    };
+
+    addDoc(eventsRef, eventData)
+      .then(() => {
+        setIsDialogOpen(false);
+        setNewEvent({ title: "", date: new Date().toISOString().split('T')[0], time: "09:00 AM", location: "Main Sanctuary", type: "Service", registrations: 0 });
+        toast({ title: "Event created successfully" });
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: eventsRef.path,
+          operation: 'create',
+          requestResourceData: eventData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
       });
-      setIsDialogOpen(false);
-      setNewEvent({ title: "", date: new Date().toISOString().split('T')[0], time: "09:00 AM", location: "Main Sanctuary", type: "Service", registrations: 0 });
-      toast({ title: "Event created successfully" });
-    } catch (e) {
-      toast({ title: "Error creating event", variant: "destructive" });
-    }
   };
 
   return (
@@ -57,11 +82,11 @@ export default function EventsPage() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold tracking-tight mb-1">Events</h2>
-          <p className="text-muted-foreground">Plan and manage upcoming church activities and gatherings.</p>
+          <p className="text-muted-foreground">Plan and manage gatherings for {currentChurch?.name || "your ministry"}.</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-primary hover:bg-primary/80">
+            <Button className="bg-primary hover:bg-primary/80" disabled={!currentChurch}>
               <Plus className="mr-2 h-4 w-4" /> Create Event
             </Button>
           </DialogTrigger>
@@ -103,7 +128,7 @@ export default function EventsPage() {
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {events?.map((event) => (
             <Card key={event.id} className="glass hover:border-primary/40 transition-all overflow-hidden group">
-              <div className="h-32 bg-primary/10 flex items-center justify-center border-b border-white/5">
+              <div className="h-32 bg-primary/10 flex items-center justify-center border-b border-border">
                 <CalendarIcon className="h-12 w-12 text-primary/40 group-hover:scale-110 transition-transform" />
               </div>
               <CardHeader>
@@ -122,7 +147,7 @@ export default function EventsPage() {
                 <p className="text-sm text-muted-foreground flex items-center gap-1 mb-4">
                   <MapPin className="h-3 w-3" /> {event.location}
                 </p>
-                <Button variant="outline" className="w-full border-white/10 hover:bg-white/5">
+                <Button variant="outline" className="w-full border-border hover:bg-muted">
                   Manage Event
                 </Button>
               </CardContent>

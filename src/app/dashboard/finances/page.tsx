@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { CreditCard, ArrowUpRight, DollarSign, FileText, Loader2, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,8 +33,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useCollection, useFirestore } from "@/firebase";
-import { collection, addDoc, serverTimestamp, query, orderBy, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { useCollection, useFirestore, useUser } from "@/firebase";
+import { collection, addDoc, serverTimestamp, query, orderBy, doc, updateDoc, deleteDoc, where, limit } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { errorEmitter } from "@/firebase/error-emitter";
@@ -42,13 +42,31 @@ import { FirestorePermissionError } from "@/firebase/errors";
 
 export default function FinancesPage() {
   const db = useFirestore();
+  const { user } = useUser();
   const { toast } = useToast();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   
-  const financesRef = collection(db, "finances");
-  const financesQuery = query(financesRef, orderBy("date", "desc"));
+  // Resolve current church context
+  const churchQuery = useMemo(() => {
+    if (!user?.email) return null;
+    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
+  }, [db, user?.email]);
+  
+  const { data: churches } = useCollection(churchQuery);
+  const currentChurch = churches?.[0];
+
+  const financesRef = useMemo(() => {
+    if (!currentChurch?.id) return null;
+    return collection(db, "churches", currentChurch.id, "finances");
+  }, [db, currentChurch?.id]);
+
+  const financesQuery = useMemo(() => {
+    if (!financesRef) return null;
+    return query(financesRef, orderBy("date", "desc"));
+  }, [financesRef]);
+
   const { data: finances, loading } = useCollection(financesQuery);
 
   const [newTransaction, setNewTransaction] = useState({
@@ -62,7 +80,7 @@ export default function FinancesPage() {
   const [transactionToDelete, setTransactionToDelete] = useState<any>(null);
 
   const handleAddTransaction = () => {
-    if (newTransaction.amount <= 0) {
+    if (newTransaction.amount <= 0 || !financesRef) {
       toast({ title: "Invalid amount", variant: "destructive" });
       return;
     }
@@ -79,7 +97,7 @@ export default function FinancesPage() {
         setNewTransaction({ date: new Date().toISOString().split('T')[0], amount: 0, type: "Tithe", method: "Bank Transfer" });
         toast({ title: "Transaction recorded in GH₵" });
       })
-      .catch(async (serverError) => {
+      .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
           path: financesRef.path,
           operation: 'create',
@@ -90,9 +108,9 @@ export default function FinancesPage() {
   };
 
   const handleUpdateTransaction = () => {
-    if (!editingTransaction || editingTransaction.amount <= 0) return;
+    if (!editingTransaction || editingTransaction.amount <= 0 || !financesRef) return;
 
-    const docRef = doc(db, "finances", editingTransaction.id);
+    const docRef = doc(financesRef, editingTransaction.id);
     const updateData = {
       date: editingTransaction.date,
       amount: Number(editingTransaction.amount),
@@ -107,7 +125,7 @@ export default function FinancesPage() {
         setEditingTransaction(null);
         toast({ title: "Transaction updated" });
       })
-      .catch(async (serverError) => {
+      .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
           path: docRef.path,
           operation: 'update',
@@ -118,16 +136,16 @@ export default function FinancesPage() {
   };
 
   const handleDeleteTransaction = () => {
-    if (!transactionToDelete) return;
+    if (!transactionToDelete || !financesRef) return;
 
-    const docRef = doc(db, "finances", transactionToDelete.id);
+    const docRef = doc(financesRef, transactionToDelete.id);
     deleteDoc(docRef)
       .then(() => {
         setIsDeleteDialogOpen(false);
         setTransactionToDelete(null);
         toast({ title: "Transaction deleted" });
       })
-      .catch(async (serverError) => {
+      .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
           path: docRef.path,
           operation: 'delete',
@@ -145,15 +163,15 @@ export default function FinancesPage() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold tracking-tight mb-1">Finances</h2>
-          <p className="text-muted-foreground">Detailed overview of tithes, offerings, and expenditures in Ghana Cedis.</p>
+          <p className="text-muted-foreground">Manage tithes and offerings for {currentChurch?.name || "your ministry"}.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="glass border-white/10">
+          <Button variant="outline" className="glass border-border">
             <FileText className="mr-2 h-4 w-4" /> Reports
           </Button>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-accent text-accent-foreground hover:bg-accent/80">
+              <Button className="bg-accent text-accent-foreground hover:bg-accent/80" disabled={!currentChurch}>
                 <Plus className="mr-2 h-4 w-4" /> Add Transaction
               </Button>
             </DialogTrigger>
@@ -175,7 +193,7 @@ export default function FinancesPage() {
                 <div className="space-y-2">
                   <Label>Transaction Type</Label>
                   <Select value={newTransaction.type} onValueChange={(v) => setNewTransaction({...newTransaction, type: v})}>
-                    <SelectTrigger className="bg-white/5">
+                    <SelectTrigger className="bg-muted/30">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="glass">
@@ -214,7 +232,7 @@ export default function FinancesPage() {
         </Card>
       </div>
 
-      <Card className="glass border-white/5">
+      <Card className="glass border-border">
         <CardHeader>
           <CardTitle className="text-lg">Recent Transactions</CardTitle>
         </CardHeader>
@@ -222,7 +240,7 @@ export default function FinancesPage() {
           <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
         ) : (
           <Table>
-            <TableHeader className="bg-white/5">
+            <TableHeader className="bg-muted/30">
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Type</TableHead>
@@ -233,7 +251,7 @@ export default function FinancesPage() {
             </TableHeader>
             <TableBody>
               {finances?.map((record) => (
-                <TableRow key={record.id} className="border-white/5">
+                <TableRow key={record.id}>
                   <TableCell>{record.date}</TableCell>
                   <TableCell>{record.type}</TableCell>
                   <TableCell className={cn(
@@ -301,7 +319,7 @@ export default function FinancesPage() {
               <div className="space-y-2">
                 <Label>Transaction Type</Label>
                 <Select value={editingTransaction.type} onValueChange={(v) => setEditingTransaction({...editingTransaction, type: v})}>
-                  <SelectTrigger className="bg-white/5">
+                  <SelectTrigger className="bg-muted/30">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="glass">
