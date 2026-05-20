@@ -12,6 +12,9 @@ import {
   doc,
   getDoc
 } from 'firebase/firestore';
+import axios from 'axios';
+
+const MNOTIFY_API_KEY = "4OAnq8qrPzc0T3dxgOrqFXKSt";
 
 /**
  * Interface for SMS Log entry
@@ -29,16 +32,33 @@ export interface SMSLog {
 }
 
 /**
- * Placeholder for mNotify SMS API simulation.
- * In production, the real sending happens in Cloud Functions or via a secure proxy.
+ * Sends SMS via mNotify API
  */
 async function sendSMSViaProvider(phone: string, message: string, senderId: string) {
-  console.log(`[mNotify SERVICE] Sending to ${phone} from ${senderId}: ${message}`);
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({ success: true, messageId: Math.random().toString(36).substr(2, 9) });
-    }, 1000);
-  });
+  // mNotify Quick SMS Endpoint
+  const url = `https://api.mnotify.com/api/sms/quick?key=${MNOTIFY_API_KEY}`;
+
+  try {
+    const response = await axios.post(
+      url,
+      {
+        recipient: [phone],
+        sender: senderId,
+        message: message,
+        is_schedule: false
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+      }
+    );
+    return { success: response.status === 200, data: response.data };
+  } catch (error: any) {
+    console.error("mNotify Client Error:", error.response?.data || error.message);
+    return { success: false, error: error.message };
+  }
 }
 
 /**
@@ -64,25 +84,26 @@ export async function sendAndLogSMS(
     const churchData = churchSnap.data();
     const senderId = churchData?.settings?.senderId || "ChurchHub";
 
-    // 1. Attempt to send (Simulated on client, handled by mNotify on server)
-    const response: any = await sendSMSViaProvider(payload.phone, payload.message, senderId);
+    // 1. Attempt to send
+    const outcome = await sendSMSViaProvider(payload.phone, payload.message, senderId);
     
-    // 2. Log success
+    // 2. Log result
     const logData: SMSLog = {
       churchId,
       memberId: payload.memberId,
       memberName: payload.memberName,
       phone: payload.phone,
       message: payload.message,
-      status: response.success ? 'sent' : 'failed',
+      status: outcome.success ? 'sent' : 'failed',
       type: payload.type,
+      error: outcome.success ? undefined : (outcome as any).error,
       createdAt: serverTimestamp(),
     };
 
     await addDoc(logsRef, logData);
-    return { success: true };
+    return { success: outcome.success };
   } catch (error: any) {
-    // 3. Log failure
+    // 3. Log catastrophic failure
     await addDoc(logsRef, {
       churchId,
       memberId: payload.memberId,

@@ -5,6 +5,9 @@ const axios = require("axios");
 
 admin.initializeApp();
 
+// mNotify API Integration Configuration
+const MNOTIFY_API_KEY = "4OAnq8qrPzc0T3dxgOrqFXKSt";
+
 /**
  * Multi-Tenant Birthday SMS Cloud Function for mNotify
  * Runs daily at 06:00 AM (Africa/Accra)
@@ -85,7 +88,7 @@ exports.sendBirthdaySMS = functions.pubsub
  * Helper function to send SMS via mNotify API
  */
 async function sendMNotifySMS(phone, message, churchData) {
-  const apiKey = functions.config().mnotify?.api_key;
+  const apiKey = functions.config().mnotify?.api_key || MNOTIFY_API_KEY;
   // Use tenant-specific senderId if configured, otherwise use default
   const senderId = churchData.settings?.senderId || functions.config().mnotify?.sender_id || "ChurchHub";
 
