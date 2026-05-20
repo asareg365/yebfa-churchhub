@@ -1,11 +1,10 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 40 30% 98%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
@@ -78,18 +77,18 @@
   body {
     @apply bg-background text-foreground font-body;
     background-image: 
-      radial-gradient(at 0% 0%, hsla(259, 81%, 70%, 0.03) 0px, transparent 50%),
-      radial-gradient(at 100% 100%, hsla(161, 84%, 39%, 0.03) 0px, transparent 50%);
+      radial-gradient(at 0% 0%, hsla(259, 81%, 70%, 0.02) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, hsla(161, 84%, 39%, 0.02) 0px, transparent 50%);
     background-attachment: fixed;
   }
 }
 
 .glass {
-  @apply bg-white/70 dark:bg-card/60 backdrop-blur-xl border border-border shadow-xl;
+  @apply bg-white/80 dark:bg-card/60 backdrop-blur-xl border border-border shadow-lg;
 }
 
 .glass-primary {
-  @apply bg-primary/5 dark:bg-primary/10 backdrop-blur-md border border-primary/20;
+  @apply bg-primary/5 dark:bg-primary/10 backdrop-blur-md border border-primary/10;
 }
 
 .font-headline {

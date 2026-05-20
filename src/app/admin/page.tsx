@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -477,7 +476,7 @@ export default function SystemAdminPortal() {
           <Button
             variant="outline"
             onClick={handleLogout}
-            className="glass border-white/10 text-destructive hover:bg-destructive/10"
+            className="border-border hover:bg-muted"
           >
             <LogOut className="mr-2 h-4 w-4" />
             Logout
@@ -485,7 +484,7 @@ export default function SystemAdminPortal() {
         </div>
       </div>
 
-      <Card className="glass border-white/10">
+      <Card className="glass">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-7">
           <div>
             <CardTitle className="text-xl">Tenant Directory</CardTitle>
@@ -498,7 +497,7 @@ export default function SystemAdminPortal() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search by name or slug..."
-              className="pl-10 bg-white/5 border-white/10 rounded-xl"
+              className="pl-10 bg-muted/20 border-border rounded-xl"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -511,8 +510,8 @@ export default function SystemAdminPortal() {
             </div>
           ) : (
             <Table>
-              <TableHeader className="bg-white/5">
-                <TableRow className="border-white/5">
+              <TableHeader className="bg-muted/30">
+                <TableRow>
                   <TableHead>Ministry Name</TableHead>
                   <TableHead>Tenant ID (Slug)</TableHead>
                   <TableHead>Denomination</TableHead>
@@ -525,7 +524,7 @@ export default function SystemAdminPortal() {
                 {sortedChurches.map((church) => (
                   <TableRow
                     key={church.id}
-                    className="border-white/5 hover:bg-white/5 transition-colors"
+                    className="hover:bg-muted/20 transition-colors"
                   >
                     <TableCell className="font-bold">{church.name}</TableCell>
                     <TableCell>
@@ -534,7 +533,7 @@ export default function SystemAdminPortal() {
                       </code>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="border-white/10">
+                      <Badge variant="outline">
                         {church.denomination || 'Unknown'}
                       </Badge>
                     </TableCell>
@@ -549,10 +548,10 @@ export default function SystemAdminPortal() {
                         className={cn(
                           'capitalize',
                           church.status === 'Approved'
-                            ? 'bg-green-500/10 text-green-500'
+                            ? 'bg-green-500/10 text-green-600 border-green-200'
                             : church.status === 'Pending'
-                              ? 'bg-accent/10 text-accent'
-                              : 'bg-destructive/10 text-destructive'
+                              ? 'bg-amber-500/10 text-amber-600 border-amber-200'
+                              : 'bg-destructive/10 text-destructive border-destructive/20'
                         )}
                       >
                         {church.status}
@@ -565,7 +564,7 @@ export default function SystemAdminPortal() {
                             <MoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="glass">
+                        <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             onClick={() => setEditingChurch(church)}
                           >
@@ -576,9 +575,9 @@ export default function SystemAdminPortal() {
                           >
                             <UserPlus className="mr-2 h-4 w-4" /> Manage Admins
                           </DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-white/5" />
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
-                            className="text-green-500 focus:text-green-500"
+                            className="text-green-600 focus:text-green-600"
                             onClick={() =>
                               handleUpdateStatus(church.id, 'Approved')
                             }
@@ -605,7 +604,7 @@ export default function SystemAdminPortal() {
           if (!open) setNewChurch(initialChurchState);
         }}
       >
-        <DialogContent className="glass max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Onboard New Organization</DialogTitle>
             <DialogDescription>
@@ -626,7 +625,7 @@ export default function SystemAdminPortal() {
                     slug: generateSlug(val),
                   });
                 }}
-                className="bg-white/5"
+                className="bg-muted/20"
               />
             </div>
             <div className="space-y-2">
@@ -639,17 +638,17 @@ export default function SystemAdminPortal() {
                     setNewChurch({ ...newChurch, slug: generateSlug(e.target.value) })
                   }
                   placeholder="hope-sanctuary"
-                  className="pl-10 bg-white/5 font-mono"
+                  className="pl-10 bg-muted/20 font-mono"
                 />
               </div>
             </div>
             <div className="space-y-2">
               <Label>Denomination</Label>
               <Select value={newChurch.denomination} onValueChange={(v) => setNewChurch({...newChurch, denomination: v})}>
-                <SelectTrigger className="bg-white/5">
+                <SelectTrigger className="bg-muted/20">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="glass">
+                <SelectContent>
                   {DENOMINATIONS.map(d => (
                     <SelectItem key={d} value={d}>{d}</SelectItem>
                   ))}
@@ -666,7 +665,7 @@ export default function SystemAdminPortal() {
                   onChange={(e) =>
                     setNewChurch({ ...newChurch, adminEmail: e.target.value })
                   }
-                  className="bg-white/5"
+                  className="bg-muted/20"
                 />
               </div>
               <div className="space-y-2">
@@ -681,12 +680,12 @@ export default function SystemAdminPortal() {
                       adminPassword: e.target.value,
                     })
                   }
-                  className="bg-white/5"
+                  className="bg-muted/20"
                 />
               </div>
             </div>
 
-            <div className="space-y-3 pt-4 border-t border-white/5">
+            <div className="space-y-3 pt-4 border-t border-border">
               <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 Features to Enable
               </Label>
@@ -694,7 +693,7 @@ export default function SystemAdminPortal() {
                 {MODULES.map((module) => (
                   <div
                     key={module.id}
-                    className="flex items-center space-x-3 p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+                    className="flex items-center space-x-3 p-2 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
                   >
                     <Checkbox
                       id={`new-${module.id}`}
@@ -733,7 +732,7 @@ export default function SystemAdminPortal() {
         open={!!editingChurch}
         onOpenChange={(open) => !open && setEditingChurch(null)}
       >
-        <DialogContent className="glass max-w-lg">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Organization Configuration</DialogTitle>
           </DialogHeader>
@@ -745,23 +744,23 @@ export default function SystemAdminPortal() {
                 onChange={(e) =>
                   setEditingChurch({ ...editingChurch, name: e.target.value })
                 }
-                className="bg-white/5"
+                className="bg-muted/20"
               />
             </div>
             <div className="space-y-2">
               <Label>Denomination</Label>
               <Select value={editingChurch?.denomination || 'Other'} onValueChange={(v) => setEditingChurch({...editingChurch, denomination: v})}>
-                <SelectTrigger className="bg-white/5">
+                <SelectTrigger className="bg-muted/20">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="glass">
+                <SelectContent>
                   {DENOMINATIONS.map(d => (
                     <SelectItem key={d} value={d}>{d}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-3 pt-4 border-t border-white/5">
+            <div className="space-y-3 pt-4 border-t border-border">
               <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 Features Enabled
               </Label>
@@ -769,7 +768,7 @@ export default function SystemAdminPortal() {
                 {MODULES.map((module) => (
                   <div
                     key={module.id}
-                    className="flex items-center space-x-3 p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+                    className="flex items-center space-x-3 p-2 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
                   >
                     <Checkbox
                       id={`edit-${module.id}`}
@@ -807,7 +806,7 @@ export default function SystemAdminPortal() {
         open={!!managingUsersId}
         onOpenChange={(open) => !open && setManagingUsersId(null)}
       >
-        <DialogContent className="glass max-w-md">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Authorized Administrators</DialogTitle>
             <DialogDescription>
@@ -827,7 +826,7 @@ export default function SystemAdminPortal() {
                       placeholder="Email Address"
                       value={newAdminEmail}
                       onChange={(e) => setNewAdminEmail(e.target.value)}
-                      className="pl-10 bg-white/5"
+                      className="pl-10 bg-muted/20"
                     />
                   </div>
                   <div className="relative">
@@ -837,7 +836,7 @@ export default function SystemAdminPortal() {
                       placeholder="Assign Password"
                       value={newAdminPassword}
                       onChange={(e) => setNewAdminPassword(e.target.value)}
-                      className="pl-10 bg-white/5"
+                      className="pl-10 bg-muted/20"
                     />
                   </div>
                   <Button
@@ -860,13 +859,13 @@ export default function SystemAdminPortal() {
               <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 Active Admins
               </Label>
-              <div className="rounded-xl border border-white/5 overflow-hidden">
+              <div className="rounded-xl border border-border overflow-hidden">
                 {managingUsers?.adminEmails?.length > 0 ? (
                   Array.from(new Set(managingUsers.adminEmails as string[])).map(
                     (email: string) => (
                       <div
                         key={email}
-                        className="flex items-center justify-between p-3 bg-white/5 border-b border-white/5 last:border-0 group"
+                        className="flex items-center justify-between p-3 bg-card border-b border-border last:border-0 group"
                       >
                         <div className="flex flex-col">
                           <span className="text-sm font-medium">{email}</span>
@@ -935,7 +934,7 @@ export default function SystemAdminPortal() {
         open={!!adminToRemove}
         onOpenChange={(open) => !open && setAdminToRemove(null)}
       >
-        <AlertDialogContent className="glass">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke Admin Access?</AlertDialogTitle>
             <AlertDialogDescription>

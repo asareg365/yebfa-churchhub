@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo } from "react";
@@ -45,13 +44,13 @@ export function Header() {
   const isSuperAdmin = user?.email && SUPER_ADMINS.includes(user.email.toLowerCase().trim());
 
   return (
-    <header className="sticky top-0 z-40 w-full glass border-b border-white/5 py-3 px-8 mb-6 rounded-2xl flex items-center justify-between">
+    <header className="sticky top-0 z-40 w-full bg-white border-b border-border py-3 px-8 mb-6 rounded-2xl flex items-center justify-between shadow-sm">
       <div className="flex items-center gap-4 flex-1 max-w-xl">
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input 
             placeholder="Search dashboard content..." 
-            className="pl-10 bg-white/5 border-white/10 rounded-xl focus-visible:ring-primary h-10"
+            className="pl-10 bg-muted/20 border-border rounded-xl focus-visible:ring-primary h-10"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -61,15 +60,15 @@ export function Header() {
       <div className="flex items-center gap-6">
         <Popover>
           <PopoverTrigger asChild>
-            <button className="relative p-2 rounded-xl hover:bg-white/5 transition-colors text-muted-foreground group">
+            <button className="relative p-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground group">
               <Bell className="w-5 h-5 group-hover:text-primary transition-colors" />
               {notifications && notifications.length > 0 && (
                 <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full border-2 border-background"></span>
               )}
             </button>
           </PopoverTrigger>
-          <PopoverContent className="glass w-80 p-0" align="end">
-            <div className="p-4 border-b border-white/5 bg-white/5">
+          <PopoverContent className="w-80 p-0 shadow-2xl border-border" align="end">
+            <div className="p-4 border-b border-border bg-muted/20">
               <h4 className="font-bold text-sm">Recent Notifications</h4>
               <p className="text-[10px] text-muted-foreground">Latest communication activity</p>
             </div>
@@ -78,7 +77,7 @@ export function Header() {
                 <div className="p-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
               ) : notifications && notifications.length > 0 ? (
                 notifications.map((notif: any) => (
-                  <div key={notif.id} className="p-4 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+                  <div key={notif.id} className="p-4 border-b border-border last:border-0 hover:bg-muted transition-colors">
                     <div className="flex items-start gap-3">
                       <div className={notif.status === 'sent' ? 'text-accent' : 'text-destructive'}>
                         {notif.status === 'sent' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
@@ -102,13 +101,13 @@ export function Header() {
                 </div>
               )}
             </div>
-            <div className="p-2 border-t border-white/5 text-center">
+            <div className="p-2 border-t border-border text-center">
               <button className="text-[10px] text-primary hover:underline font-bold">View Communication Logs</button>
             </div>
           </PopoverContent>
         </Popover>
 
-        <div className="flex items-center gap-3 pl-4 border-l border-white/5">
+        <div className="flex items-center gap-3 pl-4 border-l border-border">
           <div className="text-right hidden sm:block">
             {churchLoading ? (
               <Loader2 className="w-4 h-4 animate-spin text-primary ml-auto" />

@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -80,7 +79,7 @@ export function Sidebar() {
   };
 
   return (
-    <div className="fixed left-4 top-4 bottom-4 w-72 glass rounded-3xl z-50 flex flex-col p-6 border border-border shadow-xl overflow-hidden">
+    <div className="fixed left-4 top-4 bottom-4 w-72 bg-white rounded-3xl z-50 flex flex-col p-6 border border-border shadow-xl overflow-hidden">
       <div className="mb-8 px-2">
         <h1 className="font-headline text-lg font-bold text-primary flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/30">

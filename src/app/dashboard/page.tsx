@@ -145,7 +145,7 @@ export default function DashboardPage() {
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight mb-1">
+          <h2 className="text-3xl font-bold tracking-tight mb-1 text-foreground">
             Welcome back, Admin
           </h2>
           <p className="text-muted-foreground">
@@ -153,7 +153,7 @@ export default function DashboardPage() {
             today.
           </p>
         </div>
-        <div className="glass px-4 py-2 rounded-xl border-primary/20 text-xs font-semibold text-primary uppercase tracking-wider">
+        <div className="bg-primary/10 px-4 py-2 rounded-xl border border-primary/20 text-xs font-semibold text-primary uppercase tracking-wider">
           System Live
         </div>
       </div>
@@ -162,7 +162,7 @@ export default function DashboardPage() {
         {stats.map((stat) => (
           <Card
             key={stat.label}
-            className="glass group hover:border-primary/50 transition-all duration-300"
+            className="group hover:border-primary/50 transition-all duration-300"
           >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -188,7 +188,7 @@ export default function DashboardPage() {
       </div>
 
       <Tabs defaultValue="trends" className="space-y-6">
-        <TabsList className="glass border-white/10 p-1 rounded-2xl">
+        <TabsList className="bg-muted p-1 rounded-2xl">
           <TabsTrigger value="trends" className="rounded-xl px-6">
             <Activity className="w-4 h-4 mr-2" />
             Attendance Trends
@@ -207,7 +207,7 @@ export default function DashboardPage() {
           value="trends"
           className="animate-in fade-in-50 duration-500"
         >
-          <Card className="glass h-[400px]">
+          <Card className="h-[400px]">
             <CardHeader>
               <CardTitle className="text-lg font-semibold flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-primary" />
@@ -243,9 +243,9 @@ export default function DashboardPage() {
                       type="monotone"
                       dataKey="count"
                       stroke="hsl(var(--primary))"
-                      fillOpacity={1}
+                      fillOpacity={0.1}
                       strokeWidth={3}
-                      fill="url(#colorCount)"
+                      fill="hsl(var(--primary))"
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -263,7 +263,7 @@ export default function DashboardPage() {
           value="financials"
           className="animate-in fade-in-50 duration-500"
         >
-          <Card className="glass h-[400px]">
+          <Card className="h-[400px]">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg font-semibold flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-accent" />
@@ -273,7 +273,7 @@ export default function DashboardPage() {
             <CardContent>
               <div className="grid md:grid-cols-2 gap-8">
                 <div className="space-y-6">
-                  <div className="flex justify-between items-center p-6 rounded-3xl bg-white/5 border border-white/5">
+                  <div className="flex justify-between items-center p-6 rounded-3xl bg-muted/20 border border-border">
                     <div>
                       <p className="text-xs text-muted-foreground uppercase tracking-wider font-bold">
                         Total Balance
@@ -286,7 +286,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="flex flex-col justify-center space-y-4">
-                  <div className="p-4 rounded-2xl bg-white/5 border border-white/5 text-center">
+                  <div className="p-4 rounded-2xl bg-muted/20 border border-border text-center">
                     <p className="text-xs text-muted-foreground">
                       Recent Transactions
                     </p>
@@ -302,7 +302,7 @@ export default function DashboardPage() {
           value="birthdays"
           className="animate-in fade-in-50 duration-500"
         >
-          <Card className="glass min-h-[400px]">
+          <Card className="min-h-[400px]">
             <CardHeader>
               <div className="flex justify-between items-start">
                 <div>
@@ -333,7 +333,7 @@ export default function DashboardPage() {
                   {birthdayMembers.map((member) => (
                     <div
                       key={member.id}
-                      className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-primary/30 transition-all"
+                      className="flex items-center gap-4 p-4 rounded-2xl bg-muted/20 border border-border hover:border-primary/30 transition-all"
                     >
                       <Avatar className="h-12 w-12 border border-primary/20">
                         <AvatarImage src={member.photo} />
@@ -364,11 +364,6 @@ export default function DashboardPage() {
           </Card>
         </TabsContent>
       </Tabs>
-      <style jsx global>{`
-        #colorCount {
-          stop-color: hsl(var(--primary));
-        }
-      `}</style>
     </div>
   );
 }
