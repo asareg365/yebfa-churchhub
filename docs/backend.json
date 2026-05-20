@@ -137,31 +137,31 @@
   "firestore": {
     "/churches/{churchId}": {
       "schema": "Church",
-      "description": "Core organization record. Securely isolated by adminEmails verification."
+      "description": "Core organization record. Isolated by adminEmails matching request.auth.token.email."
     },
     "/churches/{churchId}/members/{memberId}": {
       "schema": "Member",
-      "description": "Isolated collection of church members per tenant. Strictly accessible only to church admins."
+      "description": "Isolated members. Accessible only to admins in the parent church adminEmails array."
     },
     "/churches/{churchId}/smsLogs/{logId}": {
       "schema": "SMSLog",
-      "description": "Isolated logs of SMS sent by the tenant. Strictly accessible only to church admins."
+      "description": "Isolated logs. Accessible only to admins in the parent church adminEmails array."
     },
     "/churches/{churchId}/smsTemplates/{templateId}": {
       "schema": "SMSTemplate",
-      "description": "Isolated message templates per tenant. Strictly accessible only to church admins."
+      "description": "Isolated templates. Accessible only to admins in the parent church adminEmails array."
     },
     "/churches/{churchId}/attendance/{attendanceId}": {
       "schema": "Attendance",
-      "description": "Isolated collection of attendance records per tenant. Strictly accessible only to church admins."
+      "description": "Isolated attendance. Accessible only to admins in the parent church adminEmails array."
     },
     "/churches/{churchId}/finances/{financeId}": {
       "schema": "Finance",
-      "description": "Isolated collection of financial records per tenant. Strictly accessible only to church admins."
+      "description": "Isolated finances. Accessible only to admins in the parent church adminEmails array."
     },
     "/churches/{churchId}/events/{eventId}": {
       "schema": "Event",
-      "description": "Isolated collection of church events per tenant. Strictly accessible only to church admins."
+      "description": "Isolated events. Accessible only to admins in the parent church adminEmails array."
     }
   }
 }

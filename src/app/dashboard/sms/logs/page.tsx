@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -24,12 +25,15 @@ export default function SMSLogsPage() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Use a stable identity normalization
+  const userEmail = useMemo(() => user?.email?.toLowerCase().trim() || null, [user?.email]);
+
   const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
-    return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
-  }, [db, user?.email]);
+    if (!userEmail) return null;
+    return query(collection(db, 'churches'), where('adminEmails', 'array-contains', userEmail), limit(1));
+  }, [db, userEmail]);
   
-  const { data: churches } = useCollection(churchQuery);
+  const { data: churches, loading: churchLoading } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
   const logsRef = useMemo(() => {
@@ -39,10 +43,11 @@ export default function SMSLogsPage() {
 
   const logsQuery = useMemo(() => {
     if (!logsRef) return null;
+    // Note: This requires a Firestore index for (createdAt DESC)
     return query(logsRef, orderBy('createdAt', 'desc'), limit(100));
   }, [logsRef]);
 
-  const { data: allLogs, loading: logsLoading } = useCollection(logsQuery);
+  const { data: allLogs, loading: logsLoading, error: logsError } = useCollection(logsQuery);
 
   const filteredLogs = useMemo(() => {
     if (!allLogs) return [];
@@ -55,6 +60,17 @@ export default function SMSLogsPage() {
       return matchesStatus && matchesType && matchesSearch;
     });
   }, [allLogs, statusFilter, typeFilter, searchTerm]);
+
+  if (logsError) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center space-y-4">
+        <Badge variant="destructive" className="h-8 px-4 rounded-full">Permission Denied</Badge>
+        <p className="text-muted-foreground max-w-md">
+          You do not have sufficient permissions to view logs for this ministry. Please contact your system administrator.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -164,6 +180,13 @@ export default function SMSLogsPage() {
                         <History className="w-12 h-12" />
                         <p>No matching logs found.</p>
                       </div>
+                    </td>
+                  </tr>
+                )}
+                {logsLoading && (
+                  <tr>
+                    <td colSpan={5} className="p-20 text-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
                     </td>
                   </tr>
                 )}
