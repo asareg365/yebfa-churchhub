@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -7,6 +6,21 @@ import { useRouter } from "next/navigation";
 import { Sparkles, Shield, Users, Zap, ArrowRight, Check, Smartphone, Search, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
+const CrossIcon = () => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2.5" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className="w-5 h-5 text-primary"
+  >
+    <path d="M12 3v18M8 8h8" />
+  </svg>
+);
 
 export default function LandingPage() {
   const [tenantSlug, setTenantSlug] = useState("");
@@ -43,12 +57,12 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-background">
       <header className="fixed top-0 w-full z-50 glass border-b border-border py-4 px-8">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/30">
-              <span className="text-primary font-bold">Y</span>
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/30">
+              <CrossIcon />
             </div>
             <span className="font-headline text-sm font-bold tracking-tighter text-foreground">CHURCHHUB</span>
           </div>
@@ -61,7 +75,7 @@ export default function LandingPage() {
               </Button>
             </Link>
             <Link href="/login">
-              <Button variant="ghost" className="text-sm">Login</Button>
+              <Button variant="ghost" className="text-sm text-foreground">Login</Button>
             </Link>
             <Link href="/login?tab=signup">
               <Button className="bg-primary text-primary-foreground">Get Started</Button>
@@ -72,7 +86,7 @@ export default function LandingPage() {
 
       <main className="flex-1 pt-32">
         <section className="px-8 max-w-7xl mx-auto text-center space-y-8 py-20">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass border-primary/20 text-xs font-bold text-primary uppercase tracking-widest">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-xs font-bold text-primary uppercase tracking-widest">
             <Sparkles className="w-3 h-3" />
             Next-Gen Church Management
           </div>
@@ -112,29 +126,29 @@ export default function LandingPage() {
 
         <section id="features" className="px-8 max-w-7xl mx-auto py-20">
           <div className="text-center mb-16 space-y-4">
-            <h2 className="text-3xl font-bold font-headline tracking-tighter">Core Capabilities</h2>
+            <h2 className="text-3xl font-bold font-headline tracking-tighter text-foreground">Core Capabilities</h2>
             <p className="text-muted-foreground">Everything you need to manage a thriving modern congregation.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="glass p-8 rounded-3xl space-y-4 hover:border-primary/50 transition-colors">
+            <div className="bg-white p-8 rounded-3xl space-y-4 border border-border hover:border-primary/30 transition-colors shadow-sm">
               <div className="h-12 w-12 rounded-2xl bg-primary/20 flex items-center justify-center text-primary">
                 <Shield className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold font-headline">Secure Isolation</h3>
+              <h3 className="text-xl font-bold font-headline text-foreground">Secure Isolation</h3>
               <p className="text-muted-foreground">Each church operates in a fully isolated tenant environment with zero data leakage.</p>
             </div>
-            <div className="glass p-8 rounded-3xl space-y-4 hover:border-primary/50 transition-colors">
+            <div className="bg-white p-8 rounded-3xl space-y-4 border border-border hover:border-primary/30 transition-colors shadow-sm">
               <div className="h-12 w-12 rounded-2xl bg-accent/20 flex items-center justify-center text-accent">
                 <Zap className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold font-headline">AI Insights</h3>
+              <h3 className="text-xl font-bold font-headline text-foreground">AI Insights</h3>
               <p className="text-muted-foreground">Advanced reasoning tools to analyze congregation trends and spiritual growth.</p>
             </div>
-            <div className="glass p-8 rounded-3xl space-y-4 hover:border-primary/50 transition-colors">
+            <div className="bg-white p-8 rounded-3xl space-y-4 border border-border hover:border-primary/30 transition-colors shadow-sm">
               <div className="h-12 w-12 rounded-2xl bg-primary/20 flex items-center justify-center text-primary">
                 <Users className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold font-headline">Community First</h3>
+              <h3 className="text-xl font-bold font-headline text-foreground">Community First</h3>
               <p className="text-muted-foreground">Automated birthday SMS, QR check-ins, and sophisticated member management.</p>
             </div>
           </div>
@@ -142,7 +156,7 @@ export default function LandingPage() {
 
         <section id="pricing" className="px-8 max-w-7xl mx-auto py-20">
           <div className="text-center mb-16 space-y-4">
-            <h2 className="text-3xl font-bold font-headline tracking-tighter">Simple Transparent Pricing</h2>
+            <h2 className="text-3xl font-bold font-headline tracking-tighter text-foreground">Simple Transparent Pricing</h2>
             <p className="text-muted-foreground">Choose the plan that fits your ministry's current stage.</p>
           </div>
 
@@ -150,10 +164,10 @@ export default function LandingPage() {
             {plans.map((plan) => (
               <div 
                 key={plan.name} 
-                className={`glass p-8 rounded-3xl space-y-6 flex flex-col ${plan.accent ? 'border-primary/50 ring-1 ring-primary/20 scale-105 bg-primary/5' : ''}`}
+                className={`bg-white p-8 rounded-3xl space-y-6 flex flex-col border border-border shadow-sm ${plan.accent ? 'border-primary/50 ring-1 ring-primary/20 scale-105' : ''}`}
               >
                 <div className="space-y-2">
-                  <h3 className="text-2xl font-bold">{plan.name}</h3>
+                  <h3 className="text-2xl font-bold text-foreground">{plan.name}</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">{plan.description}</p>
                 </div>
                 <div className="flex items-baseline gap-1">
@@ -162,7 +176,7 @@ export default function LandingPage() {
                 </div>
                 <ul className="space-y-4 flex-1">
                   {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-center gap-3 text-sm">
+                    <li key={feature} className="flex items-center gap-3 text-sm text-foreground">
                       <div className="h-5 w-5 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
                         <Check className="h-3 w-3 text-accent" />
                       </div>
@@ -179,13 +193,13 @@ export default function LandingPage() {
             ))}
           </div>
 
-          <div className="glass p-8 rounded-3xl max-w-4xl mx-auto border-primary/20 bg-primary/5">
+          <div className="bg-white p-8 rounded-3xl max-w-4xl mx-auto border border-border shadow-sm">
             <div className="flex flex-col md:flex-row items-center gap-8">
               <div className="h-16 w-16 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0 text-primary">
                 <Smartphone className="h-10 w-10" />
               </div>
               <div className="space-y-2">
-                <h4 className="text-xl font-bold">How to Pay</h4>
+                <h4 className="text-xl font-bold text-foreground">How to Pay</h4>
                 <p className="text-muted-foreground text-sm">
                   To activate your ministry account, please send the plan cost via MoMo to <span className="text-primary font-bold">0248472474</span>. 
                   Use your <span className="underline decoration-primary">Church Name</span> as the transaction reference. 
@@ -197,11 +211,11 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="py-12 px-8 border-t border-border glass mt-20">
+      <footer className="py-12 px-8 border-t border-border bg-white mt-20">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-xs">Y</span>
+              <CrossIcon />
             </div>
             <span className="font-headline text-xs font-bold text-foreground">YEBFA CHURCHHUB</span>
           </div>
@@ -214,8 +228,8 @@ export default function LandingPage() {
               Admin Access
             </Link>
             <span className="text-border">|</span>
-            <a href="#" className="text-muted-foreground hover:text-primary transition-colors text-xs">Twitter</a>
-            <a href="#" className="text-muted-foreground hover:text-primary transition-colors text-xs">LinkedIn</a>
+            <a href="#" className="text-muted-foreground hover:text-primary transition-colors text-xs font-medium">Twitter</a>
+            <a href="#" className="text-muted-foreground hover:text-primary transition-colors text-xs font-medium">LinkedIn</a>
           </div>
         </div>
       </footer>

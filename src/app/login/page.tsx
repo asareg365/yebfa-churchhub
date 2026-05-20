@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
@@ -32,6 +31,21 @@ const AVAILABLE_MODULES = [
   { id: "insights", label: "Pastoral Insights" },
   { id: "reports", label: "Detailed Reports" },
 ];
+
+const CrossIcon = () => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2.5" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className="w-5 h-5 text-primary"
+  >
+    <path d="M12 3v18M8 8h8" />
+  </svg>
+);
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -164,15 +178,10 @@ function LoginContent() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-background relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary rounded-full blur-[120px]" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent rounded-full blur-[120px]" />
-      </div>
-
       <div className="mb-8 text-center animate-in fade-in slide-in-from-top-4 duration-700">
         <Link href="/" className="flex items-center gap-2 justify-center mb-4">
-          <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30">
-            <span className="text-primary font-bold text-xl">Y</span>
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/30">
+            <CrossIcon />
           </div>
           <span className="font-headline text-lg font-bold tracking-tighter text-foreground">CHURCHHUB</span>
         </Link>
@@ -183,13 +192,13 @@ function LoginContent() {
           </div>
         ) : (
           <>
-            <h1 className="text-2xl font-bold">Enterprise Ministry Portal</h1>
+            <h1 className="text-2xl font-bold text-foreground">Enterprise Ministry Portal</h1>
             <p className="text-muted-foreground">Secure access for your religious organization.</p>
           </>
         )}
       </div>
 
-      <Card className="w-full max-w-md glass border-border shadow-2xl animate-in zoom-in-95 duration-500">
+      <Card className="w-full max-w-md bg-white border-border shadow-2xl animate-in zoom-in-95 duration-500">
         <Tabs defaultValue={defaultTab} className="w-full">
           {!activeChurch && (
             <TabsList className="grid w-full grid-cols-2 bg-muted p-1 rounded-t-xl rounded-b-none">
@@ -201,7 +210,7 @@ function LoginContent() {
           <TabsContent value="login">
             <form onSubmit={handleLogin}>
               <CardHeader>
-                <CardTitle>{activeChurch ? "Tenant Sign In" : "Welcome Back"}</CardTitle>
+                <CardTitle>Welcome Back</CardTitle>
                 <CardDescription>Enter your credentials to access {activeChurch?.name || "the dashboard"}.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -213,7 +222,7 @@ function LoginContent() {
                       id="email" 
                       type="email" 
                       placeholder="admin@church.org" 
-                      className="pl-10 bg-muted/50" 
+                      className="pl-10 bg-white" 
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
@@ -227,7 +236,7 @@ function LoginContent() {
                     <Input 
                       id="password" 
                       type="password" 
-                      className="pl-10 bg-muted/50" 
+                      className="pl-10 bg-white" 
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
@@ -263,7 +272,7 @@ function LoginContent() {
                       <Input 
                         id="churchName" 
                         placeholder="Grace Community Sanctuary" 
-                        className="pl-10 bg-muted/50" 
+                        className="pl-10 bg-white" 
                         value={churchName}
                         onChange={(e) => {
                           const val = e.target.value;
@@ -281,7 +290,7 @@ function LoginContent() {
                       <Input 
                         id="signup-slug" 
                         placeholder="grace-sanctuary" 
-                        className="pl-10 bg-muted/50 font-mono" 
+                        className="pl-10 bg-white font-mono" 
                         value={slug}
                         onChange={(e) => setSlug(generateSlug(e.target.value))}
                         required
@@ -294,7 +303,7 @@ function LoginContent() {
                       id="signup-email" 
                       type="email" 
                       placeholder="admin@church.org" 
-                      className="bg-muted/50" 
+                      className="bg-white" 
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
@@ -305,7 +314,7 @@ function LoginContent() {
                     <Input 
                       id="signup-password" 
                       type="password" 
-                      className="bg-muted/50" 
+                      className="bg-white" 
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required

@@ -33,6 +33,21 @@ const ALL_MENU_ITEMS = [
   { id: "settings", icon: Settings, label: "Settings", href: "/dashboard/settings" },
 ];
 
+const CrossIcon = () => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2.5" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className="w-5 h-5 text-primary"
+  >
+    <path d="M12 3v18M8 8h8" />
+  </svg>
+);
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -42,14 +57,14 @@ export function Sidebar() {
 
   const isSuperAdmin = useMemo(() => {
     const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
-    return user?.email && SUPER_ADMINS.includes(user.email);
+    return user?.email && SUPER_ADMINS.includes(user.email.toLowerCase().trim());
   }, [user?.email]);
 
   const churchQuery = useMemo(() => {
     if (!user?.email || isSuperAdmin) return null;
     return query(
       collection(db, "churches"),
-      where("adminEmails", "array-contains", user.email),
+      where("adminEmails", "array-contains", user.email.toLowerCase().trim()),
       limit(1)
     );
   }, [db, user?.email, isSuperAdmin]);
@@ -82,8 +97,8 @@ export function Sidebar() {
     <div className="fixed left-4 top-4 bottom-4 w-72 bg-white rounded-3xl z-50 flex flex-col p-6 border border-border shadow-xl overflow-hidden">
       <div className="mb-8 px-2">
         <h1 className="font-headline text-lg font-bold text-primary flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/30">
-            <span className="text-primary">Y</span>
+          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/30">
+            <CrossIcon />
           </div>
           <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">CHURCHHUB</span>
         </h1>
