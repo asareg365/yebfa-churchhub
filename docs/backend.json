@@ -137,31 +137,31 @@
   "firestore": {
     "/churches/{churchId}": {
       "schema": "Church",
-      "description": "Isolated by adminEmails array containing request.auth.token.email. Primary church record."
+      "description": "Primary church record. Read/Write allowed if request.auth.token.email is in the adminEmails array."
     },
     "/churches/{churchId}/members/{memberId}": {
       "schema": "Member",
-      "description": "Isolated members. Accessible only to admins defined in the parent church document's adminEmails array."
+      "description": "Tenant-isolated members. Authorization: request.auth.token.email must be in parent church document adminEmails array."
     },
     "/churches/{churchId}/smsLogs/{logId}": {
       "schema": "SMSLog",
-      "description": "Isolated logs. Accessible only to admins defined in the parent church document's adminEmails array."
+      "description": "Tenant-isolated logs. Authorization: request.auth.token.email must be in parent church document adminEmails array."
     },
     "/churches/{churchId}/smsTemplates/{templateId}": {
       "schema": "SMSTemplate",
-      "description": "Isolated templates. Accessible only to admins defined in the parent church document's adminEmails array."
+      "description": "Tenant-isolated templates. Authorization: request.auth.token.email must be in parent church document adminEmails array."
     },
     "/churches/{churchId}/attendance/{attendanceId}": {
       "schema": "Attendance",
-      "description": "Isolated attendance. Accessible only to admins defined in the parent church document's adminEmails array."
+      "description": "Tenant-isolated attendance. Authorization: request.auth.token.email must be in parent church document adminEmails array."
     },
     "/churches/{churchId}/finances/{financeId}": {
       "schema": "Finance",
-      "description": "Isolated finances. Accessible only to admins defined in the parent church document's adminEmails array."
+      "description": "Tenant-isolated finances. Authorization: request.auth.token.email must be in parent church document adminEmails array."
     },
     "/churches/{churchId}/events/{eventId}": {
       "schema": "Event",
-      "description": "Isolated events. Accessible only to admins defined in the parent church document's adminEmails array."
+      "description": "Tenant-isolated events. Authorization: request.auth.token.email must be in parent church document adminEmails array."
     }
   }
 }

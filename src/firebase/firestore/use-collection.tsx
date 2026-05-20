@@ -34,17 +34,19 @@ export function useCollection<T = DocumentData>(query: Query<T> | null) {
         setError(null);
         setLoading(false);
       },
-      async (serverError) => {
-        // Handle listener failure with detailed contextual error
-        // Extracting path safely from Firestore Query object internals if possible
-        const path = (query as any).path || (query as any)._query?.path?.toString?.() || 'unknown';
+      async (serverError: any) => {
+        // Only emit FirestorePermissionError if the code is actually permission-denied
+        if (serverError.code === 'permission-denied') {
+          const path = (query as any).path || (query as any)._query?.path?.toString?.() || 'unknown';
+          
+          const permissionError = new FirestorePermissionError({
+            path,
+            operation: 'list',
+          });
+          
+          errorEmitter.emit('permission-error', permissionError);
+        }
         
-        const permissionError = new FirestorePermissionError({
-          path,
-          operation: 'list',
-        });
-        
-        errorEmitter.emit('permission-error', permissionError);
         setError(serverError);
         setLoading(false);
       }

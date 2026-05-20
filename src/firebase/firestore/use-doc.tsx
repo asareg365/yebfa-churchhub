@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -27,12 +28,16 @@ export function useDoc<T = DocumentData>(docRef: DocumentReference<T> | null) {
         setData(snapshot.exists() ? { ...snapshot.data()!, id: snapshot.id } : null);
         setLoading(false);
       },
-      async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: docRef.path,
-          operation: 'get',
-        });
-        errorEmitter.emit('permission-error', permissionError);
+      async (serverError: any) => {
+        // Only emit FirestorePermissionError if the code is actually permission-denied
+        if (serverError.code === 'permission-denied') {
+          const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'get',
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        }
+        
         setError(serverError);
         setLoading(false);
       }
