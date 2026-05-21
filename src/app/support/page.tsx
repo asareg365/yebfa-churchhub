@@ -1,8 +1,7 @@
-
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Mail, MessageSquare, Smartphone, ShieldCheck, HelpCircle } from "lucide-react";
+import { ArrowLeft, Mail, Smartphone, ShieldCheck, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
@@ -40,7 +39,7 @@ export default function SupportPage() {
                 <p className="text-xs text-muted-foreground mt-2">Reference: [Your Church Name]</p>
               </div>
               <p className="text-sm text-muted-foreground">
-                Contact this number for immediate manual activation of Standard and Premium plans.
+                Contact this number for immediate manual activation of Standard and Premium plans or credit top-ups.
               </p>
             </CardContent>
           </Card>
@@ -76,11 +75,11 @@ export default function SupportPage() {
             </div>
             <div className="space-y-1">
               <p className="font-semibold">Can I use my own mNotify account?</p>
-              <p className="text-sm text-muted-foreground">Yes, Premium members can configure their own custom Sender IDs and API keys.</p>
+              <p className="text-sm text-muted-foreground">Yes, Premium members can configure their own custom Sender IDs and API keys in settings.</p>
             </div>
             <div className="space-y-1">
               <p className="font-semibold">Is my congregation's data safe?</p>
-              <p className="text-sm text-muted-foreground">Absolutely. We use enterprise-grade multi-tenant isolation in Firestore.</p>
+              <p className="text-sm text-muted-foreground">Absolutely. We use enterprise-grade multi-tenant isolation in Firestore to keep your data private.</p>
             </div>
           </div>
         </div>

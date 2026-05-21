@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -23,7 +22,7 @@ export default function PrivacyPolicyPage() {
         </div>
 
         <div className="prose prose-slate dark:prose-invert max-w-none space-y-6 text-muted-foreground">
-          <p className="text-sm italic">Last Updated: October 2023</p>
+          <p className="text-sm italic">Last Updated: March 2024</p>
 
           <section className="space-y-3">
             <h2 className="text-xl font-bold text-foreground">1. Introduction</h2>
@@ -51,7 +50,7 @@ export default function PrivacyPolicyPage() {
           <section className="space-y-3">
             <h2 className="text-xl font-bold text-foreground">4. Use of AI</h2>
             <p>
-              Our Pastoral Insight Tool processes your church's anonymized attendance and financial trends to provide growth strategies. This processing happens securely and data is never used to train global models that share information across different church organizations.
+              Our Pastoral Insight Tool processes your church's anonymized attendance and financial trends to provide growth strategies. This data is processed securely and is never shared with other tenants.
             </p>
           </section>
 

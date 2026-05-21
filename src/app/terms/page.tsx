@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -23,7 +22,7 @@ export default function TermsOfServicePage() {
         </div>
 
         <div className="prose prose-slate dark:prose-invert max-w-none space-y-6 text-muted-foreground">
-          <p className="text-sm italic">Last Updated: October 2023</p>
+          <p className="text-sm italic">Last Updated: March 2024</p>
 
           <section className="space-y-3">
             <h2 className="text-xl font-bold text-foreground">1. Acceptance of Terms</h2>
