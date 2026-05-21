@@ -1,4 +1,3 @@
-
 const admin = require("firebase-admin");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onRequest } = require("firebase-functions/v2/https");
@@ -6,38 +5,21 @@ const { defineString } = require("firebase-functions/params");
 
 admin.initializeApp();
 
-/**
- * Define environment variables using the v2 Params API
- */
 const MNOTIFY_API_KEY = defineString("MNOTIFY_API_KEY");
 const MNOTIFY_SENDER_ID = defineString("MNOTIFY_SENDER_ID");
 
 /**
- * Helper to normalize Ghana phone numbers to E.164 format (+233)
- */
-function normalizePhone(phone) {
-  if (!phone) return "";
-  const cleaned = phone.trim();
-  if (cleaned.startsWith("0")) {
-    return "+233" + cleaned.substring(1);
-  }
-  return cleaned;
-}
-
-const axios = require("axios");
-
-/**
- * Modern mNotify SMS function with detailed logging and credit tracking
+ * Enterprise mNotify SMS function with detailed logging
  */
 async function sendMNotifySMS(phone, message, churchData) {
   const apiKey = MNOTIFY_API_KEY.value();
   const defaultSenderId = MNOTIFY_SENDER_ID.value();
   
-  // Use church-specific senderId if available, otherwise global default
   const senderId = (churchData && churchData.settings && churchData.settings.senderId) || 
                    defaultSenderId || 
                    "ChurchHub";
 
+  const axios = require("axios");
   const response = await axios.post(
     "https://api.mnotify.com/api/sms/quick",
     {
@@ -48,19 +30,16 @@ async function sendMNotifySMS(phone, message, churchData) {
       is_schedule: false
     },
     {
-      headers: {
-        "Content-Type": "application/json"
-      }
+      headers: { "Content-Type": "application/json" }
     }
   );
 
   console.log("mNotify response:", response.data);
-
   return response.data;
 }
 
 /**
- * Multi-Tenant Birthday SMS Cloud Function (v2)
+ * Multi-Tenant Birthday SMS Scheduler (v2)
  */
 exports.sendBirthdaySMS = onSchedule(
   {
@@ -68,17 +47,10 @@ exports.sendBirthdaySMS = onSchedule(
     timeZone: "Africa/Accra",
   },
   async (event) => {
-    console.log("Birthday SMS job started (v2)");
     const db = admin.firestore();
-
     const today = new Date();
     const month = today.getMonth() + 1;
     const day = today.getDate();
-
-    // Used for duplicate prevention (start of today in Accra)
-    const todayStr = new Date().toLocaleString("en-US", {timeZone: "Africa/Accra"});
-    const startOfToday = new Date(todayStr);
-    startOfToday.setHours(0, 0, 0, 0);
 
     const churchesSnap = await db.collection("churches").get();
 
@@ -86,101 +58,128 @@ exports.sendBirthdaySMS = onSchedule(
       const churchData = churchDoc.data();
       const churchId = churchDoc.id;
 
-      // Skip churches with birthday SMS explicitly disabled
-      if (churchData.settings && churchData.settings.birthdaySmsEnabled === false) {
-        continue;
-      }
+      if (churchData.settings && churchData.settings.birthdaySmsEnabled === false) continue;
 
-      // CREDIT CHECK
       const sub = churchData.subscription || { smsCredits: 0, smsUsed: 0 };
-      if (sub.smsUsed >= sub.smsCredits) {
-        console.log(`[${churchId}] SMS credit exhausted. Skipping birthday messages.`);
-        continue;
-      }
+      if (sub.smsUsed >= sub.smsCredits) continue;
 
-      const membersSnap = await db
-        .collection("churches")
-        .doc(churchId)
-        .collection("members")
-        .get();
+      const membersSnap = await db.collection("churches").doc(churchId).collection("members").get();
 
       for (const memberDoc of membersSnap.docs) {
         const m = memberDoc.data();
-
         if (!m.dateOfBirth || !m.phone) continue;
 
-        // DOB is expected in YYYY-MM-DD format
-        const [year, mMonth, mDay] = m.dateOfBirth.split("-").map(Number);
+        const [mYear, mMonth, mDay] = m.dateOfBirth.split("-").map(Number);
 
         if (mMonth === month && mDay === day) {
           try {
-            // Re-check credits before each send if in the same batch
-            const currentSubSnap = await db.collection("churches").doc(churchId).get();
-            const currentSub = currentSubSnap.data().subscription || { smsCredits: 0, smsUsed: 0 };
-            if (currentSub.smsUsed >= currentSub.smsCredits) break;
-
-            // Duplicate prevention: check if already sent today
-            const existingLogs = await db.collection("churches")
-              .doc(churchId)
-              .collection("smsLogs")
-              .where("memberId", "==", memberDoc.id)
-              .where("type", "==", "birthday")
-              .where("createdAt", ">=", admin.firestore.Timestamp.fromDate(startOfToday))
-              .get();
-
-            if (!existingLogs.empty) {
-              continue;
-            }
-
             const message = `Happy Birthday ${m.name}! God bless your new age. — ${churchData.name || 'Our Church'}`;
-            const phone = normalizePhone(m.phone);
-
-            console.log(`Birthday match found for ${m.name}`);
-            const result = await sendMNotifySMS(phone, message, churchData);
+            const result = await sendMNotifySMS(m.phone, message, churchData);
             
-            // Log successfully and increment credits
             await db.collection("churches").doc(churchId).collection("smsLogs").add({
-              phone,
+              phone: m.phone,
               message,
               status: "sent",
               type: "birthday",
               memberId: memberDoc.id,
               memberName: m.name,
+              provider: "mNotify",
+              cost: 1,
               createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
 
             await db.collection("churches").doc(churchId).update({
               "subscription.smsUsed": admin.firestore.FieldValue.increment(1)
             });
-
           } catch (error) {
-            console.error(`[${churchId}] Failed SMS to ${m.name}:`, error.message);
+            console.error(`[${churchId}] Failed Birthday SMS to ${m.name}:`, error.message);
           }
         }
       }
     }
-
     return null;
   }
 );
 
 /**
- * Manual Test Endpoint for SMS (v2)
+ * Enterprise SMS Retry Scheduler (v2)
+ * Runs every hour to retry pending/failed messages with < 3 retries
  */
-exports.testBirthdaySMS = onRequest(async (req, res) => {
-  try {
-    const phone = normalizePhone(req.query.phone || "0240000000");
-    const result = await sendMNotifySMS(
-      phone, 
-      "Test SMS from Yebfa ChurchHub manual v2 trigger.", 
-      {}
-    );
+exports.smsRetryEngine = onSchedule(
+  {
+    schedule: "0 * * * *", 
+    timeZone: "Africa/Accra",
+  },
+  async (event) => {
+    const db = admin.firestore();
+    const churchesSnap = await db.collection("churches").get();
 
-    res.status(200).send(result);
-  } catch (error) {
-    res.status(500).send({
-      message: "Manual test failed",
-      error: error.message
-    });
+    for (const churchDoc of churchesSnap.docs) {
+      const churchId = churchDoc.id;
+      const churchData = churchDoc.data();
+
+      const failedLogs = await db.collection("churches")
+        .doc(churchId)
+        .collection("smsLogs")
+        .where("status", "==", "failed")
+        .where("retryCount", "<", 3)
+        .limit(20)
+        .get();
+
+      for (const logDoc of failedLogs.docs) {
+        const log = logDoc.data();
+        try {
+          await sendMNotifySMS(log.phone, log.message, churchData);
+          
+          await logDoc.ref.update({
+            status: "sent",
+            retryCount: admin.firestore.FieldValue.increment(1),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+
+          await db.collection("churches").doc(churchId).update({
+            "subscription.smsUsed": admin.firestore.FieldValue.increment(1)
+          });
+        } catch (error) {
+          await logDoc.ref.update({
+            retryCount: admin.firestore.FieldValue.increment(1),
+            error: error.message,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
+      }
+    }
+    return null;
   }
-});
+);
+
+/**
+ * Billing Renewal Scheduler (v2)
+ * Resets smsUsed monthly on the renewal date
+ */
+exports.billingRenewalEngine = onSchedule(
+  {
+    schedule: "0 0 * * *",
+    timeZone: "Africa/Accra",
+  },
+  async (event) => {
+    const db = admin.firestore();
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const churchesSnap = await db.collection("churches").where("subscription.renewalDate", "==", todayStr).get();
+
+    for (const churchDoc of churchesSnap.docs) {
+      const data = churchDoc.data();
+      const nextDate = new Date();
+      nextDate.setMonth(nextDate.getMonth() + 1);
+      
+      await churchDoc.ref.update({
+        "subscription.smsUsed": 0,
+        "subscription.renewalDate": nextDate.toISOString().split('T')[0]
+      });
+      console.log(`Renewed subscription for ${churchDoc.id}`);
+    }
+    return null;
+  }
+);

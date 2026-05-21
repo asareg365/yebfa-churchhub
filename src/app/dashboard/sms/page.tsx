@@ -9,7 +9,10 @@ import {
   TrendingUp,
   AlertTriangle,
   Wallet,
-  MessageSquare
+  MessageSquare,
+  TrendingDown,
+  BarChart3,
+  Clock
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,7 +25,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, query, where, limit, addDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 import { sendAndLogSMS, processBirthdaysToday } from '@/services/sms-service';
-import { startOfDay, startOfMonth } from 'date-fns';
+import { startOfDay, startOfMonth, format, subDays } from 'date-fns';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
 export default function SMSDashboardPage() {
   const db = useFirestore();
@@ -48,23 +52,47 @@ export default function SMSDashboardPage() {
   const templatesRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'smsTemplates') : null, [db, currentChurch?.id]);
   const logsRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'smsLogs') : null, [db, currentChurch?.id]);
   
-  const { data: allLogs } = useCollection(logsRef ? query(logsRef, orderBy('createdAt', 'desc')) : null);
+  const { data: allLogs } = useCollection(logsRef ? query(logsRef, orderBy('createdAt', 'desc'), limit(100)) : null);
 
   // Derived Stats
   const stats = useMemo(() => {
-    if (!allLogs || !currentChurch) return { today: 0, failed: 0, monthly: 0, remaining: 0 };
+    if (!allLogs || !currentChurch) return { today: 0, failed: 0, monthly: 0, remaining: 0, pendingRetry: 0, totalCost: 0 };
     const today = startOfDay(new Date());
     const month = startOfMonth(new Date());
 
     const sub = currentChurch.subscription || { smsCredits: 0, smsUsed: 0 };
 
+    const logsToday = allLogs.filter(l => l.createdAt?.toDate() >= today);
+    const sentToday = logsToday.filter(l => l.status === 'sent').length;
+    const failedToday = logsToday.filter(l => l.status === 'failed').length;
+    
     return {
-      today: allLogs.filter(l => l.createdAt?.toDate() >= today && l.status === 'sent').length,
-      failed: allLogs.filter(l => l.createdAt?.toDate() >= today && l.status === 'failed').length,
+      today: sentToday,
+      failed: failedToday,
       monthly: allLogs.filter(l => l.createdAt?.toDate() >= month && l.status === 'sent').length,
-      remaining: Math.max(0, sub.smsCredits - sub.smsUsed)
+      remaining: Math.max(0, sub.smsCredits - sub.smsUsed),
+      pendingRetry: allLogs.filter(l => l.status === 'failed' && (l.retryCount || 0) < 3).length,
+      totalCost: sub.smsUsed // 1 Credit = 1 Cost unit
     };
   }, [allLogs, currentChurch]);
+
+  // Chart Data Preparation
+  const chartData = useMemo(() => {
+    if (!allLogs) return [];
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const d = subDays(new Date(), i);
+      return format(d, 'MMM dd');
+    }).reverse();
+
+    return last7Days.map(day => {
+      const dayLogs = allLogs.filter(l => l.createdAt?.toDate() && format(l.createdAt.toDate(), 'MMM dd') === day);
+      return {
+        name: day,
+        sent: dayLogs.filter(l => l.status === 'sent').length,
+        failed: dayLogs.filter(l => l.status === 'failed').length,
+      };
+    });
+  }, [allLogs]);
 
   const handleGenerate = async () => {
     if (!topic) {
@@ -88,7 +116,7 @@ export default function SMSDashboardPage() {
     setIsSending(true);
     try {
       const outcome = await sendAndLogSMS(db, currentChurch.id, {
-        phone: '0240000000', // Default test number
+        phone: '0240000000',
         message: draft,
         type: 'test'
       });
@@ -118,7 +146,186 @@ export default function SMSDashboardPage() {
     }
   };
 
-  const handleRunBirthdayCheck = async () => {
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex justify-between items-end">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight mb-1">SMS Dashboard</h2>
+          <p className="text-muted-foreground">Monitoring communication performance for {currentChurch?.name}.</p>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            className="glass border-primary/20 hover:bg-primary/10 text-primary"
+            onClick={handleRunBirthdayCheck}
+            disabled={isProcessingBirthdays || !currentChurch}
+          >
+            {isProcessingBirthdays ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Cake className="w-4 h-4 mr-2" />}
+            Run Birthday Check
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+        <Card className="glass border-accent/20">
+          <CardContent className="pt-6">
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sent Today</p>
+              <h3 className="text-2xl font-bold text-accent">{stats.today}</h3>
+              <div className="flex items-center text-[10px] text-accent">
+                <TrendingUp className="w-3 h-3 mr-1" /> Healthy
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="glass border-destructive/20">
+          <CardContent className="pt-6">
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Failed Today</p>
+              <h3 className="text-2xl font-bold text-destructive">{stats.failed}</h3>
+              <div className="flex items-center text-[10px] text-destructive">
+                <AlertTriangle className="w-3 h-3 mr-1" /> Check Logs
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="glass border-amber-500/20">
+          <CardContent className="pt-6">
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Pending Retry</p>
+              <h3 className="text-2xl font-bold text-amber-600">{stats.pendingRetry}</h3>
+              <div className="flex items-center text-[10px] text-amber-600">
+                <Clock className="w-3 h-3 mr-1" /> In Queue
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="glass border-primary/20">
+          <CardContent className="pt-6">
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Credits Left</p>
+              <h3 className="text-2xl font-bold text-primary">{stats.remaining}</h3>
+              <div className="flex items-center text-[10px] text-primary">
+                <Wallet className="w-3 h-3 mr-1" /> Available
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="glass">
+          <CardContent className="pt-6">
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Monthly Usage</p>
+              <h3 className="text-2xl font-bold">{stats.monthly}</h3>
+              <div className="flex items-center text-[10px] text-muted-foreground">
+                <BarChart3 className="w-3 h-3 mr-1" /> 30-Day Trend
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="glass">
+          <CardContent className="pt-6">
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Total Credits</p>
+              <h3 className="text-2xl font-bold">{stats.totalCost}</h3>
+              <div className="flex items-center text-[10px] text-muted-foreground">
+                <CreditCard className="w-3 h-3 mr-1" /> Lifetime
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="glass h-[400px]">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-primary" />
+              Activity Trends (Last 7 Days)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorSent" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis fontSize={12} tickLine={false} axisLine={false} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }}
+                />
+                <Area type="monotone" dataKey="sent" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorSent)" strokeWidth={3} />
+                <Area type="monotone" dataKey="failed" stroke="hsl(var(--destructive))" fill="transparent" strokeWidth={2} strokeDasharray="5 5" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card className="glass flex flex-col">
+          <CardHeader className="bg-primary/5 border-b border-border">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary" />
+              AI Draft Assistant
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 p-6 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Main Topic</Label>
+                <Input 
+                  placeholder="e.g. Easter Youth Camp" 
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  className="bg-muted/30"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Target Audience</Label>
+                <Select value={targetAudience} onValueChange={setTargetAudience}>
+                  <SelectTrigger className="bg-muted/30">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="glass">
+                    <SelectItem value="all members">All Members</SelectItem>
+                    <SelectItem value="youth group">Youth Group</SelectItem>
+                    <SelectItem value="church elders">Church Elders</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Textarea 
+              className="min-h-[120px] bg-muted/20 border-0 focus-visible:ring-0 resize-none rounded-xl"
+              placeholder="Your AI draft will appear here..."
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <Button 
+                className="flex-1 bg-primary text-primary-foreground h-11" 
+                onClick={handleGenerate}
+                disabled={isGenerating}
+              >
+                {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                Generate Draft
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={handleSaveAsTemplate} disabled={!draft}>
+                Save Template
+              </Button>
+              <Button className="bg-accent text-white" onClick={handleSendTest} disabled={!draft || isSending}>
+                {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+
+  async function handleRunBirthdayCheck() {
     if (!currentChurch?.id) return;
     setIsProcessingBirthdays(true);
     try {
@@ -132,147 +339,5 @@ export default function SMSDashboardPage() {
     } finally {
       setIsProcessingBirthdays(false);
     }
-  };
-
-  return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex justify-between items-end">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight mb-1">SMS Dashboard</h2>
-          <p className="text-muted-foreground">Quick overview and drafting tools for {currentChurch?.name}.</p>
-        </div>
-        <Button 
-          variant="outline" 
-          className="glass border-primary/20 hover:bg-primary/10 text-primary"
-          onClick={handleRunBirthdayCheck}
-          disabled={isProcessingBirthdays || !currentChurch}
-        >
-          {isProcessingBirthdays ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Cake className="w-4 h-4 mr-2" />}
-          Run Birthday Check
-        </Button>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card className="glass border-accent/20">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Sent Today</p>
-                <h3 className="text-2xl font-bold mt-1">{stats.today}</h3>
-              </div>
-              <div className="p-3 bg-accent/10 rounded-xl text-accent">
-                <Send className="w-5 h-5" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="glass border-destructive/20">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Failed SMS</p>
-                <h3 className="text-2xl font-bold mt-1">{stats.failed}</h3>
-              </div>
-              <div className="p-3 bg-destructive/10 rounded-xl text-destructive">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="glass border-primary/20">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Monthly Usage</p>
-                <h3 className="text-2xl font-bold mt-1">{stats.monthly}</h3>
-              </div>
-              <div className="p-3 bg-primary/10 rounded-xl text-primary">
-                <TrendingUp className="w-5 h-5" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="glass border-muted">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Credits Left</p>
-                <h3 className="text-2xl font-bold mt-1">{stats.remaining}</h3>
-              </div>
-              <div className="p-3 bg-muted rounded-xl text-muted-foreground">
-                <Wallet className="w-5 h-5" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="glass border-primary/20 shadow-xl">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-primary" />
-              AI Draft Assistant
-            </CardTitle>
-            <CardDescription>Generate tailored messages for any audience.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Main Topic</Label>
-              <Input 
-                placeholder="e.g., Anniversary Celebration" 
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                className="bg-muted/30 rounded-xl h-11"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Target Audience</Label>
-              <Select value={targetAudience} onValueChange={setTargetAudience}>
-                <SelectTrigger className="bg-muted/30 rounded-xl h-11">
-                  <SelectValue placeholder="Select audience" />
-                </SelectTrigger>
-                <SelectContent className="glass">
-                  <SelectItem value="all members">All Members</SelectItem>
-                  <SelectItem value="youth group">Youth Group</SelectItem>
-                  <SelectItem value="church elders">Church Elders</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button 
-              className="w-full bg-primary text-primary-foreground h-12 rounded-xl shadow-lg shadow-primary/20" 
-              onClick={handleGenerate}
-              disabled={isGenerating}
-            >
-              {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-              Generate Draft
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="glass overflow-hidden flex flex-col shadow-xl">
-          <CardHeader className="bg-primary/5 border-b border-border">
-            <CardTitle className="text-lg">Message Workspace</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 p-0 flex flex-col">
-            <Textarea 
-              className="flex-1 p-6 bg-transparent border-0 focus-visible:ring-0 resize-none min-h-[300px]"
-              placeholder="Your draft will appear here..."
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-            />
-            <div className="p-4 border-t border-border bg-muted/20 flex gap-2">
-              <Button variant="outline" className="flex-1 h-11 rounded-xl" onClick={handleSaveAsTemplate} disabled={!draft}>
-                Save Template
-              </Button>
-              <Button className="flex-1 bg-accent text-white h-11 rounded-xl shadow-lg shadow-accent/20" onClick={handleSendTest} disabled={!draft || isSending}>
-                {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                Send Test SMS
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
+  }
 }

@@ -1,167 +1,58 @@
-
 {
   "entities": {
     "Member": {
       "title": "Member",
-      "description": "A member of the church congregation.",
       "type": "object",
       "properties": {
         "name": { "type": "string" },
-        "gender": { "type": "string", "enum": ["Male", "Female", "Other"] },
-        "department": { "type": "string" },
-        "societies": { 
-          "type": "array", 
-          "items": { "type": "string" },
-          "description": "Groups or societies the member belongs to (common in Catholic churches)."
-        },
-        "status": { "type": "string", "enum": ["Active", "Inactive", "Probation"] },
-        "joined": { "type": "string", "format": "date" },
-        "dateOfBirth": { "type": "string", "format": "date" },
         "phone": { "type": "string" },
-        "photo": { "type": "string" }
-      },
-      "required": ["name", "department", "status", "dateOfBirth"]
+        "status": { "type": "string" },
+        "joined": { "type": "string" }
+      }
     },
     "SMSLog": {
       "title": "SMS Log",
-      "description": "Record of a sent or failed SMS communication.",
       "type": "object",
       "properties": {
-        "phone": { "type": "string" },
-        "message": { "type": "string" },
-        "status": { "type": "string", "enum": ["sent", "failed", "pending"] },
-        "type": { "type": "string", "enum": ["birthday", "announcement", "test", "other"] },
-        "memberName": { "type": "string" },
-        "memberId": { "type": "string" },
-        "error": { "type": "string" },
-        "cost": { "type": "number", "description": "Number of credits used for the SMS." },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "status": { "type": "string" },
+        "retryCount": { "type": "number" },
+        "cost": { "type": "number" }
       }
     },
-    "SMSTemplate": {
-      "title": "SMS Template",
-      "description": "Reusable SMS message structure.",
+    "Transaction": {
+      "title": "Transaction",
       "type": "object",
       "properties": {
-        "name": { "type": "string" },
-        "content": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "Attendance": {
-      "title": "Attendance",
-      "description": "A record of service attendance.",
-      "type": "object",
-      "properties": {
-        "date": { "type": "string", "format": "date" },
-        "count": { "type": "number" },
-        "serviceName": { "type": "string" }
-      },
-      "required": ["date", "count"]
-    },
-    "Finance": {
-      "title": "Finance",
-      "description": "A financial transaction record.",
-      "type": "object",
-      "properties": {
-        "date": { "type": "string", "format": "date" },
         "amount": { "type": "number" },
-        "type": { "type": "string", "enum": ["Tithe", "Offering", "Donation", "Expenditure"] },
-        "method": { "type": "string" }
-      },
-      "required": ["date", "amount", "type"]
-    },
-    "Event": {
-      "title": "Event",
-      "description": "A church event or activity.",
-      "type": "object",
-      "properties": {
-        "title": { "type": "string" },
-        "date": { "type": "string", "format": "date" },
-        "time": { "type": "string" },
-        "location": { "type": "string" },
-        "type": { "type": "string" },
-        "registrations": { "type": "number" }
-      },
-      "required": ["title", "date"]
-    },
-    "Church": {
-      "title": "Church",
-      "description": "A registered church on the platform.",
-      "type": "object",
-      "properties": {
-        "name": { "type": "string" },
-        "slug": { "type": "string" },
-        "denomination": { "type": "string", "enum": ["Catholic", "Pentecostal", "Methodist", "Baptist", "Other"] },
-        "adminEmail": { "type": "string" },
-        "adminEmails": { 
-          "type": "array", 
-          "items": { "type": "string" }
-        },
-        "enabledModules": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "plan": { "type": "string", "enum": ["Basic", "Standard", "Premium"] },
-        "subscription": {
-          "type": "object",
-          "properties": {
-            "plan": { "type": "string" },
-            "smsCredits": { "type": "number" },
-            "smsUsed": { "type": "number" },
-            "status": { "type": "string" },
-            "renewalDate": { "type": "string", "format": "date" },
-            "paymentProvider": { "type": "string" }
-          }
-        },
-        "status": { "type": "string", "enum": ["Pending", "Approved", "Suspended"] },
-        "mustChangePassword": { "type": "boolean" },
-        "settings": {
-          "type": "object",
-          "properties": {
-            "birthdaySmsEnabled": { "type": "boolean" },
-            "lowCreditAlertEnabled": { "type": "boolean" },
-            "dailyReportsEnabled": { "type": "boolean" },
-            "senderId": { "type": "string" },
-            "theme": { "type": "string", "enum": ["light", "dark", "system"] }
-          }
-        },
-        "registeredAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["name", "slug", "adminEmail", "plan", "status", "denomination"]
+        "reference": { "type": "string" },
+        "status": { "type": "string" }
+      }
     }
-  },
-  "auth": {
-    "providers": ["google.com", "password"]
   },
   "firestore": {
     "/churches/{churchId}": {
-      "schema": "Church",
-      "description": "Primary church record. Read/Write allowed if request.auth.token.email is in the adminEmails array."
+      "description": "Tenant isolation: Read/Write allowed if user email in adminEmails array."
     },
     "/churches/{churchId}/members/{memberId}": {
-      "schema": "Member",
-      "description": "Tenant-isolated members. Authorization: request.auth.token.email must be in parent church document adminEmails array."
+      "description": "Tenant isolated members."
     },
     "/churches/{churchId}/smsLogs/{logId}": {
-      "schema": "SMSLog",
-      "description": "Tenant-isolated logs. Authorization: request.auth.token.email must be in parent church document adminEmails array."
+      "description": "Tenant isolated SMS logs."
     },
     "/churches/{churchId}/smsTemplates/{templateId}": {
-      "schema": "SMSTemplate",
-      "description": "Tenant-isolated templates. Authorization: request.auth.token.email must be in parent church document adminEmails array."
+      "description": "Tenant isolated templates."
     },
     "/churches/{churchId}/attendance/{attendanceId}": {
-      "schema": "Attendance",
-      "description": "Tenant-isolated attendance. Authorization: request.auth.token.email must be in parent church document adminEmails array."
+      "description": "Tenant isolated attendance."
     },
     "/churches/{churchId}/finances/{financeId}": {
-      "schema": "Finance",
-      "description": "Tenant-isolated finances. Authorization: request.auth.token.email must be in parent church document adminEmails array."
+      "description": "Tenant isolated finances."
     },
     "/churches/{churchId}/events/{eventId}": {
-      "schema": "Event",
-      "description": "Tenant-isolated events. Authorization: request.auth.token.email must be in parent church document adminEmails array."
+      "description": "Tenant isolated events."
+    },
+    "/churches/{churchId}/transactions/{txId}": {
+      "description": "Tenant isolated billing transactions."
     }
   }
 }

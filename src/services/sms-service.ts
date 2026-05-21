@@ -15,18 +15,24 @@ import {
 import axios from 'axios';
 
 /**
- * Interface for SMS Log entry
+ * Enterprise SMS Log Interface
  */
 export interface SMSLog {
+  id?: string;
   churchId: string;
   memberId?: string;
   memberName?: string;
   phone: string;
   message: string;
-  status: 'sent' | 'failed' | 'pending';
-  type: 'birthday' | 'announcement' | 'test' | 'other';
+  status: 'sent' | 'failed' | 'pending' | 'retrying';
+  type: 'birthday' | 'announcement' | 'test' | 'reminder' | 'other';
+  provider: string;
+  retryCount: number;
+  providerResponse?: any;
   error?: string;
+  cost: number;
   createdAt: any;
+  updatedAt?: any;
 }
 
 /**
@@ -65,7 +71,7 @@ async function sendSMSViaProvider(phone: string, message: string, senderId: stri
     );
     return { success: response.status === 200, data: response.data };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: error.message, data: error.response?.data };
   }
 }
 
@@ -83,6 +89,7 @@ export async function sendAndLogSMS(
     type: SMSLog['type'];
     memberId?: string;
     memberName?: string;
+    retryCount?: number;
   }
 ) {
   const logsRef = collection(db, 'churches', churchId, 'smsLogs');
@@ -95,9 +102,9 @@ export async function sendAndLogSMS(
     const churchData = churchSnap.data();
     const sub = churchData?.subscription || { smsCredits: 0, smsUsed: 0 };
 
-    // 2. CREDIT CHECK (PRE-SEND)
+    // 2. CREDIT CHECK
     if (sub.smsUsed >= sub.smsCredits) {
-      throw new Error("SMS credits exhausted. Please recharge your account.");
+      throw new Error("SMS credits exhausted. Please recharge your account via Settings > Billing.");
     }
 
     const senderId = churchData?.settings?.senderId || "ChurchHub";
@@ -106,7 +113,7 @@ export async function sendAndLogSMS(
     const outcome = await sendSMSViaProvider(normalizedPhone, payload.message, senderId);
     
     // 4. LOG TRANSACTION
-    const logData: SMSLog = {
+    const logData: Omit<SMSLog, 'id'> = {
       churchId,
       memberId: payload.memberId,
       memberName: payload.memberName,
@@ -114,11 +121,16 @@ export async function sendAndLogSMS(
       message: payload.message,
       status: outcome.success ? 'sent' : 'failed',
       type: payload.type,
-      error: outcome.success ? undefined : (outcome as any).error,
+      provider: 'mNotify',
+      retryCount: payload.retryCount || 0,
+      providerResponse: outcome.data,
+      error: outcome.success ? undefined : outcome.error,
+      cost: 1, // Standard 1 credit per message
       createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     };
 
-    await addDoc(logsRef, logData);
+    const docRef = await addDoc(logsRef, logData);
 
     // 5. UPDATE USAGE (POST-SEND)
     if (outcome.success) {
@@ -127,7 +139,7 @@ export async function sendAndLogSMS(
       });
     }
 
-    return { success: outcome.success, error: outcome.success ? undefined : (outcome as any).error };
+    return { success: outcome.success, error: outcome.success ? undefined : outcome.error, id: docRef.id };
   } catch (error: any) {
     // LOG FAILURE
     await addDoc(logsRef, {
@@ -138,8 +150,12 @@ export async function sendAndLogSMS(
       message: payload.message,
       status: 'failed',
       type: payload.type,
+      provider: 'mNotify',
+      retryCount: payload.retryCount || 0,
       error: error.message,
+      cost: 0,
       createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     });
     return { success: false, error: error.message };
   }
@@ -165,7 +181,7 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
     if (month === currentMonth && day === currentDay) {
       const outcome = await sendAndLogSMS(db, churchId, {
         phone: member.phone,
-        message: `Happy Birthday ${member.name}! God bless your new age.`,
+        message: `Happy Birthday ${member.name}! God bless your new age. From ${member.churchName || 'Your Church'}.`,
         type: 'birthday',
         memberId: doc.id,
         memberName: member.name

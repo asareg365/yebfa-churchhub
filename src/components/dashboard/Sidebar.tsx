@@ -17,7 +17,12 @@ import {
   History,
   AlertTriangle,
   Layout,
-  ChevronRight
+  ChevronRight,
+  TrendingUp,
+  Wallet,
+  FileText,
+  ShieldCheck,
+  Package
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth, useUser, useCollection, useFirestore } from "@/firebase";
@@ -35,11 +40,17 @@ const ALL_MENU_ITEMS = [
   { id: "sms", icon: MessageSquare, label: "SMS Center", href: "/dashboard/sms", isGroup: true, subItems: [
     { id: "sms-dash", label: "Dashboard", href: "/dashboard/sms", icon: MessageSquare },
     { id: "sms-logs", label: "SMS Logs", href: "/dashboard/sms/logs", icon: History },
-    { id: "sms-failed", label: "Failed Messages", href: "/dashboard/sms/failed", icon: AlertTriangle },
+    { id: "sms-failed", label: "Failed SMS", href: "/dashboard/sms/failed", icon: AlertTriangle },
     { id: "sms-templates", label: "Templates", href: "/dashboard/sms/templates", icon: Layout },
+    { id: "sms-analytics", label: "Analytics", href: "/dashboard/sms/analytics", icon: TrendingUp },
   ]},
-  { id: "insights", icon: Sparkles, label: "AI Insights", href: "/dashboard/insights" },
-  { id: "reports", icon: BarChart3, label: "Reports", href: "/dashboard/reports" },
+  { id: "billing-group", icon: Wallet, label: "Billing & Plans", href: "/dashboard/billing", isGroup: true, subItems: [
+    { id: "bill-dash", label: "Overview", href: "/dashboard/billing", icon: Wallet },
+    { id: "bill-plans", label: "Subscriptions", href: "/dashboard/billing/plans", icon: Package },
+    { id: "bill-tx", label: "Transactions", href: "/dashboard/billing/transactions", icon: History },
+    { id: "bill-reports", label: "Usage Reports", href: "/dashboard/billing/reports", icon: FileText },
+  ]},
+  { id: "analytics", icon: BarChart3, label: "Insights", href: "/dashboard/insights" },
   { id: "settings", icon: Settings, label: "Settings", href: "/dashboard/settings" },
 ];
 
@@ -65,6 +76,7 @@ export function Sidebar() {
   const db = useFirestore();
   const { user } = useUser();
   const [smsOpen, setSmsOpen] = useState(pathname.startsWith('/dashboard/sms'));
+  const [billingOpen, setBillingOpen] = useState(pathname.startsWith('/dashboard/billing'));
 
   const isSuperAdmin = useMemo(() => {
     const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
@@ -87,15 +99,14 @@ export function Sidebar() {
     if (isSuperAdmin) return ALL_MENU_ITEMS;
     if (churchLoading) return [];
 
-    const baseModules = ["dashboard", "settings"];
+    const baseModules = ["dashboard", "settings", "billing-group"];
     const enabledModules = currentChurch?.enabledModules || [];
     
-    // Map 'communication' module to 'sms' center
-    const activeModules = [...enabledModules];
+    const activeModules = [...enabledModules, ...baseModules];
     if (activeModules.includes('communication')) activeModules.push('sms');
 
     return ALL_MENU_ITEMS.filter(item => 
-      baseModules.includes(item.id) || activeModules.includes(item.id)
+      activeModules.includes(item.id)
     );
   }, [currentChurch, churchLoading, isSuperAdmin]);
 
@@ -126,27 +137,30 @@ export function Sidebar() {
           filteredMenuItems.map((item) => {
             if (item.isGroup) {
               const isGroupActive = pathname.startsWith(item.href);
+              const isOpen = item.id === 'sms' ? smsOpen : billingOpen;
+              const setOpen = item.id === 'sms' ? setSmsOpen : setBillingOpen;
+
               return (
                 <Collapsible
                   key={item.id}
-                  open={smsOpen}
-                  onOpenChange={setSmsOpen}
+                  open={isOpen}
+                  onOpenChange={setOpen}
                   className="space-y-1"
                 >
                   <CollapsibleTrigger asChild>
                     <button
                       className={cn(
                         "w-full group flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-300",
-                        isGroupActive && !smsOpen
+                        isGroupActive && !isOpen
                           ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
                           : "text-muted-foreground hover:bg-muted hover:text-primary"
                       )}
                     >
                       <div className="flex items-center gap-3">
-                        <item.icon className={cn("w-5 h-5", isGroupActive && !smsOpen ? "text-primary-foreground" : "text-primary/70")} />
+                        <item.icon className={cn("w-5 h-5", isGroupActive && !isOpen ? "text-primary-foreground" : "text-primary/70")} />
                         <span className="text-sm font-medium">{item.label}</span>
                       </div>
-                      <ChevronRight className={cn("w-4 h-4 transition-transform", smsOpen && "rotate-90")} />
+                      <ChevronRight className={cn("w-4 h-4 transition-transform", isOpen && "rotate-90")} />
                     </button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="space-y-1 pl-4">
