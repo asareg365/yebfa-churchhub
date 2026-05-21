@@ -5,14 +5,13 @@ import {
   addDoc, 
   serverTimestamp, 
   Firestore,
-  query,
   getDocs,
   doc,
   getDoc,
   updateDoc,
   increment
 } from 'firebase/firestore';
-import axios from 'axios';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 /**
  * Enterprise SMS Log Interface
@@ -40,38 +39,37 @@ export interface SMSLog {
  */
 function normalizePhone(phone: string): string {
   if (!phone) return "";
-  const cleaned = phone.trim();
+  const cleaned = phone.replace(/\D/g, "").trim();
   if (cleaned.startsWith("0")) {
-    return "+233" + cleaned.substring(1);
+    return "233" + cleaned.substring(1);
   }
   return cleaned;
 }
 
 /**
- * Sends SMS via mNotify API
+ * Sends SMS via Firebase Cloud Function (Secure)
  */
-async function sendSMSViaProvider(phone: string, message: string, senderId: string) {
-  const apiKey = process.env.NEXT_PUBLIC_MNOTIFY_API_KEY || "4OAnq8qrPzc0T3dxgOrqFXKSt";
-  const normalizedPhone = normalizePhone(phone);
-  const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
+async function sendSMSViaCloudFunction(phone: string, message: string, senderId: string) {
+  const functions = getFunctions();
+  const sendSMSFn = httpsCallable(functions, "sendSMS");
 
   try {
-    const response = await axios.post(
-      url,
-      {
-        recipient: [normalizedPhone],
-        sender: senderId,
-        message: message,
-        is_schedule: false
-      },
-      {
-        headers: { "Content-Type": "application/json" },
-        timeout: 10000,
-      }
-    );
-    return { success: response.status === 200, data: response.data };
+    const result: any = await sendSMSFn({ 
+      phone: normalizePhone(phone), 
+      message, 
+      senderId 
+    });
+
+    return { 
+      success: result.data.success, 
+      data: result.data.data,
+      error: result.data.error
+    };
   } catch (error: any) {
-    return { success: false, error: error.message, data: error.response?.data };
+    return { 
+      success: false, 
+      error: error.message 
+    };
   }
 }
 
@@ -109,8 +107,8 @@ export async function sendAndLogSMS(
 
     const senderId = churchData?.settings?.senderId || "ChurchHub";
 
-    // 3. ATTEMPT DELIVERY
-    const outcome = await sendSMSViaProvider(normalizedPhone, payload.message, senderId);
+    // 3. ATTEMPT DELIVERY VIA CLOUD FUNCTION
+    const outcome = await sendSMSViaCloudFunction(normalizedPhone, payload.message, senderId);
     
     // 4. LOG TRANSACTION
     const logData: Omit<SMSLog, 'id'> = {
@@ -123,9 +121,9 @@ export async function sendAndLogSMS(
       type: payload.type,
       provider: 'mNotify',
       retryCount: payload.retryCount || 0,
-      providerResponse: outcome.data,
-      error: outcome.success ? undefined : outcome.error,
-      cost: 1, // Standard 1 credit per message
+      providerResponse: outcome.data || null,
+      error: outcome.success ? undefined : (outcome.error || 'Delivery Failed'),
+      cost: outcome.success ? 1 : 0, // Standard 1 credit per message
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };

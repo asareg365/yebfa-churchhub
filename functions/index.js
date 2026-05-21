@@ -1,4 +1,4 @@
-const { onRequest } = require("firebase-functions/v2/https");
+const { onRequest, onCall } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
@@ -11,6 +11,44 @@ const MNOTIFY_API_KEY = defineSecret("MNOTIFY_API_KEY");
 // Import logic components
 const { sendBirthdaySMS: processBirthdays } = require("./schedulers/birthdayScheduler");
 const { retryFailedSMS } = require("./schedulers/retryScheduler");
+
+/**
+ * Callable function to send SMS securely.
+ * Replaces direct mNotify calls from the frontend.
+ */
+exports.sendSMS = onCall(
+  {
+    secrets: [MNOTIFY_API_KEY],
+  },
+  async (request) => {
+    const { phone, message, senderId } = request.data;
+    const axios = require("axios");
+    const apiKey = MNOTIFY_API_KEY.value();
+    const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
+
+    try {
+      console.log(`Cloud Function sending SMS to ${phone}...`);
+      const response = await axios.post(url, {
+        recipient: [phone],
+        sender: senderId || "ChurchHub",
+        message: message,
+        is_schedule: false
+      }, { timeout: 10000 });
+
+      return {
+        success: response.status === 200,
+        data: response.data
+      };
+    } catch (error) {
+      console.error("Cloud sendSMS Error:", error.message);
+      return {
+        success: false,
+        error: error.message,
+        details: error.response?.data
+      };
+    }
+  }
+);
 
 /**
  * Daily Birthday SMS Scheduler
