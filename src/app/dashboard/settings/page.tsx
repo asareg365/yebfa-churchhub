@@ -60,7 +60,7 @@ export default function SettingsPage() {
     birthdaySmsEnabled: true,
     lowCreditAlertEnabled: true,
     dailyReportsEnabled: false,
-    senderId: "",
+    senderId: "YEBFA",
     theme: "dark" as "light" | "dark" | "system"
   });
 
@@ -78,7 +78,7 @@ export default function SettingsPage() {
         birthdaySmsEnabled: currentChurch.settings?.birthdaySmsEnabled ?? true,
         lowCreditAlertEnabled: currentChurch.settings?.lowCreditAlertEnabled ?? true,
         dailyReportsEnabled: currentChurch.settings?.dailyReportsEnabled ?? false,
-        senderId: currentChurch.settings?.senderId || "ChurchHub",
+        senderId: currentChurch.settings?.senderId || "YEBFA",
         theme: (currentChurch.settings?.theme as any) || "dark"
       });
     }
@@ -228,7 +228,7 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 <Label>mNotify Sender ID</Label>
                 <Input 
-                  placeholder="e.g. HOPE-CHURCH" 
+                  placeholder="e.g. YEBFA" 
                   value={settings.senderId} 
                   onChange={(e) => setSettings({...settings, senderId: e.target.value.toUpperCase().slice(0, 11)})}
                   className="bg-white/5 border-white/10 font-mono" 

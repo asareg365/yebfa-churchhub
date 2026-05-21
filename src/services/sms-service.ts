@@ -106,7 +106,8 @@ export async function sendAndLogSMS(
       throw new Error("SMS credits exhausted. Please recharge your account via Billing.");
     }
 
-    const senderId = churchData?.settings?.senderId || "ChurchHub";
+    // Hardcoded approved sender ID for testing as recommended
+    const senderId = "YEBFA";
 
     const outcome = await sendSMSViaCloudFunction(normalizedPhone, payload.message, senderId);
     

@@ -26,7 +26,8 @@ async function sendSMS(apiKey, churchId, payload) {
 
     // 2. Prepare API Call
     const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
-    const finalSenderId = senderId || (churchData.settings && churchData.settings.senderId) || "ChurchHub";
+    // Hardcoded approved sender ID for testing as recommended
+    const finalSenderId = "YEBFA";
 
     const response = await axios.post(url, {
       recipient: [formattedPhone],

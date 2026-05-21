@@ -33,7 +33,7 @@ exports.sendSMS = onCall(
     try {
       const response = await axios.post(url, {
         recipient: [phone],
-        sender: senderId || "ChurchHub",
+        sender: senderId || "YEBFA",
         message: message,
         is_schedule: false
       }, { timeout: 10000 });

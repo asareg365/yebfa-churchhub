@@ -37,7 +37,7 @@ async function sendBirthdaySMS(apiKey) {
           type: "birthday",
           memberName: member.name,
           memberId: memberDoc.id,
-          senderId: churchData.settings?.senderId
+          senderId: "YEBFA"
         });
       }
     }
