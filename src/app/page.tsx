@@ -196,7 +196,7 @@ export default function LandingPage() {
 
           <div className="bg-white p-8 rounded-3xl max-w-4xl mx-auto border border-border shadow-sm">
             <div className="flex flex-col md:flex-row items-center gap-8">
-              <div className="h-16 w-16 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0 text-primary">
+              <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0 text-primary">
                 <Smartphone className="h-10 w-10" />
               </div>
               <div className="space-y-2">
@@ -224,13 +224,14 @@ export default function LandingPage() {
             © Yebfa Consult 2026. Built for the modern church.
           </p>
           <div className="flex gap-6 items-center">
+            <Link href="/privacy" className="text-xs text-muted-foreground hover:text-primary transition-colors">Privacy Policy</Link>
+            <Link href="/terms" className="text-xs text-muted-foreground hover:text-primary transition-colors">Terms of Service</Link>
+            <Link href="/support" className="text-xs text-muted-foreground hover:text-primary transition-colors">Support</Link>
+            <span className="text-border">|</span>
             <Link href="/admin/login" className="text-xs font-bold text-primary flex items-center gap-1 hover:underline">
               <ShieldCheck className="w-3 h-3" />
               Admin Access
             </Link>
-            <span className="text-border">|</span>
-            <a href="#" className="text-muted-foreground hover:text-primary transition-colors text-xs font-medium">Twitter</a>
-            <a href="#" className="text-muted-foreground hover:text-primary transition-colors text-xs font-medium">LinkedIn</a>
           </div>
         </div>
       </footer>
