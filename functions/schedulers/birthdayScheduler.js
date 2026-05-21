@@ -12,7 +12,7 @@ async function sendBirthdaySMS(apiKey) {
   const month = today.getUTCMonth() + 1;
   const day = today.getUTCDate();
   
-  // Format MM-DD for efficient indexed querying
+  // Format MM-DD for efficient indexed querying (consistent with frontend)
   const todayKey = `${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
   console.log(`🟡 Birthday job started for key: ${todayKey} (UTC)`);
@@ -28,7 +28,8 @@ async function sendBirthdaySMS(apiKey) {
       continue;
     }
 
-    // OPTIMIZED: Query only members with birthdayKey matching today
+    // OPTIMIZED: Query ONLY members with birthdayKey matching today
+    // This avoids a full collection scan (O(n) -> O(log n))
     const membersSnap = await churchDoc.ref.collection("members")
       .where("birthdayKey", "==", todayKey)
       .get();

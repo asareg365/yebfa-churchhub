@@ -107,6 +107,7 @@ export async function sendAndLogSMS(
       throw new Error("Insufficient credits");
     }
 
+    // Hardcoded approved sender ID for reliability during testing
     const senderId = "YEBFA";
     const outcome = await sendSMSViaCloudFunction(normalizedPhone, payload.message, senderId);
     
@@ -163,8 +164,12 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
   const membersRef = collection(db, 'churches', churchId, 'members');
   const today = new Date();
   
-  // Format today's date as MM-DD for indexed search
-  const todayKey = `${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
+  // Use UTC to avoid timezone discrepancies
+  const currentMonth = today.getUTCMonth() + 1;
+  const currentDay = today.getUTCDate();
+  
+  // Format MM-DD for indexed search
+  const todayKey = `${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
 
   console.log("Birthday check started (UTC Key):", todayKey);
 

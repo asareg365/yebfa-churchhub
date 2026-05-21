@@ -76,10 +76,20 @@ export default function PublicRegistrationPage() {
     societies: [] as string[]
   });
 
+  /**
+   * Generates a searchable MM-DD string for efficient birthday querying.
+   * Matches the format used in Admin UI and Cloud Functions.
+   */
   const calculateBirthdayKey = (dobString: string) => {
     if (!dobString) return "";
     const dob = new Date(dobString);
-    return `${String(dob.getUTCMonth() + 1).padStart(2, '0')}-${String(dob.getUTCDate()).padStart(2, '0')}`;
+    if (isNaN(dob.getTime())) return "";
+    
+    // Using UTC to match server-side logic
+    const month = String(dob.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(dob.getUTCDate()).padStart(2, '0');
+    
+    return `${month}-${day}`;
   };
 
   useEffect(() => {
@@ -130,6 +140,8 @@ export default function PublicRegistrationPage() {
     setIsSubmitting(true);
     try {
       const membersRef = collection(db, "churches", church.id, "members");
+      
+      // Store optimized birthdayKey alongside original DOB
       await addDoc(membersRef, {
         ...formData,
         birthdayKey: calculateBirthdayKey(formData.dateOfBirth),

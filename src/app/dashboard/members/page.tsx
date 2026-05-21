@@ -122,10 +122,23 @@ export default function MembersPage() {
     societies: [] as string[]
   });
 
-  const calculateBirthdayKey = (dobString: string) => {
+  /**
+   * Generates a searchable MM-DD string for efficient birthday querying
+   */
+  const calculateBirthdayKey = (dobString: any) => {
     if (!dobString) return "";
-    const dob = new Date(dobString);
-    return `${String(dob.getUTCMonth() + 1).padStart(2, '0')}-${String(dob.getUTCDate()).padStart(2, '0')}`;
+    
+    // Handle both string format and Firestore Timestamp
+    const dob = dobString.toDate 
+      ? dobString.toDate() 
+      : new Date(dobString);
+
+    if (isNaN(dob.getTime())) return "";
+
+    const month = String(dob.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(dob.getUTCDate()).padStart(2, '0');
+    
+    return `${month}-${day}`;
   };
 
   const toggleSociety = (society: string, isEdit: boolean = false) => {
