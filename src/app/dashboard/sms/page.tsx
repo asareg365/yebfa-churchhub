@@ -12,7 +12,8 @@ import {
   MessageSquare,
   TrendingDown,
   BarChart3,
-  Clock
+  Clock,
+  CreditCard
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -62,14 +63,14 @@ export default function SMSDashboardPage() {
 
     const sub = currentChurch.subscription || { smsCredits: 0, smsUsed: 0 };
 
-    const logsToday = allLogs.filter(l => l.createdAt?.toDate() >= today);
+    const logsToday = allLogs.filter(l => l.createdAt?.toDate?.() >= today);
     const sentToday = logsToday.filter(l => l.status === 'sent').length;
     const failedToday = logsToday.filter(l => l.status === 'failed').length;
     
     return {
       today: sentToday,
       failed: failedToday,
-      monthly: allLogs.filter(l => l.createdAt?.toDate() >= month && l.status === 'sent').length,
+      monthly: allLogs.filter(l => l.createdAt?.toDate?.() >= month && l.status === 'sent').length,
       remaining: Math.max(0, sub.smsCredits - sub.smsUsed),
       pendingRetry: allLogs.filter(l => l.status === 'failed' && (l.retryCount || 0) < 3).length,
       totalCost: sub.smsUsed // 1 Credit = 1 Cost unit
@@ -85,7 +86,7 @@ export default function SMSDashboardPage() {
     }).reverse();
 
     return last7Days.map(day => {
-      const dayLogs = allLogs.filter(l => l.createdAt?.toDate() && format(l.createdAt.toDate(), 'MMM dd') === day);
+      const dayLogs = allLogs.filter(l => l.createdAt?.toDate && format(l.createdAt.toDate(), 'MMM dd') === day);
       return {
         name: day,
         sent: dayLogs.filter(l => l.status === 'sent').length,
@@ -143,6 +144,22 @@ export default function SMSDashboardPage() {
       toast({ title: 'Template saved' });
     } catch (error) {
       toast({ title: 'Save failed', variant: 'destructive' });
+    }
+  };
+
+  const handleRunBirthdayCheck = async () => {
+    if (!currentChurch?.id) return;
+    setIsProcessingBirthdays(true);
+    try {
+      const results = await processBirthdaysToday(db, currentChurch.id);
+      toast({ 
+        title: 'Birthday check complete', 
+        description: `Sent: ${results.sent}, Failed: ${results.failed}, Skipped: ${results.skipped}` 
+      });
+    } catch (error: any) {
+      toast({ title: 'Birthday process failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsProcessingBirthdays(false);
     }
   };
 
@@ -324,20 +341,4 @@ export default function SMSDashboardPage() {
       </div>
     </div>
   );
-
-  async function handleRunBirthdayCheck() {
-    if (!currentChurch?.id) return;
-    setIsProcessingBirthdays(true);
-    try {
-      const results = await processBirthdaysToday(db, currentChurch.id);
-      toast({ 
-        title: 'Birthday check complete', 
-        description: `Sent: ${results.sent}, Failed: ${results.failed}, Skipped: ${results.skipped}` 
-      });
-    } catch (error: any) {
-      toast({ title: 'Birthday process failed', description: error.message, variant: 'destructive' });
-    } finally {
-      setIsProcessingBirthdays(false);
-    }
-  }
 }

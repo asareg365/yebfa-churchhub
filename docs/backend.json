@@ -19,7 +19,7 @@
         "phone": { "type": "string" },
         "message": { "type": "string" },
         "status": { "type": "string", "enum": ["sent", "failed", "pending", "retrying"] },
-        "type": { "type": "string", "enum": ["birthday", "announcement", "test", "reminder"] },
+        "type": { "type": "string", "enum": ["birthday", "announcement", "test", "reminder", "other"] },
         "retryCount": { "type": "number" },
         "cost": { "type": "number" },
         "error": { "type": "string" },
@@ -43,27 +43,27 @@
     },
     "/churches/{churchId}/members/{memberId}": {
       "schema": "Member",
-      "description": "Tenant isolated member directory."
+      "description": "Tenant isolated member directory. Access authorized via adminEmails."
     },
     "/churches/{churchId}/smsLogs/{logId}": {
       "schema": "SMSLog",
-      "description": "Tenant isolated communication logs with strict ownership rules."
+      "description": "Tenant isolated communication logs. Access authorized via adminEmails."
     },
     "/churches/{churchId}/smsTemplates/{templateId}": {
-      "description": "Tenant isolated reusable message structures."
+      "description": "Tenant isolated reusable message structures. Access authorized via adminEmails."
     },
     "/churches/{churchId}/attendance/{attendanceId}": {
-      "description": "Tenant isolated service attendance records."
+      "description": "Tenant isolated service attendance records. Access authorized via adminEmails."
     },
     "/churches/{churchId}/finances/{financeId}": {
-      "description": "Tenant isolated tithing and offering records."
+      "description": "Tenant isolated tithing and offering records. Access authorized via adminEmails."
     },
     "/churches/{churchId}/events/{eventId}": {
-      "description": "Tenant isolated event planning."
+      "description": "Tenant isolated event planning. Access authorized via adminEmails."
     },
     "/churches/{churchId}/transactions/{txId}": {
       "schema": "Transaction",
-      "description": "Tenant isolated billing history."
+      "description": "Tenant isolated billing history. Access authorized via adminEmails."
     }
   }
 }
