@@ -121,7 +121,7 @@ export async function sendAndLogSMS(
     // 4. LOG TRANSACTION
     const logData: Omit<SMSLog, 'id'> = {
       churchId,
-      memberId: payload.memberId || null,
+      memberId: payload.memberId ?? undefined,
       memberName: payload.memberName || "Unknown",
       phone: normalizedPhone,
       message: payload.message,
@@ -150,7 +150,7 @@ export async function sendAndLogSMS(
     // LOG FAILURE
     await addDoc(logsRef, {
       churchId,
-      memberId: payload.memberId || null,
+      memberId: payload.memberId ?? undefined,
       memberName: payload.memberName || "Unknown",
       phone: normalizedPhone,
       message: payload.message,

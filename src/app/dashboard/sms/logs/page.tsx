@@ -34,7 +34,7 @@ export default function SMSLogsPage() {
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
-  const userEmail = useMemo(() => user?.email?.toLowerCase().trim() || null, [user?.email]);
+  const userEmail = useMemo(() => user?.email?.toLowerCase().trim() ?? undefined, [user?.email]);
 
   const churchQuery = useMemo(() => {
     if (!userEmail) return null;
