@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, Search, Download, MoreVertical, QrCode, Mail, Phone, Loader2, Users as UsersIcon, Trash2, FileUp, CheckCircle2, AlertCircle, ChevronDown, Check } from "lucide-react";
+import { Plus, Search, Download, MoreVertical, QrCode, Mail, Phone, Loader2, Users as UsersIcon, Trash2, FileUp, CheckCircle2, AlertCircle, ChevronDown, Check, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -52,7 +52,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useCollection, useFirestore, useUser } from "@/firebase";
-import { collection, addDoc, serverTimestamp, doc, deleteDoc, query, where, limit, writeBatch } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, deleteDoc, query, where, limit, writeBatch, updateDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -82,10 +82,12 @@ export default function MembersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusTab, setStatusTab] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [bulkData, setBulkData] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [memberToDelete, setMemberToDelete] = useState<any>(null);
+  const [editingMember, setEditingMember] = useState<any>(null);
   const [otherSocietyInput, setOtherSocietyInput] = useState("");
 
   const db = useFirestore();
@@ -120,23 +122,41 @@ export default function MembersPage() {
     societies: [] as string[]
   });
 
-  const toggleSociety = (society: string) => {
-    setNewMember(prev => ({
-      ...prev,
-      societies: prev.societies.includes(society)
-        ? prev.societies.filter(s => s !== society)
-        : [...prev.societies, society]
-    }));
-  };
-
-  const handleAddCustomSociety = () => {
-    const val = otherSocietyInput.trim();
-    if (!val) return;
-    if (!newMember.societies.includes(val)) {
+  const toggleSociety = (society: string, isEdit: boolean = false) => {
+    if (isEdit) {
+      setEditingMember((prev: any) => ({
+        ...prev,
+        societies: prev.societies?.includes(society)
+          ? prev.societies.filter((s: string) => s !== society)
+          : [...(prev.societies || []), society]
+      }));
+    } else {
       setNewMember(prev => ({
         ...prev,
-        societies: [...prev.societies, val]
+        societies: prev.societies.includes(society)
+          ? prev.societies.filter(s => s !== society)
+          : [...prev.societies, society]
       }));
+    }
+  };
+
+  const handleAddCustomSociety = (isEdit: boolean = false) => {
+    const val = otherSocietyInput.trim();
+    if (!val) return;
+    if (isEdit) {
+      if (!editingMember.societies?.includes(val)) {
+        setEditingMember((prev: any) => ({
+          ...prev,
+          societies: [...(prev.societies || []), val]
+        }));
+      }
+    } else {
+      if (!newMember.societies.includes(val)) {
+        setNewMember(prev => ({
+          ...prev,
+          societies: [...prev.societies, val]
+        }));
+      }
     }
     setOtherSocietyInput("");
   };
@@ -165,6 +185,37 @@ export default function MembersPage() {
           path: membersRef.path,
           operation: 'create',
           requestResourceData: memberData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
+  };
+
+  const handleUpdateMember = () => {
+    if (!editingMember || !editingMember.id || !membersRef) return;
+
+    const docRef = doc(membersRef, editingMember.id);
+    const updateData = {
+      name: editingMember.name,
+      phone: editingMember.phone,
+      gender: editingMember.gender,
+      dateOfBirth: editingMember.dateOfBirth,
+      department: editingMember.department,
+      status: editingMember.status,
+      societies: editingMember.societies || [],
+      updatedAt: serverTimestamp()
+    };
+
+    updateDoc(docRef, updateData)
+      .then(() => {
+        setIsEditDialogOpen(false);
+        setEditingMember(null);
+        toast({ title: "Member details updated" });
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'update',
+          requestResourceData: updateData,
         });
         errorEmitter.emit('permission-error', permissionError);
       });
@@ -420,7 +471,7 @@ export default function MembersPage() {
                                  type="button"
                                  size="icon" 
                                  className="h-9 w-9 shrink-0" 
-                                 onClick={handleAddCustomSociety}
+                                 onClick={() => handleAddCustomSociety()}
                                >
                                  <Plus className="h-4 w-4" />
                                </Button>
@@ -537,9 +588,19 @@ Jane Smith, 0550000000, 1995-10-20, Youth, Female"
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="glass">
+                            <DropdownMenuItem 
+                              className="cursor-pointer"
+                              onClick={() => {
+                                setEditingMember(member);
+                                setIsEditDialogOpen(true);
+                              }}
+                            >
+                              <Pencil className="mr-2 h-4 w-4" /> Edit Profile
+                            </DropdownMenuItem>
                             <DropdownMenuItem className="cursor-pointer">
                               <QrCode className="mr-2 h-4 w-4" /> View QR ID
                             </DropdownMenuItem>
+                            <DropdownMenuSeparator className="border-white/5" />
                             <DropdownMenuItem className="cursor-pointer" onClick={() => setMemberToDelete(member)}>
                               <Trash2 className="mr-2 h-4 w-4 text-destructive" /> Delete
                             </DropdownMenuItem>
@@ -564,6 +625,191 @@ Jane Smith, 0550000000, 1995-10-20, Youth, Female"
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Member Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="glass max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Member Profile</DialogTitle>
+            <DialogDescription>Update information for {editingMember?.name}.</DialogDescription>
+          </DialogHeader>
+          {editingMember && (
+            <div className="space-y-6 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Full Name</Label>
+                  <Input 
+                    value={editingMember.name} 
+                    onChange={(e) => setEditingMember({...editingMember, name: e.target.value})}
+                    className="bg-white/5"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Gender</Label>
+                  <Select value={editingMember.gender} onValueChange={(v: any) => setEditingMember({...editingMember, gender: v})}>
+                    <SelectTrigger className="bg-white/5">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="glass">
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Phone Number</Label>
+                  <Input 
+                    value={editingMember.phone} 
+                    onChange={(e) => setEditingMember({...editingMember, phone: e.target.value})}
+                    className="bg-white/5"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Date of Birth</Label>
+                  <Input 
+                    type="date"
+                    value={editingMember.dateOfBirth} 
+                    onChange={(e) => setEditingMember({...editingMember, dateOfBirth: e.target.value})}
+                    className="bg-white/5"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Department</Label>
+                  <Select value={editingMember.department} onValueChange={(v) => setEditingMember({...editingMember, department: v})}>
+                    <SelectTrigger className="bg-white/5">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="glass">
+                      {DEPARTMENTS.map(d => (
+                        <SelectItem key={d} value={d}>{d}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select value={editingMember.status} onValueChange={(v: any) => setEditingMember({...editingMember, status: v})}>
+                    <SelectTrigger className="bg-white/5">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="glass">
+                      <SelectItem value="Active">Active</SelectItem>
+                      <SelectItem value="Inactive">Inactive</SelectItem>
+                      <SelectItem value="Probation">Probation</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {isCatholic && (
+                <div className="space-y-2">
+                  <Label>Societies</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-between bg-white/5 border-white/10 h-11 px-3 text-left font-normal"
+                      >
+                        <span className="truncate">
+                          {(editingMember.societies?.length || 0) > 0 
+                            ? `${editingMember.societies.length} Selected`
+                            : "Select Societies"}
+                        </span>
+                        <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent 
+                      className="w-[var(--radix-popover-trigger-width)] p-0 glass overflow-hidden" 
+                      align="start"
+                      onOpenAutoFocus={(e) => e.preventDefault()}
+                    >
+                      <div className="flex flex-col" onPointerDown={(e) => e.stopPropagation()}>
+                        <ScrollArea className="h-64">
+                          <div className="p-2 space-y-1">
+                            {CATHOLIC_SOCIETIES.map(society => {
+                              const isSelected = editingMember.societies?.includes(society);
+                              return (
+                                <button 
+                                  key={society}
+                                  type="button"
+                                  className={cn(
+                                    "w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-colors outline-none",
+                                    isSelected ? "bg-primary/20 text-primary font-bold" : "hover:bg-white/5"
+                                  )}
+                                  onClick={() => toggleSociety(society, true)}
+                                >
+                                  <div className={cn(
+                                    "w-4 h-4 border rounded flex items-center justify-center transition-colors shrink-0",
+                                    isSelected ? "bg-primary border-primary" : "border-white/20"
+                                  )}>
+                                    {isSelected && <Check className="h-3 w-3 text-primary-foreground" />}
+                                  </div>
+                                  <span className="text-sm">{society}</span>
+                                </button>
+                              );
+                            })}
+
+                            {(editingMember.societies || []).filter((s: string) => !CATHOLIC_SOCIETIES.includes(s)).map((society: string) => (
+                              <button 
+                                key={society}
+                                type="button"
+                                className="w-full flex items-center gap-3 p-2.5 rounded-lg bg-primary/20 text-primary font-bold text-left"
+                                onClick={() => toggleSociety(society, true)}
+                              >
+                                <div className="w-4 h-4 border rounded border-primary bg-primary flex items-center justify-center shrink-0">
+                                  <Check className="h-3 w-3 text-primary-foreground" />
+                                </div>
+                                <span className="text-sm">{society}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </ScrollArea>
+
+                        <div className="p-3 border-t border-white/10 bg-muted/20 space-y-2">
+                           <Label className="text-[10px] uppercase font-bold text-muted-foreground">Add Other Society</Label>
+                           <div className="flex gap-2">
+                             <Input 
+                               placeholder="Enter name"
+                               value={otherSocietyInput}
+                               onChange={(e) => setOtherSocietyInput(e.target.value)}
+                               className="h-9 text-sm bg-white/10"
+                               onKeyDown={(e) => {
+                                 if (e.key === 'Enter') {
+                                   e.preventDefault();
+                                   handleAddCustomSociety(true);
+                                 }
+                               }}
+                             />
+                             <Button 
+                               type="button"
+                               size="icon" 
+                               className="h-9 w-9 shrink-0" 
+                               onClick={() => handleAddCustomSociety(true)}
+                             >
+                               <Plus className="h-4 w-4" />
+                             </Button>
+                           </div>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleUpdateMember}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!memberToDelete} onOpenChange={(open) => !open && setMemberToDelete(null)}>
         <AlertDialogContent className="glass">
