@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo } from "react";
@@ -86,6 +85,7 @@ export default function MembersPage() {
   const [bulkData, setBulkData] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [memberToDelete, setMemberToDelete] = useState<any>(null);
+  const [otherSocietyInput, setOtherSocietyInput] = useState("");
 
   const db = useFirestore();
   const { user } = useUser();
@@ -126,6 +126,18 @@ export default function MembersPage() {
         ? prev.societies.filter(s => s !== society)
         : [...prev.societies, society]
     }));
+  };
+
+  const handleAddCustomSociety = () => {
+    const val = otherSocietyInput.trim();
+    if (!val) return;
+    if (!newMember.societies.includes(val)) {
+      setNewMember(prev => ({
+        ...prev,
+        societies: [...prev.societies, val]
+      }));
+    }
+    setOtherSocietyInput("");
   };
 
   const handleAddMember = () => {
@@ -343,6 +355,7 @@ export default function MembersPage() {
                       </PopoverTrigger>
                       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 glass" align="start">
                         <div className="max-h-[300px] overflow-y-auto p-2 space-y-1">
+                          {/* Standard List */}
                           {CATHOLIC_SOCIETIES.map(society => {
                             const isSelected = newMember.societies.includes(society);
                             return (
@@ -364,6 +377,42 @@ export default function MembersPage() {
                               </div>
                             );
                           })}
+
+                          {/* Custom Ones Already Selected */}
+                          {newMember.societies.filter(s => !CATHOLIC_SOCIETIES.includes(s)).map(society => (
+                            <div 
+                              key={society} 
+                              className="flex items-center gap-2 p-2 rounded-lg cursor-pointer bg-primary/20 text-primary"
+                              onClick={() => toggleSociety(society)}
+                            >
+                              <div className="w-4 h-4 border rounded border-primary bg-primary flex items-center justify-center">
+                                <Check className="h-3 w-3 text-primary-foreground" />
+                              </div>
+                              <span className="text-sm">{society}</span>
+                            </div>
+                          ))}
+
+                          {/* Add Custom Input */}
+                          <div className="p-2 pt-4 border-t border-white/10 mt-2 space-y-2">
+                             <Label className="text-[10px] uppercase font-bold text-muted-foreground">Add Other Society</Label>
+                             <div className="flex gap-2">
+                               <Input 
+                                 placeholder="Enter society name"
+                                 value={otherSocietyInput}
+                                 onChange={(e) => setOtherSocietyInput(e.target.value)}
+                                 className="h-8 text-xs bg-white/5"
+                                 onKeyDown={(e) => {
+                                   if (e.key === 'Enter') {
+                                     e.preventDefault();
+                                     handleAddCustomSociety();
+                                   }
+                                 }}
+                               />
+                               <Button size="sm" className="h-8 w-8 p-0" onClick={handleAddCustomSociety}>
+                                 <Plus className="h-3 w-3" />
+                               </Button>
+                             </div>
+                          </div>
                         </div>
                       </PopoverContent>
                     </Popover>

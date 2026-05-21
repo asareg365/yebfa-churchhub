@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -15,7 +14,8 @@ import {
   Sparkles,
   Heart,
   ChevronDown,
-  Check
+  Check,
+  Plus
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,7 @@ export default function PublicRegistrationPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [otherSocietyInput, setOtherSocietyInput] = useState("");
 
   const [formData, setFormData] = useState({
     name: "",
@@ -98,6 +99,18 @@ export default function PublicRegistrationPage() {
         ? prev.societies.filter(s => s !== society)
         : [...prev.societies, society]
     }));
+  };
+
+  const handleAddCustomSociety = () => {
+    const val = otherSocietyInput.trim();
+    if (!val) return;
+    if (!formData.societies.includes(val)) {
+      setFormData(prev => ({
+        ...prev,
+        societies: [...prev.societies, val]
+      }));
+    }
+    setOtherSocietyInput("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -259,6 +272,7 @@ export default function PublicRegistrationPage() {
                       </PopoverTrigger>
                       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 glass" align="start">
                         <div className="max-h-[300px] overflow-y-auto p-2 space-y-1">
+                          {/* Standard List */}
                           {CATHOLIC_SOCIETIES.map(society => {
                             const isSelected = formData.societies.includes(society);
                             return (
@@ -280,6 +294,42 @@ export default function PublicRegistrationPage() {
                               </div>
                             );
                           })}
+
+                          {/* Custom Ones Already Selected */}
+                          {formData.societies.filter(s => !CATHOLIC_SOCIETIES.includes(s)).map(society => (
+                            <div 
+                              key={society} 
+                              className="flex items-center gap-2 p-2 rounded-lg cursor-pointer bg-primary/20 text-primary"
+                              onClick={() => toggleSociety(society)}
+                            >
+                              <div className="w-4 h-4 border rounded border-primary bg-primary flex items-center justify-center">
+                                <Check className="h-3 w-3 text-primary-foreground" />
+                              </div>
+                              <span className="text-xs">{society}</span>
+                            </div>
+                          ))}
+
+                          {/* Add Custom Input */}
+                          <div className="p-2 pt-4 border-t border-white/10 mt-2 space-y-2">
+                             <Label className="text-[10px] uppercase font-bold text-muted-foreground">Add Other Society</Label>
+                             <div className="flex gap-2">
+                               <Input 
+                                 placeholder="Enter society name"
+                                 value={otherSocietyInput}
+                                 onChange={(e) => setOtherSocietyInput(e.target.value)}
+                                 className="h-8 text-xs bg-white/5"
+                                 onKeyDown={(e) => {
+                                   if (e.key === 'Enter') {
+                                     e.preventDefault();
+                                     handleAddCustomSociety();
+                                   }
+                                 }}
+                               />
+                               <Button size="sm" className="h-8 w-8 p-0" onClick={handleAddCustomSociety}>
+                                 <Plus className="h-3 w-3" />
+                               </Button>
+                             </div>
+                          </div>
                         </div>
                       </PopoverContent>
                     </Popover>
