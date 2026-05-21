@@ -362,7 +362,6 @@ export default function MembersPage() {
                         <div className="flex flex-col" onPointerDown={(e) => e.stopPropagation()}>
                           <ScrollArea className="h-64">
                             <div className="p-2 space-y-1">
-                              {/* Standard List */}
                               {CATHOLIC_SOCIETIES.map(society => {
                                 const isSelected = newMember.societies.includes(society);
                                 return (
@@ -386,7 +385,6 @@ export default function MembersPage() {
                                 );
                               })}
 
-                              {/* Custom Ones Already Selected */}
                               {newMember.societies.filter(s => !CATHOLIC_SOCIETIES.includes(s)).map(society => (
                                 <button 
                                   key={society}
@@ -403,7 +401,6 @@ export default function MembersPage() {
                             </div>
                           </ScrollArea>
 
-                          {/* Add Custom Input - Pinned at bottom */}
                           <div className="p-3 border-t border-white/10 bg-muted/20 space-y-2">
                              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Add Other Society</Label>
                              <div className="flex gap-2">

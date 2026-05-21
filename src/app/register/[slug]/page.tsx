@@ -279,7 +279,6 @@ export default function PublicRegistrationPage() {
                          <div className="flex flex-col" onPointerDown={(e) => e.stopPropagation()}>
                            <ScrollArea className="h-64">
                              <div className="p-2 space-y-1">
-                               {/* Standard List */}
                                {CATHOLIC_SOCIETIES.map(society => {
                                  const isSelected = formData.societies.includes(society);
                                  return (
@@ -303,7 +302,6 @@ export default function PublicRegistrationPage() {
                                  );
                                })}
 
-                               {/* Custom Ones Already Selected */}
                                {formData.societies.filter(s => !CATHOLIC_SOCIETIES.includes(s)).map(society => (
                                  <button 
                                    key={society}
@@ -320,7 +318,6 @@ export default function PublicRegistrationPage() {
                              </div>
                            </ScrollArea>
 
-                           {/* Add Custom Input - Pinned at bottom */}
                            <div className="p-3 border-t border-white/10 bg-muted/20 space-y-2">
                               <Label className="text-[10px] uppercase font-bold text-muted-foreground">Add Other Society</Label>
                               <div className="flex gap-2">
