@@ -102,7 +102,11 @@ export default function PublicRegistrationPage() {
     }));
   };
 
-  const handleAddCustomSociety = () => {
+  const handleAddCustomSociety = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     const val = otherSocietyInput.trim();
     if (!val) return;
     if (!formData.societies.includes(val)) {
@@ -271,7 +275,10 @@ export default function PublicRegistrationPage() {
                           <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 glass overflow-hidden" align="start">
+                      <PopoverContent 
+                        className="w-[var(--radix-popover-trigger-width)] p-0 glass overflow-hidden" 
+                        align="start"
+                      >
                          <div className="flex flex-col max-h-[350px]">
                            <ScrollArea className="flex-1">
                              <div className="p-2 space-y-1">
@@ -285,7 +292,12 @@ export default function PublicRegistrationPage() {
                                        "flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors",
                                        isSelected ? "bg-primary/20 text-primary" : "hover:bg-white/5"
                                      )}
-                                     onClick={() => toggleSociety(society)}
+                                     onClick={(e) => {
+                                       e.preventDefault();
+                                       e.stopPropagation();
+                                       toggleSociety(society);
+                                     }}
+                                     onPointerDown={(e) => e.stopPropagation()}
                                    >
                                      <div className={cn(
                                        "w-4 h-4 border rounded flex items-center justify-center transition-colors",
@@ -303,7 +315,12 @@ export default function PublicRegistrationPage() {
                                  <div 
                                    key={society} 
                                    className="flex items-center gap-2 p-2 rounded-lg cursor-pointer bg-primary/20 text-primary"
-                                   onClick={() => toggleSociety(society)}
+                                   onClick={(e) => {
+                                     e.preventDefault();
+                                     e.stopPropagation();
+                                     toggleSociety(society);
+                                   }}
+                                   onPointerDown={(e) => e.stopPropagation()}
                                  >
                                    <div className="w-4 h-4 border rounded border-primary bg-primary flex items-center justify-center">
                                      <Check className="h-3 w-3 text-primary-foreground" />
@@ -315,7 +332,10 @@ export default function PublicRegistrationPage() {
                            </ScrollArea>
 
                            {/* Add Custom Input - Pinned at bottom */}
-                           <div className="p-3 border-t border-white/10 bg-muted/20 space-y-2">
+                           <div 
+                             className="p-3 border-t border-white/10 bg-muted/20 space-y-2"
+                             onPointerDown={(e) => e.stopPropagation()}
+                           >
                               <Label className="text-[10px] uppercase font-bold text-muted-foreground">Add Other Society</Label>
                               <div className="flex gap-2">
                                 <Input 
@@ -326,11 +346,21 @@ export default function PublicRegistrationPage() {
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
                                       e.preventDefault();
+                                      e.stopPropagation();
                                       handleAddCustomSociety();
                                     }
                                   }}
                                 />
-                                <Button size="sm" className="h-8 w-8 p-0" onClick={handleAddCustomSociety}>
+                                <Button 
+                                  type="button"
+                                  size="sm" 
+                                  className="h-8 w-8 p-0" 
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleAddCustomSociety();
+                                  }}
+                                >
                                   <Plus className="h-3 w-3" />
                                 </Button>
                               </div>
