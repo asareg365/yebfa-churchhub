@@ -163,11 +163,18 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
   const currentMonth = today.getMonth() + 1;
   const currentDay = today.getDate();
 
+  console.log("TODAY:", currentMonth, currentDay);
+
   const membersSnap = await getDocs(membersRef);
   const results = { sent: 0, failed: 0, skipped: 0 };
 
   for (const doc of membersSnap.docs) {
     const member = doc.data();
+    
+    if (member.name && member.dateOfBirth) {
+      console.log("MEMBER:", member.name, member.dateOfBirth);
+    }
+
     if (!member.dateOfBirth || !member.phone) {
       results.skipped++;
       continue;
