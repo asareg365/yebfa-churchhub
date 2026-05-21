@@ -1,22 +1,86 @@
 const { onRequest, onCall } = require("firebase-functions/v2/https");
-const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
+const { CloudSchedulerClient } = require("@google-cloud/scheduler");
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
 }
 
-// Define the API Key secret - strictly using Secret Manager
 const MNOTIFY_API_KEY = defineSecret("MNOTIFY_API_KEY");
+const scheduler = new CloudSchedulerClient();
 
 // Import logic components
 const { sendBirthdaySMS: processBirthdays } = require("./schedulers/birthdayScheduler");
 const { retryFailedSMS: processRetries } = require("./schedulers/retryScheduler");
 
 /**
- * Callable function to send SMS securely.
- * Invoked by the frontend using httpsCallable.
+ * Per-Church Birthday Trigger (HTTP)
+ * Designed to be called by a Cloud Scheduler job specific to a church.
+ */
+exports.sendBirthdaySMS = onRequest(
+  {
+    secrets: [MNOTIFY_API_KEY],
+  },
+  async (req, res) => {
+    const churchId = req.body?.churchId || req.query?.churchId;
+
+    if (!churchId) {
+      return res.status(400).send({ success: false, error: "Missing churchId in payload" });
+    }
+
+    try {
+      const result = await processBirthdays(MNOTIFY_API_KEY.value(), churchId);
+      res.status(200).send(result);
+    } catch (error) {
+      console.error(`Error processing birthdays for ${churchId}:`, error);
+      res.status(500).send({ success: false, error: error.message });
+    }
+  }
+);
+
+/**
+ * Automate Cloud Scheduler Creation
+ * Triggers when a new church is registered.
+ */
+exports.onChurchCreated = onDocumentCreated(
+  "/churches/{churchId}",
+  async (event) => {
+    const churchId = event.params.churchId;
+    const projectId = process.env.GCLOUD_PROJECT;
+    const location = "us-central1"; // Default location, adjust if necessary
+    
+    // Construct the URL for the trigger function
+    // Note: In production, you'd use the actual deployed URL
+    const functionUrl = `https://${location}-${projectId}.cloudfunctions.net/sendBirthdaySMS`;
+
+    const parent = scheduler.locationPath(projectId, location);
+    const jobName = `church-${churchId}-birthday-job`;
+
+    const job = {
+      name: `${parent}/jobs/${jobName}`,
+      schedule: "0 6 * * *", // 6:00 AM daily
+      timeZone: "Africa/Accra",
+      httpTarget: {
+        uri: functionUrl,
+        httpMethod: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: Buffer.from(JSON.stringify({ churchId })).toString("base64"),
+      },
+    };
+
+    try {
+      await scheduler.createJob({ parent, job });
+      console.log(`🚀 Created Cloud Scheduler job for church: ${churchId}`);
+    } catch (error) {
+      console.error(`❌ Failed to create scheduler for ${churchId}:`, error.message);
+    }
+  }
+);
+
+/**
+ * Secure Callable for manual Frontend SMS sends
  */
 exports.sendSMS = onCall(
   {
@@ -25,8 +89,6 @@ exports.sendSMS = onCall(
   async (request) => {
     const { phone, message, senderId } = request.data;
     const axios = require("axios");
-    
-    // Access the secret value from Secret Manager
     const apiKey = MNOTIFY_API_KEY.value();
     const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
 
@@ -44,60 +106,35 @@ exports.sendSMS = onCall(
       };
     } catch (error) {
       console.error("sendSMS Error:", error.message);
-      return {
-        success: false,
-        error: error.message,
-        details: error.response?.data
-      };
+      return { success: false, error: error.message };
     }
   }
 );
 
 /**
- * Daily Birthday SMS Scheduler
- * Executes at 6:00 AM Africa/Accra time.
- */
-exports.sendBirthdaySMS = onSchedule(
-  {
-    schedule: "0 6 * * *",
-    timeZone: "Africa/Accra",
-    secrets: [MNOTIFY_API_KEY],
-  },
-  async (event) => {
-    return processBirthdays(MNOTIFY_API_KEY.value());
-  }
-);
-
-/**
- * Manual Trigger for testing Birthday SMS
+ * Manual Trigger for testing specific church birthdays
  */
 exports.testBirthdaySMS = onRequest(
   {
     secrets: [MNOTIFY_API_KEY],
   },
   async (req, res) => {
+    const churchId = req.query.churchId;
+    if (!churchId) return res.status(400).send("Provide ?churchId=");
+
     try {
-      const result = await processBirthdays(MNOTIFY_API_KEY.value());
-      res.status(200).send({
-        success: true,
-        message: "Manual birthday test execution completed.",
-        details: result
-      });
+      const result = await processBirthdays(MNOTIFY_API_KEY.value(), churchId);
+      res.status(200).send({ success: true, result });
     } catch (error) {
-      console.error("testBirthdaySMS error:", error);
-      res.status(500).send({
-        success: false,
-        error: error.message
-      });
+      res.status(500).send({ success: false, error: error.message });
     }
   }
 );
 
 /**
- * Failed SMS Retry Engine
- * Runs every 30 minutes to deliver failed messages.
+ * Failed SMS Retry Engine (Legacy Global Scheduler)
  */
-exports.retryFailedSMS = onSchedule(
+exports.retryFailedSMS = require("firebase-functions/v2/scheduler").onSchedule(
   {
     schedule: "every 30 minutes",
     timeZone: "Africa/Accra",
