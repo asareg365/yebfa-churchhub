@@ -1,28 +1,20 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { 
   Settings, 
-  User, 
-  Bell, 
-  Shield, 
-  Cloud, 
-  CreditCard, 
   Save, 
-  Check, 
-  Info, 
-  Smartphone, 
-  Trash2, 
   Loader2, 
   KeyRound,
-  ShieldAlert,
   Lock,
   MessageSquare,
   Sun,
   Moon,
-  Laptop
+  Laptop,
+  Cake,
+  Bell,
+  Smartphone
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,8 +29,8 @@ import { useUser, useFirestore, useCollection, useAuth } from "@/firebase";
 import { doc, updateDoc, query, collection, where, limit } from "firebase/firestore";
 import { updatePassword } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
-import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
+import { errorEmitter } from "@/firebase/error-emitter";
 import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
@@ -52,7 +44,6 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [activeTab, setActiveTab] = useState(isForced ? "security" : "general");
-  const [currentTheme, setCurrentTheme] = useState<"light" | "dark" | "system">("dark");
 
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
@@ -80,7 +71,6 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (currentChurch) {
-      const dbTheme = currentChurch.settings?.theme || "dark";
       setSettings({
         name: currentChurch.name || "",
         adminEmail: currentChurch.adminEmail || "",
@@ -88,25 +78,11 @@ export default function SettingsPage() {
         birthdaySmsEnabled: currentChurch.settings?.birthdaySmsEnabled ?? true,
         lowCreditAlertEnabled: currentChurch.settings?.lowCreditAlertEnabled ?? true,
         dailyReportsEnabled: currentChurch.settings?.dailyReportsEnabled ?? false,
-        senderId: currentChurch.settings?.senderId || "",
-        theme: dbTheme
+        senderId: currentChurch.settings?.senderId || "ChurchHub",
+        theme: (currentChurch.settings?.theme as any) || "dark"
       });
-      setCurrentTheme(dbTheme);
-      applyTheme(dbTheme);
     }
   }, [currentChurch]);
-
-  const applyTheme = (theme: "light" | "dark" | "system") => {
-    const root = window.document.documentElement;
-    root.classList.remove("light", "dark");
-
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-      root.classList.add(systemTheme);
-    } else {
-      root.classList.add(theme);
-    }
-  };
 
   const handleSave = () => {
     if (!currentChurch) return;
@@ -127,7 +103,6 @@ export default function SettingsPage() {
 
     updateDoc(docRef, updateData)
       .then(() => {
-        applyTheme(settings.theme);
         toast({ title: "Settings updated", description: "Your changes have been saved successfully." });
       })
       .catch(async (error) => {
@@ -156,31 +131,18 @@ export default function SettingsPage() {
     try {
       if (auth.currentUser) {
         await updatePassword(auth.currentUser, passwords.new);
-        
         if (currentChurch?.id) {
-          const docRef = doc(db, "churches", currentChurch.id);
-          await updateDoc(docRef, { mustChangePassword: false });
+          await updateDoc(doc(db, "churches", currentChurch.id), { mustChangePassword: false });
         }
-
         toast({ title: "Password changed", description: "Your security credentials have been updated." });
         setPasswords({ new: "", confirm: "" });
       }
     } catch (error: any) {
-      toast({ 
-        title: "Update failed", 
-        description: error.message, 
-        variant: "destructive" 
-      });
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
     } finally {
       setIsChangingPassword(false);
     }
   };
-
-  const plans = [
-    { name: "Basic", price: "99", description: "Essential tools for small congregations.", features: ["100 SMS/month", "1 church admin", "Basic attendance", "Member management"], current: currentChurch?.plan === "Basic" },
-    { name: "Standard", price: "299", description: "Advanced features for growing ministries.", features: ["1,000 SMS/month", "Unlimited members", "Finance management", "AI Insights Lite"], current: currentChurch?.plan === "Standard" },
-    { name: "Premium", price: "599", description: "Full suite for enterprise organizations.", features: ["Priority Support", "AI Analytics", "Unlimited Branches", "Custom Reports"], current: currentChurch?.plan === "Premium" }
-  ];
 
   if (churchLoading) {
     return (
@@ -208,8 +170,8 @@ export default function SettingsPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="glass border-white/10 p-1 rounded-2xl">
           <TabsTrigger value="general" className="rounded-xl px-6" disabled={isForced}>General</TabsTrigger>
+          <TabsTrigger value="communication" className="rounded-xl px-6" disabled={isForced}>Communication</TabsTrigger>
           <TabsTrigger value="display" className="rounded-xl px-6" disabled={isForced}>Display</TabsTrigger>
-          <TabsTrigger value="notifications" className="rounded-xl px-6" disabled={isForced}>Notifications</TabsTrigger>
           <TabsTrigger value="billing" className="rounded-xl px-6" disabled={isForced}>Billing</TabsTrigger>
           <TabsTrigger value="security" className="rounded-xl px-6">Security</TabsTrigger>
         </TabsList>
@@ -248,19 +210,58 @@ export default function SettingsPage() {
                     className="bg-white/5 border-white/10" 
                   />
                 </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label className="flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-primary" />
-                    mNotify Sender ID
-                  </Label>
-                  <Input 
-                    placeholder="e.g. HOPE-CHURCH" 
-                    value={settings.senderId} 
-                    onChange={(e) => setSettings({...settings, senderId: e.target.value.toUpperCase().slice(0, 11)})}
-                    className="bg-white/5 border-white/10 font-mono" 
-                  />
-                  <p className="text-[10px] text-muted-foreground italic">Must be pre-approved on your mNotify account. Max 11 characters.</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="communication" className="animate-in fade-in-50 duration-500 space-y-6">
+          <Card className="glass">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-primary" />
+                SMS Integration (mNotify)
+              </CardTitle>
+              <CardDescription>Configure your bulk SMS engine and automated greetings.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label>mNotify Sender ID</Label>
+                <Input 
+                  placeholder="e.g. HOPE-CHURCH" 
+                  value={settings.senderId} 
+                  onChange={(e) => setSettings({...settings, senderId: e.target.value.toUpperCase().slice(0, 11)})}
+                  className="bg-white/5 border-white/10 font-mono" 
+                />
+                <p className="text-[10px] text-muted-foreground italic">Must be pre-approved on your mNotify account. Max 11 characters.</p>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-2xl bg-muted/20 border border-white/5">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Cake className="w-4 h-4 text-accent" />
+                    <Label className="text-base">Automated Birthday SMS</Label>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Send greetings to members on their birthday at 6:00 AM.</p>
                 </div>
+                <Switch 
+                  checked={settings.birthdaySmsEnabled} 
+                  onCheckedChange={(checked) => setSettings({...settings, birthdaySmsEnabled: checked})}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-2xl bg-muted/20 border border-white/5">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-primary" />
+                    <Label className="text-base">Low SMS Credit Alert</Label>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Notify when ministry credits fall below 10% of allocation.</p>
+                </div>
+                <Switch 
+                  checked={settings.lowCreditAlertEnabled} 
+                  onCheckedChange={(checked) => setSettings({...settings, lowCreditAlertEnabled: checked})}
+                />
               </div>
             </CardContent>
           </Card>
@@ -316,47 +317,6 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="notifications" className="animate-in fade-in-50 duration-500">
-          <Card className="glass">
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <CardDescription>Control how you and your members receive updates.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors">
-                <div className="space-y-0.5">
-                  <Label className="text-base">Automated Birthday SMS</Label>
-                  <p className="text-sm text-muted-foreground">Send greetings to members on their birthday via mNotify.</p>
-                </div>
-                <Switch 
-                  checked={settings.birthdaySmsEnabled} 
-                  onCheckedChange={(checked) => setSettings({...settings, birthdaySmsEnabled: checked})}
-                />
-              </div>
-              <div className="flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors">
-                <div className="space-y-0.5">
-                  <Label className="text-base">Low SMS Credit Alert</Label>
-                  <p className="text-sm text-muted-foreground">Notify when mNotify credits fall below 500.</p>
-                </div>
-                <Switch 
-                  checked={settings.lowCreditAlertEnabled} 
-                  onCheckedChange={(checked) => setSettings({...settings, lowCreditAlertEnabled: checked})}
-                />
-              </div>
-              <div className="flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors">
-                <div className="space-y-0.5">
-                  <Label className="text-base">Daily Attendance Reports</Label>
-                  <p className="text-sm text-muted-foreground">Email summary of attendance each evening.</p>
-                </div>
-                <Switch 
-                  checked={settings.dailyReportsEnabled} 
-                  onCheckedChange={(checked) => setSettings({...settings, dailyReportsEnabled: checked})}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="billing" className="space-y-6 animate-in fade-in-50 duration-500">
           <Alert className="glass-primary border-primary/30 py-6 rounded-3xl">
             <Smartphone className="h-6 w-6 text-primary" />
@@ -368,39 +328,6 @@ export default function SettingsPage() {
               Accounts are typically approved within 1 hour of payment.
             </AlertDescription>
           </Alert>
-
-          <div className="grid gap-6 md:grid-cols-3">
-            {plans.map((plan) => (
-              <Card key={plan.name} className={plan.current ? "glass border-primary/50 ring-1 ring-primary/20 scale-105" : "glass"}>
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle className="text-xl">{plan.name}</CardTitle>
-                      <CardDescription className="mt-1">{plan.description}</CardDescription>
-                    </div>
-                    {plan.current && <Badge className="bg-primary text-primary-foreground">Current Plan</Badge>}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-bold">GH₵{plan.price}</span>
-                    <span className="text-muted-foreground">/month</span>
-                  </div>
-                  <ul className="space-y-3">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-center gap-2 text-sm">
-                        <Check className="h-4 w-4 text-accent" />
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Button className="w-full h-11 rounded-xl" variant={plan.current ? "outline" : "default"}>
-                    {plan.current ? "Renew Plan" : `Upgrade to ${plan.name}`}
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
         </TabsContent>
 
         <TabsContent value="security" className="space-y-6 animate-in fade-in-50 duration-500">

@@ -7,16 +7,23 @@
         "name": { "type": "string" },
         "phone": { "type": "string" },
         "status": { "type": "string" },
-        "joined": { "type": "string" }
+        "joined": { "type": "string" },
+        "dateOfBirth": { "type": "string", "format": "date" }
       }
     },
     "SMSLog": {
       "title": "SMS Log",
       "type": "object",
       "properties": {
-        "status": { "type": "string" },
+        "memberName": { "type": "string" },
+        "phone": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["sent", "failed", "pending", "retrying"] },
+        "type": { "type": "string", "enum": ["birthday", "announcement", "test", "reminder"] },
         "retryCount": { "type": "number" },
-        "cost": { "type": "number" }
+        "cost": { "type": "number" },
+        "error": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
       }
     },
     "Transaction": {
@@ -25,34 +32,38 @@
       "properties": {
         "amount": { "type": "number" },
         "reference": { "type": "string" },
-        "status": { "type": "string" }
+        "status": { "type": "string" },
+        "provider": { "type": "string" }
       }
     }
   },
   "firestore": {
     "/churches/{churchId}": {
-      "description": "Tenant isolation: Read/Write allowed if user email in adminEmails array."
+      "description": "Tenant organization. Admin access restricted to users in adminEmails array."
     },
     "/churches/{churchId}/members/{memberId}": {
-      "description": "Tenant isolated members."
+      "schema": "Member",
+      "description": "Tenant isolated member directory."
     },
     "/churches/{churchId}/smsLogs/{logId}": {
-      "description": "Tenant isolated SMS logs."
+      "schema": "SMSLog",
+      "description": "Tenant isolated communication logs with strict ownership rules."
     },
     "/churches/{churchId}/smsTemplates/{templateId}": {
-      "description": "Tenant isolated templates."
+      "description": "Tenant isolated reusable message structures."
     },
     "/churches/{churchId}/attendance/{attendanceId}": {
-      "description": "Tenant isolated attendance."
+      "description": "Tenant isolated service attendance records."
     },
     "/churches/{churchId}/finances/{financeId}": {
-      "description": "Tenant isolated finances."
+      "description": "Tenant isolated tithing and offering records."
     },
     "/churches/{churchId}/events/{eventId}": {
-      "description": "Tenant isolated events."
+      "description": "Tenant isolated event planning."
     },
     "/churches/{churchId}/transactions/{txId}": {
-      "description": "Tenant isolated billing transactions."
+      "schema": "Transaction",
+      "description": "Tenant isolated billing history."
     }
   }
 }
