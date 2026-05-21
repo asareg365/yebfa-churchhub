@@ -45,17 +45,12 @@ function normalizePhone(phone: string): string {
     cleaned = "233" + cleaned.substring(1);
   }
 
-  // Ensure it doesn't have a leading + for the final string
-  if (cleaned.startsWith("+")) {
-    cleaned = cleaned.substring(1);
-  }
-  
   return cleaned;
 }
 
 /**
  * Sends SMS via Firebase Cloud Function (Secure)
- * No API Keys are stored or used here.
+ * No API Keys are stored or used in the client code.
  */
 async function sendSMSViaCloudFunction(phone: string, message: string, senderId: string) {
   const functions = getFunctions();
@@ -103,25 +98,21 @@ export async function sendAndLogSMS(
   const normalizedPhone = normalizePhone(payload.phone);
   
   try {
-    // 1. FETCH SUBSCRIPTION STATUS
     const churchSnap = await getDoc(churchRef);
     const churchData = churchSnap.data();
     const sub = churchData?.subscription || { smsCredits: 0, smsUsed: 0 };
 
-    // 2. CREDIT CHECK
     if (sub.smsUsed >= sub.smsCredits) {
       throw new Error("SMS credits exhausted. Please recharge your account via Billing.");
     }
 
     const senderId = churchData?.settings?.senderId || "ChurchHub";
 
-    // 3. ATTEMPT DELIVERY VIA CLOUD FUNCTION
     const outcome = await sendSMSViaCloudFunction(normalizedPhone, payload.message, senderId);
     
-    // 4. LOG TRANSACTION
     const logData: Omit<SMSLog, 'id'> = {
       churchId,
-      memberId: payload.memberId ?? undefined,
+      memberId: payload.memberId || undefined,
       memberName: payload.memberName || "Unknown",
       phone: normalizedPhone,
       message: payload.message,
@@ -138,7 +129,6 @@ export async function sendAndLogSMS(
 
     const docRef = await addDoc(logsRef, logData);
 
-    // 5. UPDATE USAGE (POST-SEND)
     if (outcome.success) {
       await updateDoc(churchRef, {
         "subscription.smsUsed": increment(1)
@@ -147,10 +137,9 @@ export async function sendAndLogSMS(
 
     return { success: outcome.success, error: outcome.success ? undefined : outcome.error, id: docRef.id };
   } catch (error: any) {
-    // LOG FAILURE
     await addDoc(logsRef, {
       churchId,
-      memberId: payload.memberId ?? undefined,
+      memberId: payload.memberId || undefined,
       memberName: payload.memberName || "Unknown",
       phone: normalizedPhone,
       message: payload.message,

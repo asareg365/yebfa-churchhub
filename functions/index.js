@@ -3,18 +3,20 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 
-admin.initializeApp();
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
 
 // Define the API Key secret - strictly using Secret Manager
 const MNOTIFY_API_KEY = defineSecret("MNOTIFY_API_KEY");
 
 // Import logic components
 const { sendBirthdaySMS: processBirthdays } = require("./schedulers/birthdayScheduler");
-const { retryFailedSMS } = require("./schedulers/retryScheduler");
+const { retryFailedSMS: processRetries } = require("./schedulers/retryScheduler");
 
 /**
  * Callable function to send SMS securely.
- * Uses the secret value directly via .value()
+ * Invoked by the frontend using httpsCallable.
  */
 exports.sendSMS = onCall(
   {
@@ -24,12 +26,11 @@ exports.sendSMS = onCall(
     const { phone, message, senderId } = request.data;
     const axios = require("axios");
     
-    // Access the secret value
+    // Access the secret value from Secret Manager
     const apiKey = MNOTIFY_API_KEY.value();
     const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
 
     try {
-      console.log(`Cloud Function sending SMS...`);
       const response = await axios.post(url, {
         recipient: [phone],
         sender: senderId || "ChurchHub",
@@ -42,7 +43,7 @@ exports.sendSMS = onCall(
         data: response.data
       };
     } catch (error) {
-      console.error("Cloud sendSMS Error:", error.message);
+      console.error("sendSMS Error:", error.message);
       return {
         success: false,
         error: error.message,
@@ -54,6 +55,7 @@ exports.sendSMS = onCall(
 
 /**
  * Daily Birthday SMS Scheduler
+ * Executes at 6:00 AM Africa/Accra time.
  */
 exports.sendBirthdaySMS = onSchedule(
   {
@@ -75,15 +77,14 @@ exports.testBirthdaySMS = onRequest(
   },
   async (req, res) => {
     try {
-      console.log("Starting manual birthday SMS test...");
       const result = await processBirthdays(MNOTIFY_API_KEY.value());
       res.status(200).send({
         success: true,
-        message: "Birthday test execution completed.",
+        message: "Manual birthday test execution completed.",
         details: result
       });
     } catch (error) {
-      console.error("Test function error:", error);
+      console.error("testBirthdaySMS error:", error);
       res.status(500).send({
         success: false,
         error: error.message
@@ -94,6 +95,7 @@ exports.testBirthdaySMS = onRequest(
 
 /**
  * Failed SMS Retry Engine
+ * Runs every 30 minutes to deliver failed messages.
  */
 exports.retryFailedSMS = onSchedule(
   {
@@ -102,6 +104,6 @@ exports.retryFailedSMS = onSchedule(
     secrets: [MNOTIFY_API_KEY],
   },
   async (event) => {
-    return retryFailedSMS(MNOTIFY_API_KEY.value());
+    return processRetries(MNOTIFY_API_KEY.value());
   }
 );
