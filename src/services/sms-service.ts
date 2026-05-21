@@ -160,10 +160,12 @@ export async function sendAndLogSMS(
 export async function processBirthdaysToday(db: Firestore, churchId: string) {
   const membersRef = collection(db, 'churches', churchId, 'members');
   const today = new Date();
-  const currentMonth = today.getMonth() + 1;
-  const currentDay = today.getDate();
+  
+  // Use UTC comparison to avoid timezone shifts
+  const currentMonth = today.getUTCMonth() + 1;
+  const currentDay = today.getUTCDate();
 
-  console.log("TODAY:", currentMonth, currentDay);
+  console.log("TODAY (UTC):", currentMonth, currentDay);
 
   const membersSnap = await getDocs(membersRef);
   const results = { sent: 0, failed: 0, skipped: 0 };
@@ -171,10 +173,6 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
   for (const doc of membersSnap.docs) {
     const member = doc.data();
     
-    if (member.name && member.dateOfBirth) {
-      console.log("MEMBER:", member.name, member.dateOfBirth);
-    }
-
     if (!member.dateOfBirth || !member.phone) {
       results.skipped++;
       continue;
@@ -185,8 +183,10 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
       ? member.dateOfBirth.toDate()
       : new Date(member.dateOfBirth);
 
-    const mMonth = dob.getMonth() + 1;
-    const mDay = dob.getDate();
+    const mMonth = dob.getUTCMonth() + 1;
+    const mDay = dob.getUTCDate();
+
+    console.log(`CHECKING ${member.name}: ${mMonth}/${mDay}`);
 
     if (mMonth === currentMonth && mDay === currentDay) {
       const outcome = await sendAndLogSMS(db, churchId, {

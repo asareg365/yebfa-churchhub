@@ -5,10 +5,11 @@ async function sendBirthdaySMS(apiKey) {
   const db = admin.firestore();
 
   const today = new Date();
-  const month = today.getMonth() + 1;
-  const day = today.getDate();
+  // Use UTC methods for robust comparison
+  const month = today.getUTCMonth() + 1;
+  const day = today.getUTCDate();
 
-  console.log(`🟡 Birthday job started for ${month}/${day}`);
+  console.log(`🟡 Birthday job started for ${month}/${day} (UTC)`);
 
   const churchesSnap = await db.collection("churches").get();
 
@@ -37,10 +38,13 @@ async function sendBirthdaySMS(apiKey) {
         continue;
       }
 
-      const dob = new Date(member.dateOfBirth);
+      // Robust handle for DOB string or Timestamp
+      const dob = member.dateOfBirth.toDate
+        ? member.dateOfBirth.toDate()
+        : new Date(member.dateOfBirth);
 
-      const mMonth = dob.getMonth() + 1;
-      const mDay = dob.getDate();
+      const mMonth = dob.getUTCMonth() + 1;
+      const mDay = dob.getUTCDate();
 
       console.log(`🔍 Checking ${member.name}: ${mMonth}/${mDay}`);
 
