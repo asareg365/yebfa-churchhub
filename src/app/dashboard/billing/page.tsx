@@ -1,20 +1,17 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   Wallet, 
   Package, 
   History, 
   CreditCard, 
-  CheckCircle2, 
-  AlertTriangle,
-  ArrowUpRight,
-  TrendingUp,
-  Loader2,
-  Calendar,
   Smartphone,
   FileText,
-  Info
+  Info,
+  Calendar,
+  Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,16 +21,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, query, where, limit, orderBy } from 'firebase/firestore';
 import { format } from 'date-fns';
-import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
 // Sub-components
 import PlansPage from './plans/page';
-import ReportsPage from '../reports/page';
+import BillingTransactionsPage from './transactions/page';
+import BillingUsageReportsPage from './reports/page';
 
 export default function BillingCenterHub() {
   const db = useFirestore();
   const { user } = useUser();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
   const [activeTab, setActiveTab] = useState('overview');
 
   const churchQuery = useMemo(() => {
@@ -49,10 +49,14 @@ export default function BillingCenterHub() {
     return collection(db, 'churches', currentChurch.id, 'transactions');
   }, [db, currentChurch?.id]);
 
-  const { data: transactions } = useCollection(transactionsRef ? query(transactionsRef, orderBy('createdAt', 'desc'), limit(20)) : null);
+  const { data: transactions } = useCollection(transactionsRef ? query(transactionsRef, orderBy('createdAt', 'desc'), limit(5)) : null);
 
   const sub = currentChurch?.subscription || { plan: 'Basic', smsCredits: 100, smsUsed: 0, status: 'active', renewalDate: 'N/A' };
   const usagePercent = Math.min(100, ((sub.smsUsed || 0) / (sub.smsCredits || 1)) * 100);
+
+  if (churchLoading) {
+    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -69,11 +73,11 @@ export default function BillingCenterHub() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="glass border-white/10 p-1 rounded-2xl">
-          <TabsTrigger value="overview" className="rounded-xl px-6"><Wallet className="w-4 h-4 mr-2" />Overview</TabsTrigger>
-          <TabsTrigger value="plans" className="rounded-xl px-6"><Package className="w-4 h-4 mr-2" />Plans</TabsTrigger>
-          <TabsTrigger value="transactions" className="rounded-xl px-6"><History className="w-4 h-4 mr-2" />Transactions</TabsTrigger>
-          <TabsTrigger value="usage" className="rounded-xl px-6"><FileText className="w-4 h-4 mr-2" />Usage Reports</TabsTrigger>
+        <TabsList className="glass border-white/10 p-1 rounded-2xl w-full md:w-auto">
+          <TabsTrigger value="overview" className="rounded-xl px-6 flex-1 md:flex-none"><Wallet className="w-4 h-4 mr-2" />Overview</TabsTrigger>
+          <TabsTrigger value="plans" className="rounded-xl px-6 flex-1 md:flex-none"><Package className="w-4 h-4 mr-2" />Plans</TabsTrigger>
+          <TabsTrigger value="transactions" className="rounded-xl px-6 flex-1 md:flex-none"><History className="w-4 h-4 mr-2" />Transactions</TabsTrigger>
+          <TabsTrigger value="usage" className="rounded-xl px-6 flex-1 md:flex-none"><FileText className="w-4 h-4 mr-2" />Usage Reports</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -107,21 +111,40 @@ export default function BillingCenterHub() {
                       <p className="text-sm font-bold flex items-center gap-2"><Calendar className="w-4 h-4 text-primary" />{sub.renewalDate}</p>
                     </div>
                     <div className="p-4 rounded-2xl bg-muted/20 border border-border">
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Lifetime Spend</p>
-                      <p className="text-sm font-bold flex items-center gap-2"><CreditCard className="w-4 h-4 text-accent" />GH₵{(sub.smsUsed || 0).toLocaleString()}</p>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Total Credits</p>
+                      <p className="text-sm font-bold flex items-center gap-2"><CreditCard className="w-4 h-4 text-accent" />{sub.smsCredits?.toLocaleString()}</p>
                     </div>
                   </div>
+                </div>
+
+                <div className="pt-6 border-t border-border">
+                   <div className="flex justify-between items-center mb-4">
+                      <h4 className="text-sm font-bold flex items-center gap-2"><History className="w-4 h-4 text-primary" /> Recent Activity</h4>
+                      <Button variant="link" className="text-xs text-primary font-bold" onClick={() => setActiveTab('transactions')}>View All</Button>
+                   </div>
+                   <div className="space-y-2">
+                      {transactions?.map((tx) => (
+                        <div key={tx.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border text-xs">
+                          <div className="font-mono">{tx.reference}</div>
+                          <div className="font-bold text-accent">GH₵{tx.amount}</div>
+                          <Badge variant="outline" className="text-[9px] uppercase">{tx.status}</Badge>
+                        </div>
+                      ))}
+                      {(!transactions || transactions.length === 0) && (
+                        <p className="text-xs text-muted-foreground italic text-center py-4">No recent activity.</p>
+                      )}
+                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="glass bg-accent/5 border-accent/20">
+            <Card className="glass bg-accent/5 border-accent/20 h-fit">
               <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Smartphone className="w-5 h-5 text-accent" />Manual Top-up</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <div className="p-4 rounded-2xl bg-white/50 border border-accent/10 space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">MoMo Pay</p>
                   <p className="text-2xl font-bold text-accent">0248472474</p>
-                  <p className="text-[10px] italic text-muted-foreground">Reference: Your Church Slug</p>
+                  <p className="text-[10px] italic text-muted-foreground">Reference: {currentChurch?.slug}</p>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">Payments are typically applied within 1 hour. Contact support for instant activation.</p>
                 <Button variant="outline" className="w-full border-accent/20 text-accent font-bold" onClick={() => window.open('https://wa.me/233248472474')}>WhatsApp Verification</Button>
@@ -131,32 +154,8 @@ export default function BillingCenterHub() {
         </TabsContent>
 
         <TabsContent value="plans"><PlansPage /></TabsContent>
-        <TabsContent value="transactions">
-          <Card className="glass overflow-hidden">
-            <CardHeader><CardTitle className="text-lg">Transaction History</CardTitle></CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-muted/10 text-muted-foreground border-b border-border">
-                    <tr><th className="p-4 font-bold text-[10px]">Reference</th><th className="p-4 font-bold text-[10px]">Amount</th><th className="p-4 font-bold text-[10px]">Status</th><th className="p-4 font-bold text-[10px]">Provider</th><th className="p-4 font-bold text-[10px] text-right">Date</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {transactions?.map((tx) => (
-                      <tr key={tx.id} className="hover:bg-muted/5">
-                        <td className="p-4 font-mono text-xs">{tx.reference}</td>
-                        <td className="p-4 font-bold text-accent">GH₵{tx.amount}</td>
-                        <td className="p-4"><Badge variant="outline" className={cn("text-[10px] uppercase", tx.status === 'success' ? 'text-accent' : 'text-muted-foreground')}>{tx.status}</Badge></td>
-                        <td className="p-4 text-xs">{tx.provider}</td>
-                        <td className="p-4 text-right text-[10px] text-muted-foreground">{tx.createdAt?.toDate ? format(tx.createdAt.toDate(), 'MMM d, yyyy') : 'N/A'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="usage"><ReportsPage /></TabsContent>
+        <TabsContent value="transactions"><BillingTransactionsPage /></TabsContent>
+        <TabsContent value="usage"><BillingUsageReportsPage /></TabsContent>
       </Tabs>
     </div>
   );
