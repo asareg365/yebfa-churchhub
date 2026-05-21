@@ -27,6 +27,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useFirestore } from "@/firebase";
 import { collection, query, where, getDocs, limit, addDoc, serverTimestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
@@ -270,67 +271,71 @@ export default function PublicRegistrationPage() {
                           <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 glass" align="start">
-                        <div className="max-h-[300px] overflow-y-auto p-2 space-y-1">
-                          {/* Standard List */}
-                          {CATHOLIC_SOCIETIES.map(society => {
-                            const isSelected = formData.societies.includes(society);
-                            return (
-                              <div 
-                                key={society} 
-                                className={cn(
-                                  "flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors",
-                                  isSelected ? "bg-primary/20 text-primary" : "hover:bg-white/5"
-                                )}
-                                onClick={() => toggleSociety(society)}
-                              >
-                                <div className={cn(
-                                  "w-4 h-4 border rounded flex items-center justify-center transition-colors",
-                                  isSelected ? "bg-primary border-primary" : "border-white/20"
-                                )}>
-                                  {isSelected && <Check className="h-3 w-3 text-primary-foreground" />}
-                                </div>
-                                <span className="text-xs">{society}</span>
-                              </div>
-                            );
-                          })}
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 glass overflow-hidden" align="start">
+                         <div className="flex flex-col max-h-[350px]">
+                           <ScrollArea className="flex-1">
+                             <div className="p-2 space-y-1">
+                               {/* Standard List */}
+                               {CATHOLIC_SOCIETIES.map(society => {
+                                 const isSelected = formData.societies.includes(society);
+                                 return (
+                                   <div 
+                                     key={society} 
+                                     className={cn(
+                                       "flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors",
+                                       isSelected ? "bg-primary/20 text-primary" : "hover:bg-white/5"
+                                     )}
+                                     onClick={() => toggleSociety(society)}
+                                   >
+                                     <div className={cn(
+                                       "w-4 h-4 border rounded flex items-center justify-center transition-colors",
+                                       isSelected ? "bg-primary border-primary" : "border-white/20"
+                                     )}>
+                                       {isSelected && <Check className="h-3 w-3 text-primary-foreground" />}
+                                     </div>
+                                     <span className="text-xs">{society}</span>
+                                   </div>
+                                 );
+                               })}
 
-                          {/* Custom Ones Already Selected */}
-                          {formData.societies.filter(s => !CATHOLIC_SOCIETIES.includes(s)).map(society => (
-                            <div 
-                              key={society} 
-                              className="flex items-center gap-2 p-2 rounded-lg cursor-pointer bg-primary/20 text-primary"
-                              onClick={() => toggleSociety(society)}
-                            >
-                              <div className="w-4 h-4 border rounded border-primary bg-primary flex items-center justify-center">
-                                <Check className="h-3 w-3 text-primary-foreground" />
-                              </div>
-                              <span className="text-xs">{society}</span>
-                            </div>
-                          ))}
-
-                          {/* Add Custom Input */}
-                          <div className="p-2 pt-4 border-t border-white/10 mt-2 space-y-2">
-                             <Label className="text-[10px] uppercase font-bold text-muted-foreground">Add Other Society</Label>
-                             <div className="flex gap-2">
-                               <Input 
-                                 placeholder="Enter society name"
-                                 value={otherSocietyInput}
-                                 onChange={(e) => setOtherSocietyInput(e.target.value)}
-                                 className="h-8 text-xs bg-white/5"
-                                 onKeyDown={(e) => {
-                                   if (e.key === 'Enter') {
-                                     e.preventDefault();
-                                     handleAddCustomSociety();
-                                   }
-                                 }}
-                               />
-                               <Button size="sm" className="h-8 w-8 p-0" onClick={handleAddCustomSociety}>
-                                 <Plus className="h-3 w-3" />
-                               </Button>
+                               {/* Custom Ones Already Selected */}
+                               {formData.societies.filter(s => !CATHOLIC_SOCIETIES.includes(s)).map(society => (
+                                 <div 
+                                   key={society} 
+                                   className="flex items-center gap-2 p-2 rounded-lg cursor-pointer bg-primary/20 text-primary"
+                                   onClick={() => toggleSociety(society)}
+                                 >
+                                   <div className="w-4 h-4 border rounded border-primary bg-primary flex items-center justify-center">
+                                     <Check className="h-3 w-3 text-primary-foreground" />
+                                   </div>
+                                   <span className="text-xs">{society}</span>
+                                 </div>
+                               ))}
                              </div>
-                          </div>
-                        </div>
+                           </ScrollArea>
+
+                           {/* Add Custom Input - Pinned at bottom */}
+                           <div className="p-3 border-t border-white/10 bg-muted/20 space-y-2">
+                              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Add Other Society</Label>
+                              <div className="flex gap-2">
+                                <Input 
+                                  placeholder="Enter name"
+                                  value={otherSocietyInput}
+                                  onChange={(e) => setOtherSocietyInput(e.target.value)}
+                                  className="h-8 text-xs bg-white/10"
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleAddCustomSociety();
+                                    }
+                                  }}
+                                />
+                                <Button size="sm" className="h-8 w-8 p-0" onClick={handleAddCustomSociety}>
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                              </div>
+                           </div>
+                         </div>
                       </PopoverContent>
                     </Popover>
                   </div>
