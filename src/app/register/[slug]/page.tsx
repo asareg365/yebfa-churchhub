@@ -76,6 +76,12 @@ export default function PublicRegistrationPage() {
     societies: [] as string[]
   });
 
+  const calculateBirthdayKey = (dobString: string) => {
+    if (!dobString) return "";
+    const dob = new Date(dobString);
+    return `${String(dob.getUTCMonth() + 1).padStart(2, '0')}-${String(dob.getUTCDate()).padStart(2, '0')}`;
+  };
+
   useEffect(() => {
     async function fetchChurch() {
       try {
@@ -126,6 +132,7 @@ export default function PublicRegistrationPage() {
       const membersRef = collection(db, "churches", church.id, "members");
       await addDoc(membersRef, {
         ...formData,
+        birthdayKey: calculateBirthdayKey(formData.dateOfBirth),
         status: "Active",
         joined: new Date().toISOString().split('T')[0],
         createdAt: serverTimestamp(),

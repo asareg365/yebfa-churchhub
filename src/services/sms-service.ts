@@ -9,7 +9,9 @@ import {
   doc,
   getDoc,
   updateDoc,
-  increment
+  increment,
+  query,
+  where
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -50,7 +52,6 @@ function normalizePhone(phone: string): string {
 
 /**
  * Sends SMS via Firebase Cloud Function (Secure)
- * No API Keys are stored or used in the client code.
  */
 async function sendSMSViaCloudFunction(phone: string, message: string, senderId: string) {
   const functions = getFunctions();
@@ -103,12 +104,10 @@ export async function sendAndLogSMS(
     const sub = churchData?.subscription || { smsCredits: 0, smsUsed: 0 };
 
     if (sub.smsUsed >= sub.smsCredits) {
-      throw new Error("SMS credits exhausted. Please recharge your account via Billing.");
+      throw new Error("Insufficient credits");
     }
 
-    // Hardcoded approved sender ID for testing as recommended
     const senderId = "YEBFA";
-
     const outcome = await sendSMSViaCloudFunction(normalizedPhone, payload.message, senderId);
     
     const logData: Omit<SMSLog, 'id'> = {
@@ -157,48 +156,45 @@ export async function sendAndLogSMS(
   }
 }
 
+/**
+ * Optimized Birthday Processor using indexed birthdayKey query
+ */
 export async function processBirthdaysToday(db: Firestore, churchId: string) {
   const membersRef = collection(db, 'churches', churchId, 'members');
   const today = new Date();
   
-  // Use UTC comparison to avoid timezone shifts
-  const currentMonth = today.getUTCMonth() + 1;
-  const currentDay = today.getUTCDate();
+  // Format today's date as MM-DD for indexed search
+  const todayKey = `${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
 
-  console.log("TODAY (UTC):", currentMonth, currentDay);
+  console.log("Birthday check started (UTC Key):", todayKey);
 
-  const membersSnap = await getDocs(membersRef);
+  // Optimized Query: Only fetch members with matching birthdayKey
+  const q = query(membersRef, where("birthdayKey", "==", todayKey));
+  const membersSnap = await getDocs(q);
+  
   const results = { sent: 0, failed: 0, skipped: 0 };
+
+  console.log(`Found ${membersSnap.size} celebrants for today.`);
 
   for (const doc of membersSnap.docs) {
     const member = doc.data();
     
-    if (!member.dateOfBirth || !member.phone) {
+    if (!member.phone) {
       results.skipped++;
       continue;
     }
 
-    // Correctly handle DOB if it is a Firestore Timestamp or a string
-    const dob = member.dateOfBirth.toDate
-      ? member.dateOfBirth.toDate()
-      : new Date(member.dateOfBirth);
+    const outcome = await sendAndLogSMS(db, churchId, {
+      phone: member.phone,
+      message: `Happy Birthday ${member.name}! May God bless your new age with favor, health, and prosperity. — ${member.churchName || 'Our Church'}.`,
+      type: 'birthday',
+      memberId: doc.id,
+      memberName: member.name
+    });
 
-    const mMonth = dob.getUTCMonth() + 1;
-    const mDay = dob.getUTCDate();
-
-    console.log(`CHECKING ${member.name}: ${mMonth}/${mDay}`);
-
-    if (mMonth === currentMonth && mDay === currentDay) {
-      const outcome = await sendAndLogSMS(db, churchId, {
-        phone: member.phone,
-        message: `Happy Birthday ${member.name}! May God bless your new age with favor, health, and prosperity. — ${member.churchName || 'Our Church'}.`,
-        type: 'birthday',
-        memberId: doc.id,
-        memberName: member.name
-      });
-      if (outcome.success) results.sent++;
-      else results.failed++;
-    }
+    if (outcome.success) results.sent++;
+    else results.failed++;
   }
+  
   return results;
 }

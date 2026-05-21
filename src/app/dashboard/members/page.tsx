@@ -122,6 +122,12 @@ export default function MembersPage() {
     societies: [] as string[]
   });
 
+  const calculateBirthdayKey = (dobString: string) => {
+    if (!dobString) return "";
+    const dob = new Date(dobString);
+    return `${String(dob.getUTCMonth() + 1).padStart(2, '0')}-${String(dob.getUTCDate()).padStart(2, '0')}`;
+  };
+
   const toggleSociety = (society: string, isEdit: boolean = false) => {
     if (isEdit) {
       setEditingMember((prev: any) => ({
@@ -169,6 +175,7 @@ export default function MembersPage() {
     
     const memberData = {
       ...newMember,
+      birthdayKey: calculateBirthdayKey(newMember.dateOfBirth),
       joined: new Date().toISOString().split('T')[0],
       createdAt: serverTimestamp(),
       photo: `https://picsum.photos/seed/${Math.random()}/100/100`
@@ -199,6 +206,7 @@ export default function MembersPage() {
       phone: editingMember.phone,
       gender: editingMember.gender,
       dateOfBirth: editingMember.dateOfBirth,
+      birthdayKey: calculateBirthdayKey(editingMember.dateOfBirth),
       department: editingMember.department,
       status: editingMember.status,
       societies: editingMember.societies || [],
@@ -238,7 +246,8 @@ export default function MembersPage() {
         batch.set(docRef, {
           name,
           phone: phone || "",
-          dateOfBirth: dob, // Expected YYYY-MM-DD
+          dateOfBirth: dob,
+          birthdayKey: calculateBirthdayKey(dob),
           department: department || "Music",
           gender: (gender as any) || "Male",
           status: "Active",
