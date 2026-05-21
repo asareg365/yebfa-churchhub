@@ -14,7 +14,9 @@ import {
   Laptop,
   Cake,
   Bell,
-  Smartphone
+  Smartphone,
+  Globe,
+  Clock
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,8 +25,9 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useUser, useFirestore, useCollection, useAuth } from "@/firebase";
 import { doc, updateDoc, query, collection, where, limit } from "firebase/firestore";
 import { updatePassword } from "firebase/auth";
@@ -32,6 +35,15 @@ import { useToast } from "@/hooks/use-toast";
 import { FirestorePermissionError } from "@/firebase/errors";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { cn } from "@/lib/utils";
+
+const TIMEZONES = [
+  "Africa/Accra",
+  "Africa/Lagos",
+  "Africa/Nairobi",
+  "Europe/London",
+  "America/New_York",
+  "UTC"
+];
 
 export default function SettingsPage() {
   const { user } = useUser();
@@ -55,9 +67,10 @@ export default function SettingsPage() {
 
   const [settings, setSettings] = useState({
     name: "",
-    adminEmail: "",
     phone: "",
     birthdaySmsEnabled: true,
+    timezone: "Africa/Accra",
+    birthdayTemplate: "Happy Birthday {{name}}! May God bless your new age with favor and joy. — {{churchName}}",
     lowCreditAlertEnabled: true,
     dailyReportsEnabled: false,
     senderId: "YEBFA",
@@ -73,9 +86,10 @@ export default function SettingsPage() {
     if (currentChurch) {
       setSettings({
         name: currentChurch.name || "",
-        adminEmail: currentChurch.adminEmail || "",
         phone: currentChurch.phone || "",
         birthdaySmsEnabled: currentChurch.settings?.birthdaySmsEnabled ?? true,
+        timezone: currentChurch.settings?.timezone || "Africa/Accra",
+        birthdayTemplate: currentChurch.smsTemplates?.birthday || "Happy Birthday {{name}}! May God bless your new age with favor and joy. — {{churchName}}",
         lowCreditAlertEnabled: currentChurch.settings?.lowCreditAlertEnabled ?? true,
         dailyReportsEnabled: currentChurch.settings?.dailyReportsEnabled ?? false,
         senderId: currentChurch.settings?.senderId || "YEBFA",
@@ -94,16 +108,20 @@ export default function SettingsPage() {
       phone: settings.phone,
       settings: {
         birthdaySmsEnabled: settings.birthdaySmsEnabled,
+        timezone: settings.timezone,
         lowCreditAlertEnabled: settings.lowCreditAlertEnabled,
         dailyReportsEnabled: settings.dailyReportsEnabled,
         senderId: settings.senderId,
         theme: settings.theme
+      },
+      smsTemplates: {
+        birthday: settings.birthdayTemplate
       }
     };
 
     updateDoc(docRef, updateData)
       .then(() => {
-        toast({ title: "Settings updated", description: "Your changes have been saved successfully." });
+        toast({ title: "Configuration Updated", description: "All ministry settings have been securely applied." });
       })
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
@@ -122,11 +140,6 @@ export default function SettingsPage() {
       toast({ title: "Passwords do not match", variant: "destructive" });
       return;
     }
-    if (passwords.new.length < 6) {
-      toast({ title: "Password too short", description: "Minimum 6 characters required.", variant: "destructive" });
-      return;
-    }
-
     setIsChangingPassword(true);
     try {
       if (auth.currentUser) {
@@ -134,244 +147,183 @@ export default function SettingsPage() {
         if (currentChurch?.id) {
           await updateDoc(doc(db, "churches", currentChurch.id), { mustChangePassword: false });
         }
-        toast({ title: "Password changed", description: "Your security credentials have been updated." });
+        toast({ title: "Security Updated", description: "Your dashboard access password has been changed." });
         setPasswords({ new: "", confirm: "" });
       }
     } catch (error: any) {
-      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+      toast({ title: "Security Update Failed", description: error.message, variant: "destructive" });
     } finally {
       setIsChangingPassword(false);
     }
   };
 
   if (churchLoading) {
-    return (
-      <div className="min-h-[400px] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <div className="min-h-[400px] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight mb-1">Settings</h2>
-          <p className="text-muted-foreground">Manage your church configuration and platform preferences.</p>
+          <h2 className="text-3xl font-bold tracking-tight mb-1 text-foreground">Ministry Configuration</h2>
+          <p className="text-muted-foreground">Manage organizational behavior, automation, and security for {currentChurch?.name}.</p>
         </div>
         {!isForced && (
-          <Button onClick={handleSave} disabled={isSaving} className="bg-primary hover:bg-primary/80">
+          <Button onClick={handleSave} disabled={isSaving} className="bg-primary hover:bg-primary/90 h-11 px-8 rounded-xl shadow-lg shadow-primary/20">
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            Save Changes
+            Apply Changes
           </Button>
         )}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="glass border-white/10 p-1 rounded-2xl">
+        <TabsList className="glass border-white/10 p-1 rounded-2xl w-full md:w-auto">
           <TabsTrigger value="general" className="rounded-xl px-6" disabled={isForced}>General</TabsTrigger>
-          <TabsTrigger value="communication" className="rounded-xl px-6" disabled={isForced}>Communication</TabsTrigger>
+          <TabsTrigger value="automation" className="rounded-xl px-6" disabled={isForced}>Automation</TabsTrigger>
           <TabsTrigger value="display" className="rounded-xl px-6" disabled={isForced}>Display</TabsTrigger>
-          <TabsTrigger value="billing" className="rounded-xl px-6" disabled={isForced}>Billing</TabsTrigger>
           <TabsTrigger value="security" className="rounded-xl px-6">Security</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="general" className="animate-in fade-in-50 duration-500">
-          <Card className="glass">
+        <TabsContent value="general" className="animate-in fade-in-50 duration-500 space-y-6">
+          <Card className="glass border-border shadow-xl">
             <CardHeader>
-              <CardTitle>Church Information</CardTitle>
-              <CardDescription>Update your basic organization details.</CardDescription>
+              <CardTitle>Organization Details</CardTitle>
+              <CardDescription>Core identity markers for your ministry.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-6 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Church Name</Label>
-                  <Input 
-                    placeholder="Enter church name" 
-                    value={settings.name} 
-                    onChange={(e) => setSettings({...settings, name: e.target.value})}
-                    className="bg-white/5 border-white/10" 
-                  />
+                  <Input value={settings.name} onChange={(e) => setSettings({...settings, name: e.target.value})} className="bg-muted/20 border-border" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Organization Email</Label>
-                  <Input 
-                    disabled
-                    value={settings.adminEmail} 
-                    className="bg-white/5 border-white/10 opacity-50 cursor-not-allowed" 
-                  />
+                  <Label>Local Timezone</Label>
+                  <Select value={settings.timezone} onValueChange={(v) => setSettings({...settings, timezone: v})}>
+                    <SelectTrigger className="bg-muted/20 border-border">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="glass">
+                      {TIMEZONES.map(tz => <SelectItem key={tz} value={tz}>{tz}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground italic flex items-center gap-1"><Globe className="w-3 h-3" /> Determines when automated messages are sent.</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Phone Number</Label>
-                  <Input 
-                    placeholder="+233..." 
-                    value={settings.phone}
-                    onChange={(e) => setSettings({...settings, phone: e.target.value})}
-                    className="bg-white/5 border-white/10" 
-                  />
+                  <Label>Official Contact Phone</Label>
+                  <Input value={settings.phone} onChange={(e) => setSettings({...settings, phone: e.target.value})} className="bg-muted/20 border-border" />
                 </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="communication" className="animate-in fade-in-50 duration-500 space-y-6">
-          <Card className="glass">
+        <TabsContent value="automation" className="animate-in fade-in-50 duration-500 space-y-6">
+          <Card className="glass border-border shadow-xl">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-primary" />
-                SMS Integration (mNotify)
+                <Cake className="w-5 h-5 text-accent" />
+                Birthday Automation Engine
               </CardTitle>
-              <CardDescription>Configure your bulk SMS engine and automated greetings.</CardDescription>
+              <CardDescription>Configure how the system handles member anniversaries.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label>mNotify Sender ID</Label>
-                <Input 
-                  placeholder="e.g. YEBFA" 
-                  value={settings.senderId} 
-                  onChange={(e) => setSettings({...settings, senderId: e.target.value.toUpperCase().slice(0, 11)})}
-                  className="bg-white/5 border-white/10 font-mono" 
-                />
-                <p className="text-[10px] text-muted-foreground italic">Must be pre-approved on your mNotify account. Max 11 characters.</p>
+            <CardContent className="space-y-8">
+              <div className="flex items-center justify-between p-6 rounded-2xl bg-muted/20 border border-border">
+                <div className="space-y-1">
+                  <Label className="text-base">Enable Automatic Greetings</Label>
+                  <p className="text-sm text-muted-foreground">The system will automatically send personalized SMS to celebrants at 06:00 AM daily.</p>
+                </div>
+                <Switch checked={settings.birthdaySmsEnabled} onCheckedChange={(c) => setSettings({...settings, birthdaySmsEnabled: c})} />
               </div>
 
-              <div className="flex items-center justify-between p-4 rounded-2xl bg-muted/20 border border-white/5">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <Cake className="w-4 h-4 text-accent" />
-                    <Label className="text-base">Automated Birthday SMS</Label>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Send greetings to members on their birthday at 6:00 AM.</p>
+              <div className="space-y-4">
+                <div className="flex justify-between items-end">
+                   <Label className="text-base">Personalized Greeting Template</Label>
+                   <span className="text-[10px] text-accent font-bold uppercase">Personalization Active</span>
                 </div>
-                <Switch 
-                  checked={settings.birthdaySmsEnabled} 
-                  onCheckedChange={(checked) => setSettings({...settings, birthdaySmsEnabled: checked})}
+                <Textarea 
+                  value={settings.birthdayTemplate} 
+                  onChange={(e) => setSettings({...settings, birthdayTemplate: e.target.value})}
+                  className="min-h-[120px] bg-muted/20 border-border font-body"
+                  placeholder="Type your template here..."
                 />
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-2xl bg-muted/20 border border-white/5">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <Bell className="w-4 h-4 text-primary" />
-                    <Label className="text-base">Low SMS Credit Alert</Label>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Notify when ministry credits fall below 10% of allocation.</p>
+                <div className="flex flex-wrap gap-2">
+                  <div className="px-2 py-1 bg-white border border-border rounded-lg text-[10px] font-mono text-primary font-bold">{"{{name}}"}</div>
+                  <div className="px-2 py-1 bg-white border border-border rounded-lg text-[10px] font-mono text-primary font-bold">{"{{churchName}}"}</div>
                 </div>
-                <Switch 
-                  checked={settings.lowCreditAlertEnabled} 
-                  onCheckedChange={(checked) => setSettings({...settings, lowCreditAlertEnabled: checked})}
-                />
+                <p className="text-xs text-muted-foreground leading-relaxed italic">
+                  Tip: Use the tags above to automatically insert the member's name and your church's official name into the message.
+                </p>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <TabsContent value="display" className="animate-in fade-in-50 duration-500">
-          <Card className="glass">
+          <Card className="glass border-border shadow-xl">
             <CardHeader>
-              <CardTitle>Appearance</CardTitle>
-              <CardDescription>Choose how ChurchHub looks on your screen.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <RadioGroup 
-                value={settings.theme} 
-                onValueChange={(v: any) => setSettings({...settings, theme: v})}
-                className="grid grid-cols-1 md:grid-cols-3 gap-4"
-              >
-                <Label
-                  htmlFor="theme-light"
-                  className={cn(
-                    "flex flex-col items-center justify-between rounded-2xl border-2 border-muted bg-white/5 p-4 hover:bg-white/10 cursor-pointer",
-                    settings.theme === "light" && "border-primary"
-                  )}
-                >
-                  <RadioGroupItem value="light" id="theme-light" className="sr-only" />
-                  <Sun className="mb-3 h-6 w-6" />
-                  <span className="text-sm font-semibold">Light</span>
-                </Label>
-                <Label
-                  htmlFor="theme-dark"
-                  className={cn(
-                    "flex flex-col items-center justify-between rounded-2xl border-2 border-muted bg-white/5 p-4 hover:bg-white/10 cursor-pointer",
-                    settings.theme === "dark" && "border-primary"
-                  )}
-                >
-                  <RadioGroupItem value="dark" id="theme-dark" className="sr-only" />
-                  <Moon className="mb-3 h-6 w-6" />
-                  <span className="text-sm font-semibold">Dark</span>
-                </Label>
-                <Label
-                  htmlFor="theme-system"
-                  className={cn(
-                    "flex flex-col items-center justify-between rounded-2xl border-2 border-muted bg-white/5 p-4 hover:bg-white/10 cursor-pointer",
-                    settings.theme === "system" && "border-primary"
-                  )}
-                >
-                  <RadioGroupItem value="system" id="theme-system" className="sr-only" />
-                  <Laptop className="mb-3 h-6 w-6" />
-                  <span className="text-sm font-semibold">System</span>
-                </Label>
-              </RadioGroup>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="billing" className="space-y-6 animate-in fade-in-50 duration-500">
-          <Alert className="glass-primary border-primary/30 py-6 rounded-3xl">
-            <Smartphone className="h-6 w-6 text-primary" />
-            <AlertTitle className="text-primary font-bold text-lg ml-2">Subscription Renewal via MoMo</AlertTitle>
-            <AlertDescription className="mt-2 text-foreground/90 ml-2 text-base">
-              To activate or renew your plan and recharge SMS credits, please send the plan cost via Mobile Money to 
-              <span className="font-bold text-primary mx-1">0248472474</span>. 
-              Use your <span className="font-bold underline italic">Church Name</span> as the reference.
-              Accounts are typically approved within 1 hour of payment.
-            </AlertDescription>
-          </Alert>
-        </TabsContent>
-
-        <TabsContent value="security" className="space-y-6 animate-in fade-in-50 duration-500">
-          <Card className="glass">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Lock className="h-5 w-5 text-primary" />
-                Security Credentials
+              <CardTitle className="flex items-center gap-2 text-primary">
+                <MessageSquare className="w-5 h-5" />
+                SMS Credit Enforcement
               </CardTitle>
-              <CardDescription>Update your ministry dashboard access password.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
-                <div className="space-y-2">
-                  <Label htmlFor="new-password">New Password</Label>
-                  <Input 
-                    id="new-password"
-                    type="password"
-                    value={passwords.new}
-                    onChange={(e) => setPasswords({...passwords, new: e.target.value})}
-                    className="bg-white/5 border-white/10"
-                    placeholder="Min. 6 characters"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm New Password</Label>
-                  <Input 
-                    id="confirm-password"
-                    type="password"
-                    value={passwords.confirm}
-                    onChange={(e) => setPasswords({...passwords, confirm: e.target.value})}
-                    className="bg-white/5 border-white/10"
-                    placeholder="Repeat new password"
-                    required
-                  />
-                </div>
-                <Button type="submit" disabled={isChangingPassword} className="w-full bg-primary text-primary-foreground">
-                  {isChangingPassword ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <KeyRound className="h-4 w-4 mr-2" />}
-                  Update Access Password
-                </Button>
-              </form>
+            <CardContent className="space-y-4">
+               <div className="flex items-center justify-between p-4 border-b border-border last:border-0">
+                  <div>
+                    <Label className="font-bold">Low Credit Notifications</Label>
+                    <p className="text-xs text-muted-foreground">Alert administrators when balance falls below 50 credits.</p>
+                  </div>
+                  <Switch checked={settings.lowCreditAlertEnabled} onCheckedChange={(c) => setSettings({...settings, lowCreditAlertEnabled: c})} />
+               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="display" className="animate-in fade-in-50 duration-500 space-y-6">
+          <Card className="glass border-border shadow-xl">
+             <CardHeader><CardTitle>Platform Theme</CardTitle></CardHeader>
+             <CardContent>
+               <RadioGroup value={settings.theme} onValueChange={(v: any) => setSettings({...settings, theme: v})} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <Label htmlFor="t-light" className={cn("flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-muted cursor-pointer hover:bg-muted/20 transition-all", settings.theme === 'light' && "border-primary bg-primary/5")}>
+                    <RadioGroupItem value="light" id="t-light" className="sr-only" />
+                    <Sun className="h-8 w-8 text-amber-500" />
+                    <span className="font-bold">Light Mode</span>
+                  </Label>
+                  <Label htmlFor="t-dark" className={cn("flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-muted cursor-pointer hover:bg-muted/20 transition-all", settings.theme === 'dark' && "border-primary bg-primary/5")}>
+                    <RadioGroupItem value="dark" id="t-dark" className="sr-only" />
+                    <Moon className="h-8 w-8 text-primary" />
+                    <span className="font-bold">Dark Mode</span>
+                  </Label>
+                  <Label htmlFor="t-system" className={cn("flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-muted cursor-pointer hover:bg-muted/20 transition-all", settings.theme === 'system' && "border-primary bg-primary/5")}>
+                    <RadioGroupItem value="system" id="t-system" className="sr-only" />
+                    <Laptop className="h-8 w-8 text-muted-foreground" />
+                    <span className="font-bold">System Default</span>
+                  </Label>
+               </RadioGroup>
+             </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="security" className="animate-in fade-in-50 duration-500 space-y-6">
+           <Card className="glass border-border shadow-2xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-destructive"><Lock className="w-5 h-5" />Access Credentials</CardTitle>
+                <CardDescription>Update your ministry dashboard entry keys.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleChangePassword} className="max-w-md space-y-4">
+                  <div className="space-y-2">
+                    <Label>New Security Key</Label>
+                    <Input type="password" value={passwords.new} onChange={(e) => setPasswords({...passwords, new: e.target.value})} className="bg-muted/20 border-border" placeholder="Min. 8 characters" required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Confirm Security Key</Label>
+                    <Input type="password" value={passwords.confirm} onChange={(e) => setPasswords({...passwords, confirm: e.target.value})} className="bg-muted/20 border-border" required />
+                  </div>
+                  <Button type="submit" disabled={isChangingPassword} className="w-full bg-primary h-12 rounded-xl text-lg font-bold">
+                    {isChangingPassword ? <Loader2 className="h-5 w-5 animate-spin" /> : <KeyRound className="mr-2 h-5 w-5" />}
+                    Update Security Keys
+                  </Button>
+                </form>
+              </CardContent>
+           </Card>
         </TabsContent>
       </Tabs>
     </div>
