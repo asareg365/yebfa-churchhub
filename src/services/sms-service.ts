@@ -180,8 +180,15 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
       continue;
     }
 
-    const [year, month, day] = member.dateOfBirth.split('-').map(Number);
-    if (month === currentMonth && day === currentDay) {
+    // Correctly handle DOB if it is a Firestore Timestamp or a string
+    const dob = member.dateOfBirth.toDate
+      ? member.dateOfBirth.toDate()
+      : new Date(member.dateOfBirth);
+
+    const mMonth = dob.getMonth() + 1;
+    const mDay = dob.getDate();
+
+    if (mMonth === currentMonth && mDay === currentDay) {
       const outcome = await sendAndLogSMS(db, churchId, {
         phone: member.phone,
         message: `Happy Birthday ${member.name}! May God bless your new age with favor, health, and prosperity. — ${member.churchName || 'Our Church'}.`,

@@ -26,7 +26,13 @@ async function sendBirthdaySMS(apiKey) {
       const member = memberDoc.data();
       if (!member.dateOfBirth || !member.phone) continue;
 
-      const [mYear, mMonth, mDay] = member.dateOfBirth.split("-").map(Number);
+      // Correctly handle DOB if it is a Firestore Timestamp or a string
+      const dob = member.dateOfBirth.toDate
+        ? member.dateOfBirth.toDate()
+        : new Date(member.dateOfBirth);
+
+      const mMonth = dob.getMonth() + 1;
+      const mDay = dob.getDate();
 
       if (mMonth === month && mDay === day) {
         const message = `Happy Birthday ${member.name}! May God bless your new age with favor, health, and prosperity. — ${churchData.name || "Our Church"}`;
