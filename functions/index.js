@@ -5,7 +5,7 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-// Define the API Key secret
+// Define the API Key secret - strictly using Secret Manager
 const MNOTIFY_API_KEY = defineSecret("MNOTIFY_API_KEY");
 
 // Import logic components
@@ -14,7 +14,7 @@ const { retryFailedSMS } = require("./schedulers/retryScheduler");
 
 /**
  * Callable function to send SMS securely.
- * Replaces direct mNotify calls from the frontend.
+ * Uses the secret value directly via .value()
  */
 exports.sendSMS = onCall(
   {
@@ -23,11 +23,13 @@ exports.sendSMS = onCall(
   async (request) => {
     const { phone, message, senderId } = request.data;
     const axios = require("axios");
+    
+    // Access the secret value
     const apiKey = MNOTIFY_API_KEY.value();
     const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
 
     try {
-      console.log(`Cloud Function sending SMS to ${phone}...`);
+      console.log(`Cloud Function sending SMS...`);
       const response = await axios.post(url, {
         recipient: [phone],
         sender: senderId || "ChurchHub",
@@ -52,8 +54,6 @@ exports.sendSMS = onCall(
 
 /**
  * Daily Birthday SMS Scheduler
- * Runs at 06:00 AM Africa/Accra
- * Uses the MNOTIFY_API_KEY secret
  */
 exports.sendBirthdaySMS = onSchedule(
   {
@@ -68,8 +68,6 @@ exports.sendBirthdaySMS = onSchedule(
 
 /**
  * Manual Trigger for testing Birthday SMS
- * Trigger via HTTPS request
- * Uses the MNOTIFY_API_KEY secret
  */
 exports.testBirthdaySMS = onRequest(
   {
@@ -96,7 +94,6 @@ exports.testBirthdaySMS = onRequest(
 
 /**
  * Failed SMS Retry Engine
- * Runs every 30 minutes to clean up failed deliveries
  */
 exports.retryFailedSMS = onSchedule(
   {

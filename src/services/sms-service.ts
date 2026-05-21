@@ -35,19 +35,27 @@ export interface SMSLog {
 }
 
 /**
- * Helper to normalize Ghana phone numbers to E.164 format (+233)
+ * Helper to normalize Ghana phone numbers to E.164 format (233XXXXXXXXX)
  */
 function normalizePhone(phone: string): string {
   if (!phone) return "";
-  const cleaned = phone.replace(/\D/g, "").trim();
+  let cleaned = phone.replace(/\D/g, "").trim();
+  
   if (cleaned.startsWith("0")) {
-    return "233" + cleaned.substring(1);
+    cleaned = "233" + cleaned.substring(1);
   }
+
+  // Ensure it doesn't have a leading + for the final string
+  if (cleaned.startsWith("+")) {
+    cleaned = cleaned.substring(1);
+  }
+  
   return cleaned;
 }
 
 /**
  * Sends SMS via Firebase Cloud Function (Secure)
+ * No API Keys are stored or used here.
  */
 async function sendSMSViaCloudFunction(phone: string, message: string, senderId: string) {
   const functions = getFunctions();
@@ -102,7 +110,7 @@ export async function sendAndLogSMS(
 
     // 2. CREDIT CHECK
     if (sub.smsUsed >= sub.smsCredits) {
-      throw new Error("SMS credits exhausted. Please recharge your account via Settings > Billing.");
+      throw new Error("SMS credits exhausted. Please recharge your account via Billing.");
     }
 
     const senderId = churchData?.settings?.senderId || "ChurchHub";
@@ -113,8 +121,8 @@ export async function sendAndLogSMS(
     // 4. LOG TRANSACTION
     const logData: Omit<SMSLog, 'id'> = {
       churchId,
-      memberId: payload.memberId,
-      memberName: payload.memberName,
+      memberId: payload.memberId || null,
+      memberName: payload.memberName || "Unknown",
       phone: normalizedPhone,
       message: payload.message,
       status: outcome.success ? 'sent' : 'failed',
@@ -123,7 +131,7 @@ export async function sendAndLogSMS(
       retryCount: payload.retryCount || 0,
       providerResponse: outcome.data || null,
       error: outcome.success ? undefined : (outcome.error || 'Delivery Failed'),
-      cost: outcome.success ? 1 : 0, // Standard 1 credit per message
+      cost: outcome.success ? 1 : 0,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
@@ -142,8 +150,8 @@ export async function sendAndLogSMS(
     // LOG FAILURE
     await addDoc(logsRef, {
       churchId,
-      memberId: payload.memberId,
-      memberName: payload.memberName,
+      memberId: payload.memberId || null,
+      memberName: payload.memberName || "Unknown",
       phone: normalizedPhone,
       message: payload.message,
       status: 'failed',
@@ -179,7 +187,7 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
     if (month === currentMonth && day === currentDay) {
       const outcome = await sendAndLogSMS(db, churchId, {
         phone: member.phone,
-        message: `Happy Birthday ${member.name}! God bless your new age. From ${member.churchName || 'Your Church'}.`,
+        message: `Happy Birthday ${member.name}! May God bless your new age with favor, health, and prosperity. — ${member.churchName || 'Our Church'}.`,
         type: 'birthday',
         memberId: doc.id,
         memberName: member.name
