@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -204,7 +203,7 @@ export default function SystemAdminPortal() {
             <div className="text-3xl font-bold text-destructive">{(platformStats?.totalFailed || 0).toLocaleString()}</div>
             <p className="text-[10px] text-muted-foreground mt-1">System-wide error rate</p>
           </CardContent>
-        </div>
+        </Card>
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
