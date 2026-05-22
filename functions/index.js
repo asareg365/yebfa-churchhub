@@ -54,32 +54,13 @@ exports.resetMonthlyCredits = onSchedule(
       const data = doc.data();
       const plan = data.plan || "Basic";
       const credits = planCredits[plan] || 100;
-      batch.update(doc.ref, { "sms.credits": credits });
+      batch.update(doc.ref, { 
+        "sms.credits": credits,
+        "sms.updatedAt": admin.firestore.FieldValue.serverTimestamp()
+      });
     });
 
     return batch.commit();
-  }
-);
-
-/**
- * MANUAL TEST ENDPOINT
- */
-exports.testBirthdaySMS = onRequest(
-  { secrets: [MNOTIFY_API_KEY] },
-  async (req, res) => {
-    const churchId = req.query.churchId || req.body.churchId;
-    if (!churchId) return res.status(400).send("Missing churchId");
-
-    try {
-      const db = admin.firestore();
-      const churchDoc = await db.collection("churches").doc(churchId).get();
-      if (!churchDoc.exists) return res.status(404).send("Church not found");
-
-      const result = await processChurchBirthdays(MNOTIFY_API_KEY.value(), churchDoc);
-      res.status(200).send({ success: true, result });
-    } catch (error) {
-      res.status(500).send({ success: false, error: error.message });
-    }
   }
 );
 
@@ -92,7 +73,6 @@ exports.sendSMS = onCall(
     const { sendSMS: coreSend } = require("./services/smsService");
     const { phone, message, type, memberName, memberId, churchId } = request.data;
     
-    // Authorization check: User should be member of church (Simplified for now)
     if (!churchId) throw new Error("Missing churchId context");
 
     return coreSend(MNOTIFY_API_KEY.value(), churchId, {

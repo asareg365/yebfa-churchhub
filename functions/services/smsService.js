@@ -4,7 +4,8 @@ const admin = require("firebase-admin");
 const { formatPhone } = require("../utils/phoneFormatter");
 
 /**
- * Enterprise SMS Service with Credit & Approval Enforcement
+ * Centralized Enterprise SMS Service with Robust Accounting
+ * Handles: Credit checks, mNotify delivery, balance deduction, and analytics.
  */
 async function sendSMS(apiKey, churchId, payload) {
   const db = admin.firestore();
@@ -16,28 +17,28 @@ async function sendSMS(apiKey, churchId, payload) {
   const formattedPhone = formatPhone(phone);
 
   try {
-    // 1. Validate Church Status & Credits
+    // 1. SECURITY & CREDIT GATEKEEPER
     const churchDoc = await churchRef.get();
     if (!churchDoc.exists) throw new Error("Organization not found");
     
     const churchData = churchDoc.data();
-    const smsConfig = churchData.sms || { enabled: false, credits: 0, approved: false };
+    const smsConfig = churchData.sms || { enabled: false, credits: 0, approved: false, sent: 0, failed: 0 };
 
-    // Support both approved boolean and active string status for robustness
+    // Support both approved boolean and active string status
     const isApproved = smsConfig.approved === true || smsConfig.subscriptionStatus === 'active';
 
     if (!isApproved || !smsConfig.enabled) {
       return { success: false, error: "SMS service is not active or approved for this account." };
     }
 
-    if (smsConfig.credits <= 0) {
+    if ((smsConfig.credits || 0) <= 0) {
       console.warn(`[${churchId}] Credits exhausted. Blocking send.`);
       return { success: false, error: "Insufficient SMS credits" };
     }
 
-    // 2. Prepare API Call (mNotify)
+    // 2. DISPATCH TO mNOTIFY
     const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
-    const finalSenderId = "YEBFA"; // SaaS Shared Approved Sender ID
+    const finalSenderId = "YEBFA"; // Hardcoded approved technical ID
 
     const response = await axios.post(url, {
       recipient: [formattedPhone],
@@ -46,49 +47,74 @@ async function sendSMS(apiKey, churchId, payload) {
       is_schedule: false
     }, { timeout: 10000 });
 
-    const isSent = response.status === 200;
+    // mNotify success is typically HTTP 200 with code "1000" in body
+    const isSent = response.status === 200 && (response.data.code === "1000" || response.data.status === "success");
 
     if (isSent) {
-      const balanceBefore = smsConfig.credits;
-      const balanceAfter = balanceBefore - 1;
-
-      // 3. Atomically deduct credit & log transaction
+      // 3. ATOMIC ACCOUNTING (Only on Success)
       await db.runTransaction(async (t) => {
-        t.update(churchRef, { "sms.credits": balanceAfter });
+        const freshSnap = await t.get(churchRef);
+        const currentCredits = freshSnap.data().sms?.credits || 0;
+        
+        t.update(churchRef, { 
+          "sms.credits": admin.firestore.FieldValue.increment(-1),
+          "sms.sent": admin.firestore.FieldValue.increment(1),
+          "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
+        });
+
         t.add(txRef, {
           type: "debit",
           amount: 1,
-          balanceBefore,
-          balanceAfter,
+          balanceBefore: currentCredits,
+          balanceAfter: currentCredits - 1,
           reason: type || "manual_send",
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
       });
+
+      // 4. LOG COMMUNICATION
+      await logsRef.add({
+        memberName: memberName || "Unknown",
+        memberId: memberId || null,
+        phone: formattedPhone,
+        message,
+        status: "sent",
+        provider: "mnotify",
+        type: type || "other",
+        retryCount: payload.retryCount || 0,
+        cost: 1,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return { success: true, data: response.data };
+    } else {
+      // 5. TRACK PROVIDER FAILURE
+      await churchRef.update({
+        "sms.failed": admin.firestore.FieldValue.increment(1)
+      });
+
+      await logsRef.add({
+        memberName: memberName || "Unknown",
+        phone: formattedPhone,
+        message,
+        status: "failed",
+        error: response.data?.message || "Provider rejection",
+        type: type || "other",
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return { success: false, error: response.data?.message || "Delivery failed by provider" };
     }
 
-    // 4. Log Communication Result
-    await logsRef.add({
-      memberName: memberName || "Unknown",
-      memberId: memberId || null,
-      phone: formattedPhone,
-      message,
-      status: isSent ? "sent" : "failed",
-      provider: "mnotify",
-      type: type || "other",
-      retryCount: payload.retryCount || 0,
-      cost: isSent ? 1 : 0,
-      providerResponse: response.data || {},
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    return { success: isSent, data: response.data };
-
   } catch (error) {
-    console.error(`[${churchId}] SMS Service Error:`, error.message);
+    console.error(`[${churchId}] SMS Critical Error:`, error.message);
     
-    // Log failure for audit trail if it wasn't a pre-check error
+    // Log failure unless it was a pre-check rejection
     if (!["Insufficient SMS credits", "Organization not found"].includes(error.message)) {
+      await churchRef.update({
+        "sms.failed": admin.firestore.FieldValue.increment(1)
+      });
+
       await logsRef.add({
         memberName: memberName || "Unknown",
         phone: formattedPhone,
@@ -96,7 +122,6 @@ async function sendSMS(apiKey, churchId, payload) {
         status: "failed",
         error: error.message,
         type: type || "other",
-        retryCount: 0,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
     }
