@@ -1,19 +1,25 @@
+
 "use client";
 
 import { useMemo } from "react";
-import { Bell, Search, User, Loader2, CheckCircle2, AlertCircle, MessageSquare } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Bell, Search, User, Loader2, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { useUser, useCollection, useFirestore } from "@/firebase";
-import { collection, query, where, limit, orderBy } from "firebase/firestore";
+import { collection, query, where, limit, orderBy, writeBatch, doc } from "firebase/firestore";
 import { useSearch } from "@/context/search-context";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 export function Header() {
   const { user } = useUser();
   const db = useFirestore();
+  const router = useRouter();
+  const { toast } = useToast();
   const { searchTerm, setSearchTerm } = useSearch();
 
   const churchQuery = useMemo(() => {
@@ -43,6 +49,22 @@ export function Header() {
   const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
   const isSuperAdmin = user?.email && SUPER_ADMINS.includes(user.email.toLowerCase().trim());
 
+  const handleClearNotifications = async () => {
+    if (!currentChurch?.id || !notifications || notifications.length === 0) return;
+    
+    const batch = writeBatch(db);
+    notifications.forEach((notif: any) => {
+      batch.delete(doc(db, "churches", currentChurch.id, "smsLogs", notif.id));
+    });
+
+    try {
+      await batch.commit();
+      toast({ title: "Notifications cleared" });
+    } catch (error) {
+      toast({ title: "Clear failed", variant: "destructive" });
+    }
+  };
+
   return (
     <header className="sticky top-0 z-40 w-full bg-white border-b border-border py-3 px-8 mb-6 rounded-2xl flex items-center justify-between shadow-sm">
       <div className="flex items-center gap-4 flex-1 max-w-xl">
@@ -68,9 +90,22 @@ export function Header() {
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-80 p-0 shadow-2xl border-border" align="end">
-            <div className="p-4 border-b border-border bg-muted/20">
-              <h4 className="font-bold text-sm">Recent Notifications</h4>
-              <p className="text-[10px] text-muted-foreground">Latest communication activity</p>
+            <div className="p-4 border-b border-border bg-muted/20 flex items-center justify-between">
+              <div>
+                <h4 className="font-bold text-sm">Recent Notifications</h4>
+                <p className="text-[10px] text-muted-foreground">Latest communication activity</p>
+              </div>
+              {notifications && notifications.length > 0 && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-8 px-2 text-[10px] font-bold text-destructive hover:bg-destructive/10"
+                  onClick={handleClearNotifications}
+                >
+                  <Trash2 className="w-3 h-3 mr-1" />
+                  Clear
+                </Button>
+              )}
             </div>
             <div className="max-h-[300px] overflow-y-auto">
               {notificationsLoading ? (
@@ -102,7 +137,12 @@ export function Header() {
               )}
             </div>
             <div className="p-2 border-t border-border text-center">
-              <button className="text-[10px] text-primary hover:underline font-bold">View Communication Logs</button>
+              <button 
+                onClick={() => router.push("/dashboard/sms/logs")}
+                className="text-[10px] text-primary hover:underline font-bold w-full py-1"
+              >
+                View Communication Logs
+              </button>
             </div>
           </PopoverContent>
         </Popover>
