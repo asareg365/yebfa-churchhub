@@ -133,7 +133,6 @@ function LoginContent() {
         ...SUPER_ADMINS.map(email => email.toLowerCase().trim())
       ]));
 
-      // SaaS Multi-tenant standard church data
       const churchData = {
         name: churchName,
         slug: finalSlug,
@@ -145,11 +144,18 @@ function LoginContent() {
         denomination: "Pentecostal",
         sms: {
           enabled: false,
-          senderId: "YEBFA", // Pre-approved global sender
-          displayName: churchName, // Branding variable
-          credits: 0,
           approved: false,
-          subscriptionStatus: 'pending'
+          status: "Pending",
+          subscriptionStatus: 'pending',
+          senderId: "YEBFA",
+          displayName: churchName,
+          credits: 0,
+          stats: {
+            sent: 0,
+            failed: 0,
+            refunded: 0,
+            queued: 0
+          }
         },
         mustChangePassword: false,
         registeredAt: serverTimestamp(),

@@ -143,11 +143,15 @@ exports.updateChurchStatus = onCall(
     const userEmail = request.auth?.token?.email?.toLowerCase() || "";
     if (!request.auth || !SUPER_ADMINS.includes(userEmail)) throw new HttpsError("permission-denied", "Unauthorized");
     const { churchId, status } = request.data;
+    const isApproved = status === 'active';
+    
     try {
       await admin.firestore().collection("churches").doc(churchId).update({
         "sms.subscriptionStatus": status,
-        "sms.approved": status === 'active',
-        status: status === 'active' ? 'Approved' : 'Suspended'
+        "sms.approved": isApproved,
+        "sms.status": isApproved ? 'Approved' : 'Suspended',
+        "sms.enabled": isApproved,
+        status: isApproved ? 'Approved' : 'Suspended'
       });
       return { success: true };
     } catch (error) { throw new HttpsError("internal", error.message); }
@@ -187,9 +191,9 @@ exports.adminTopUpWallet = onCall(
 exports.sendSMS = onCall(
   { region: "us-central1" },
   async (request) => {
-    const { phone, message, type, churchId } = request.data;
+    const { phone, message, type, churchId, memberName, memberId } = request.data;
     if (!churchId) throw new HttpsError("invalid-argument", "Missing context");
-    try { return await queueSMS(churchId, { phone, message, type }); }
+    try { return await queueSMS(churchId, { phone, message, type, memberName, memberId }); }
     catch (error) { throw new HttpsError("internal", error.message); }
   }
 );
