@@ -40,7 +40,11 @@ exports.getSystemStats = onCall(async (request) => {
   if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email.toLowerCase())) {
     throw new HttpsError("permission-denied", "Unauthorized access to system stats");
   }
-  return getPlatformStats();
+  try {
+    return await getPlatformStats();
+  } catch (error) {
+    throw new HttpsError("internal", error.message);
+  }
 });
 
 exports.adminTopUpWallet = onCall(async (request) => {
@@ -51,8 +55,12 @@ exports.adminTopUpWallet = onCall(async (request) => {
     throw new HttpsError("permission-denied", "Only system admins can top up wallets");
   }
 
-  await creditWallet(churchId, amount, `admin_manual_topup`, request.auth.token.email);
-  return { success: true };
+  try {
+    await creditWallet(churchId, amount, `admin_manual_topup`, request.auth.token.email);
+    return { success: true };
+  } catch (error) {
+    throw new HttpsError("internal", error.message);
+  }
 });
 
 exports.updateChurchStatus = onCall(async (request) => {
@@ -63,14 +71,17 @@ exports.updateChurchStatus = onCall(async (request) => {
     throw new HttpsError("permission-denied", "Only system admins can manage status");
   }
 
-  const db = admin.firestore();
-  await db.collection("churches").doc(churchId).update({
-    "sms.subscriptionStatus": status,
-    "sms.approved": status === "active",
-    "sms.enabled": status === "active"
-  });
-
-  return { success: true };
+  try {
+    const db = admin.firestore();
+    await db.collection("churches").doc(churchId).update({
+      "sms.subscriptionStatus": status,
+      "sms.approved": status === "active",
+      "sms.enabled": status === "active"
+    });
+    return { success: true };
+  } catch (error) {
+    throw new HttpsError("internal", error.message);
+  }
 });
 
 /**
@@ -114,9 +125,14 @@ exports.processSmsCampaigns = onSchedule(
 exports.sendSMS = onCall(async (request) => {
   const { phone, message, type, memberName, memberId, churchId } = request.data;
   if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId context");
-  return queueSMS(churchId, {
-    phone, message, type, memberName, memberId
-  });
+  
+  try {
+    return await queueSMS(churchId, {
+      phone, message, type, memberName, memberId
+    });
+  } catch (error) {
+    throw new HttpsError("internal", error.message);
+  }
 });
 
 /**

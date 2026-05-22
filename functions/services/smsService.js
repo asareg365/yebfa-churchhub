@@ -163,7 +163,7 @@ async function processSMSQueueItem(apiKey, messageId, data) {
       is_schedule: false
     }, { timeout: 15000 });
 
-    const isSent = response.status === 200 && (response.data.code === "1000" || response.data.status === "success");
+    const isSent = response.status === 200 && (response.data?.code === "1000" || response.data?.status === "success");
 
     if (isSent) {
       await queueRef.update({ 
@@ -256,7 +256,7 @@ async function getPlatformStats() {
     totalSent,
     totalFailed,
     globalCreditPool: totalCredits,
-    timestamp: admin.firestore.FieldValue.serverTimestamp()
+    timestamp: new Date().toISOString() // Must be JSON-serializable for onCall
   };
 }
 
