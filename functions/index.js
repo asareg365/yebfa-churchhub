@@ -20,9 +20,11 @@ const { processSMSQueueItem, queueSMS, creditWallet, getPlatformStats, handleMNo
 
 /**
  * SMS QUEUE DISPATCHER
+ * Regional Fix: Forced to us-central1 to align with Firestore and platform resources.
  */
 exports.onSmsQueued = onDocumentCreated(
   {
+    region: "us-central1",
     document: "smsQueue/{messageId}",
     secrets: [MNOTIFY_API_KEY]
   },
@@ -35,68 +37,80 @@ exports.onSmsQueued = onDocumentCreated(
  * MNOTIFY WEBHOOK
  * Receives delivery updates from provider.
  */
-exports.mnotifyDeliveryWebhook = onRequest(async (req, res) => {
-  return handleMNotifyWebhook(req, res);
-});
+exports.mnotifyDeliveryWebhook = onRequest(
+  { region: "us-central1" },
+  async (req, res) => {
+    return handleMNotifyWebhook(req, res);
+  }
+);
 
 /**
  * ADMIN CALLABLES
  */
-exports.getSystemStats = onCall(async (request) => {
-  const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
-  const userEmail = request.auth?.token?.email?.toLowerCase() || "";
-  
-  if (!request.auth || !SUPER_ADMINS.includes(userEmail)) {
-    throw new HttpsError("permission-denied", "Unauthorized access to system stats");
-  }
+exports.getSystemStats = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+    const userEmail = request.auth?.token?.email?.toLowerCase() || "";
+    
+    if (!request.auth || !SUPER_ADMINS.includes(userEmail)) {
+      throw new HttpsError("permission-denied", "Unauthorized access to system stats");
+    }
 
-  try {
-    const stats = await getPlatformStats();
-    return stats;
-  } catch (error) {
-    console.error("System Stats Error:", error);
-    throw new HttpsError("internal", error.message || "Failed to retrieve platform stats");
+    try {
+      const stats = await getPlatformStats();
+      return stats;
+    } catch (error) {
+      console.error("System Stats Error:", error);
+      throw new HttpsError("internal", error.message || "Failed to retrieve platform stats");
+    }
   }
-});
+);
 
-exports.adminTopUpWallet = onCall(async (request) => {
-  const { churchId, amount } = request.data;
-  const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
-  const userEmail = request.auth?.token?.email?.toLowerCase() || "";
-  
-  if (!request.auth || !SUPER_ADMINS.includes(userEmail)) {
-    throw new HttpsError("permission-denied", "Only system admins can top up wallets");
-  }
+exports.adminTopUpWallet = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const { churchId, amount } = request.data;
+    const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+    const userEmail = request.auth?.token?.email?.toLowerCase() || "";
+    
+    if (!request.auth || !SUPER_ADMINS.includes(userEmail)) {
+      throw new HttpsError("permission-denied", "Only system admins can top up wallets");
+    }
 
-  try {
-    await creditWallet(churchId, amount, `admin_manual_topup`, userEmail);
-    return { success: true };
-  } catch (error) {
-    throw new HttpsError("internal", error.message);
+    try {
+      await creditWallet(churchId, amount, `admin_manual_topup`, userEmail);
+      return { success: true };
+    } catch (error) {
+      throw new HttpsError("internal", error.message);
+    }
   }
-});
+);
 
-exports.updateChurchStatus = onCall(async (request) => {
-  const { churchId, status } = request.data;
-  const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
-  const userEmail = request.auth?.token?.email?.toLowerCase() || "";
-  
-  if (!request.auth || !SUPER_ADMINS.includes(userEmail)) {
-    throw new HttpsError("permission-denied", "Only system admins can manage status");
-  }
+exports.updateChurchStatus = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const { churchId, status } = request.data;
+    const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+    const userEmail = request.auth?.token?.email?.toLowerCase() || "";
+    
+    if (!request.auth || !SUPER_ADMINS.includes(userEmail)) {
+      throw new HttpsError("permission-denied", "Only system admins can manage status");
+    }
 
-  try {
-    const db = admin.firestore();
-    await db.collection("churches").doc(churchId).update({
-      "sms.subscriptionStatus": status,
-      "sms.approved": status === "active",
-      "sms.enabled": status === "active"
-    });
-    return { success: true };
-  } catch (error) {
-    throw new HttpsError("internal", error.message);
+    try {
+      const db = admin.firestore();
+      await db.collection("churches").doc(churchId).update({
+        "sms.subscriptionStatus": status,
+        "sms.approved": status === "active",
+        "sms.enabled": status === "active"
+      });
+      return { success: true };
+    } catch (error) {
+      throw new HttpsError("internal", error.message);
+    }
   }
-});
+);
 
 /**
  * GLOBAL AUTOMATION DISPATCHERS
@@ -105,6 +119,7 @@ exports.runDailyAutomations = onSchedule(
   {
     schedule: "0 6 * * *",
     timeZone: "UTC",
+    region: "us-central1",
     secrets: [MNOTIFY_API_KEY],
     timeoutSeconds: 540,
     memory: "512MiB"
@@ -125,6 +140,7 @@ exports.processSmsCampaigns = onSchedule(
   {
     schedule: "*/10 * * * *",
     timeZone: "UTC",
+    region: "us-central1",
     secrets: [MNOTIFY_API_KEY]
   },
   async (event) => {
@@ -135,18 +151,21 @@ exports.processSmsCampaigns = onSchedule(
 /**
  * SECURE CALLABLE FOR FRONTEND
  */
-exports.sendSMS = onCall(async (request) => {
-  const { phone, message, type, memberName, memberId, churchId } = request.data;
-  if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId context");
-  
-  try {
-    return await queueSMS(churchId, {
-      phone, message, type, memberName, memberId
-    });
-  } catch (error) {
-    throw new HttpsError("internal", error.message);
+exports.sendSMS = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const { phone, message, type, memberName, memberId, churchId } = request.data;
+    if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId context");
+    
+    try {
+      return await queueSMS(churchId, {
+        phone, message, type, memberName, memberId
+      });
+    } catch (error) {
+      throw new HttpsError("internal", error.message);
+    }
   }
-});
+);
 
 /**
  * RETRY ENGINE
@@ -155,6 +174,7 @@ exports.retryFailedSMS = onSchedule(
   {
     schedule: "every 30 minutes",
     timeZone: "Africa/Accra",
+    region: "us-central1",
     secrets: [MNOTIFY_API_KEY],
   },
   async (event) => {
