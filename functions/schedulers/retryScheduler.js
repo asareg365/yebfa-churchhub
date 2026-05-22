@@ -1,9 +1,9 @@
 
 const admin = require("firebase-admin");
-const { sendSMS } = require("../services/smsService");
 
 /**
- * Retries failed SMS logs that haven't exceeded retry limits
+ * Retries failed SMS logs by placing them back into the global queue
+ * instead of sending directly. This maintains the 'Charge-Then-Send' integrity.
  */
 async function retryFailedSMS(apiKey) {
   const db = admin.firestore();
@@ -11,43 +11,45 @@ async function retryFailedSMS(apiKey) {
 
   for (const churchDoc of churchesSnap.docs) {
     const churchId = churchDoc.id;
-    const churchData = churchDoc.data();
 
     // Query logs where status is failed and retryCount < 3
     const failedLogsSnap = await churchDoc.ref.collection("smsLogs")
       .where("status", "==", "failed")
       .where("retryCount", "<", 3)
-      .limit(20) // Batch processing
+      .limit(20)
       .get();
+
+    if (failedLogsSnap.empty) continue;
+
+    const queueRef = db.collection("smsQueue");
 
     for (const logDoc of failedLogsSnap.docs) {
       const log = logDoc.data();
       
-      const result = await sendSMS(apiKey, churchId, {
+      // Re-enqueue the message
+      await queueRef.add({
+        churchId,
         phone: log.phone,
         message: log.message,
         type: log.type,
-        memberName: log.memberName,
-        memberId: log.memberId,
+        status: "queued",
         retryCount: (log.retryCount || 0) + 1,
-        senderId: churchData.settings?.senderId
+        maxRetries: 3,
+        cost: log.cost || 1,
+        metadata: {
+          memberId: log.memberId || null,
+          memberName: log.memberName || null,
+        },
+        scheduledAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
-      if (result.success) {
-        // Remove the old failed log after successful resend
-        await logDoc.ref.delete();
-      } else {
-        // Update the log with the new retry count and error
-        await logDoc.ref.update({
-          retryCount: admin.firestore.FieldValue.increment(1),
-          error: result.error,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-      }
+      // Remove the old failed log to keep history clean (a new one will be created)
+      await logDoc.ref.delete();
     }
   }
   
-  return null;
+  return { success: true };
 }
 
 module.exports = { retryFailedSMS };

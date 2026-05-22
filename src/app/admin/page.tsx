@@ -113,9 +113,13 @@ export default function SystemAdminPortal() {
   useEffect(() => {
     if (user && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       const fetchStats = httpsCallable(functions, 'getSystemStats');
-      fetchStats().then((res: any) => {
-        setPlatformStats(res.data);
-      });
+      fetchStats()
+        .then((res: any) => {
+          setPlatformStats(res.data);
+        })
+        .catch((err) => {
+          console.error("System Stats Error:", err);
+        });
     }
   }, [user, functions]);
 
@@ -150,7 +154,10 @@ export default function SystemAdminPortal() {
   if (userLoading || (user && !SUPER_ADMINS.includes(user.email?.toLowerCase() || ''))) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-10 h-10 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Authenticating System Access...</p>
+        </div>
       </div>
     );
   }
