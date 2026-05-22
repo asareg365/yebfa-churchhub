@@ -1,4 +1,3 @@
-
 'use client';
 
 import { 
@@ -50,7 +49,7 @@ function normalizePhone(phone: string): string {
 
 /**
  * Optimized push to Enterprise Queue via Cloud Function bridge.
- * This function no longer sends directly; it enqueues for the worker.
+ * Region is explicitly forced to us-central1 to ensure connectivity.
  */
 export async function sendAndLogSMS(
   db: Firestore,
@@ -64,7 +63,7 @@ export async function sendAndLogSMS(
     retryCount?: number;
   }
 ) {
-  const functions = getFunctions();
+  const functions = getFunctions(undefined, "us-central1");
   const sendSMSFn = httpsCallable(functions, "sendSMS");
 
   try {

@@ -1,4 +1,3 @@
-
 const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
@@ -20,7 +19,7 @@ const { processSMSQueueItem, queueSMS, creditWallet, getPlatformStats, handleMNo
 
 /**
  * SMS QUEUE DISPATCHER
- * Regional Fix: Forced to us-central1 to align with Firestore and platform resources.
+ * Region: us-central1 (Consolidated to single region for performance)
  */
 exports.onSmsQueued = onDocumentCreated(
   {
@@ -35,7 +34,7 @@ exports.onSmsQueued = onDocumentCreated(
 
 /**
  * MNOTIFY WEBHOOK
- * Receives delivery updates from provider.
+ * Region: us-central1
  */
 exports.mnotifyDeliveryWebhook = onRequest(
   { region: "us-central1" },
@@ -118,7 +117,7 @@ exports.updateChurchStatus = onCall(
 exports.runDailyAutomations = onSchedule(
   {
     schedule: "0 6 * * *",
-    timeZone: "UTC",
+    timeZone: "Africa/Accra",
     region: "us-central1",
     secrets: [MNOTIFY_API_KEY],
     timeoutSeconds: 540,
@@ -139,7 +138,7 @@ exports.runDailyAutomations = onSchedule(
 exports.processSmsCampaigns = onSchedule(
   {
     schedule: "*/10 * * * *",
-    timeZone: "UTC",
+    timeZone: "Africa/Accra",
     region: "us-central1",
     secrets: [MNOTIFY_API_KEY]
   },
