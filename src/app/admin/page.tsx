@@ -7,10 +7,7 @@ import {
   ShieldCheck,
   Search,
   MoreVertical,
-  CheckCircle2,
   Loader2,
-  Trash2,
-  Smartphone,
   LogOut,
   Plus,
   Zap,
@@ -18,10 +15,10 @@ import {
   Ban,
   Activity,
   CreditCard,
-  History,
   TrendingUp,
   DollarSign,
-  Users
+  Users,
+  Info
 } from 'lucide-react';
 import {
   Card,
@@ -60,7 +57,6 @@ import { Label } from '@/components/ui/label';
 import { useCollection, useFirestore, useUser, useAuth, useFunctions } from '@/firebase';
 import {
   collection,
-  doc,
   query,
   limit,
 } from 'firebase/firestore';
@@ -131,7 +127,7 @@ export default function SystemAdminPortal() {
     const updateFn = httpsCallable(functions, 'updateChurchStatus');
     try {
       await updateFn({ churchId, status });
-      toast({ title: `Organization ${status.toUpperCase()}`, description: "Status updated in high-integrity ledger." });
+      toast({ title: `Organization ${status.toUpperCase()}`, description: "Status updated in secure ledger." });
     } catch (e: any) {
       toast({ title: "Operation Failed", description: e.message, variant: "destructive" });
     } finally {
@@ -145,7 +141,7 @@ export default function SystemAdminPortal() {
     const topUpFn = httpsCallable(functions, 'adminTopUpWallet');
     try {
       await topUpFn({ churchId: managingSmsId, amount: parseInt(topUpAmount) });
-      toast({ title: "Credits Allocated", description: `${topUpAmount} credits added with transaction audit.` });
+      toast({ title: "Credits Allocated", description: `${topUpAmount} SMS credits added successfully.` });
       setManagingSmsId(null);
     } catch (e: any) {
       toast({ title: "Top-up Failed", description: e.message, variant: "destructive" });
@@ -192,7 +188,7 @@ export default function SystemAdminPortal() {
           <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><DollarSign className="w-3 h-3"/> Platform Revenue</CardTitle></CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-accent">GH₵{(platformStats?.totalRevenue || 0).toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">All-time credit top-ups</p>
+            <p className="text-[10px] text-muted-foreground mt-1">All-time top-up value in GH₵</p>
           </CardContent>
         </Card>
         <Card className="glass">
@@ -208,7 +204,7 @@ export default function SystemAdminPortal() {
             <div className="text-3xl font-bold text-destructive">{(platformStats?.totalFailed || 0).toLocaleString()}</div>
             <p className="text-[10px] text-muted-foreground mt-1">System-wide error rate</p>
           </CardContent>
-        </Card>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
@@ -230,7 +226,7 @@ export default function SystemAdminPortal() {
                   <TableHead>Ministry</TableHead>
                   <TableHead>Plan</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Balance</TableHead>
+                  <TableHead>Balance (Credits)</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -299,7 +295,7 @@ export default function SystemAdminPortal() {
 
         <Card className="glass h-fit">
           <CardHeader>
-            <CardTitle className="text-sm font-bold uppercase tracking-widest">Top Spending Tenants</CardTitle>
+            <CardTitle className="text-sm font-bold uppercase tracking-widest">Top Active Tenants</CardTitle>
             <CardDescription className="text-xs">Based on total SMS volume dispatched.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -311,7 +307,7 @@ export default function SystemAdminPortal() {
                   </div>
                   <div>
                     <p className="text-xs font-bold truncate max-w-[120px]">{spener.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{spener.sent.toLocaleString()} Sent</p>
+                    <p className="text-[10px] text-muted-foreground">{spener.sent.toLocaleString()} Messages</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -333,21 +329,24 @@ export default function SystemAdminPortal() {
         <DialogContent className="glass">
           <DialogHeader>
             <DialogTitle>Source-of-Truth Allocation</DialogTitle>
-            <DialogDescription>Adding credits for <strong>{activeChurchSms?.name}</strong>. This action is recorded in the immutable ledger.</DialogDescription>
+            <DialogDescription>Adding credits for <strong>{activeChurchSms?.name}</strong>. Transactions are recorded in GH₵.</DialogDescription>
           </DialogHeader>
           <div className="py-6 space-y-4">
             <div className="p-4 rounded-xl bg-muted/20 border flex justify-between items-center">
               <span className="text-sm font-medium">Current Balance:</span>
-              <span className="text-xl font-bold">{(activeChurchSms?.sms?.credits || 0).toLocaleString()}</span>
+              <span className="text-xl font-bold">{(activeChurchSms?.sms?.credits || 0).toLocaleString()} Credits</span>
             </div>
             <div className="space-y-2">
-              <Label>Amount to Add</Label>
+              <Label>SMS Credits to Add</Label>
               <div className="flex gap-2">
                 <Input type="number" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="h-12 bg-white" />
                 <Button className="bg-primary h-12 px-6" onClick={handleTopUp} disabled={isProcessing}>
                   {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 </Button>
               </div>
+              <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1">
+                <Info className="w-3 h-3" /> Note: 1 SMS Credit = 1 Message segment. Top-up assumes payment in GH₵.
+              </p>
             </div>
           </div>
           <DialogFooter>

@@ -29,8 +29,6 @@ function isPotentiallyMalicious(message) {
 
 /**
  * SMS QUEUE WRITER
- * Supports dedupeKey for enterprise-grade idempotency.
- * Now includes ABUSE DETECTION.
  */
 async function queueSMS(churchId, payload) {
   const db = admin.firestore();
@@ -43,13 +41,11 @@ async function queueSMS(churchId, payload) {
   
   if (!isApproved) return { success: false, error: "SMS service not approved for this account" };
 
-  // 1. CONTENT VALIDATION (Abuse Detection)
   if (payload.message.length > MAX_MESSAGE_LENGTH) {
     return { success: false, error: `Message too long (Max ${MAX_MESSAGE_LENGTH} chars)` };
   }
 
   if (isPotentiallyMalicious(payload.message)) {
-    // Log abuse attempt for admin review
     await db.collection("smsAbuseLogs").add({
       churchId,
       churchName: churchData.name,
@@ -62,8 +58,6 @@ async function queueSMS(churchId, payload) {
   }
 
   const queueRef = db.collection("smsQueue");
-
-  // 2. RATE LIMITING (Plan-based Concurrency)
   const currentPlan = churchData.plan || "Basic";
   const limit = PLAN_CONCURRENCY_LIMITS[currentPlan] || 50;
 
@@ -76,14 +70,13 @@ async function queueSMS(churchId, payload) {
   if (currentQueued.data().count >= limit) {
     return { 
       success: false, 
-      error: `Concurrency limit reached for ${currentPlan} plan. Please wait for current messages to send or upgrade.` 
+      error: `Concurrency limit reached for ${currentPlan} plan.` 
     };
   }
 
   const cost = payload.cost || 1;
   const dedupeKey = payload.dedupeKey || null;
 
-  // 3. DEDUPLICATION CHECK
   if (dedupeKey) {
     const existing = await queueRef
       .where("dedupeKey", "==", dedupeKey)
@@ -95,7 +88,7 @@ async function queueSMS(churchId, payload) {
       return { 
         success: true, 
         skipped: true, 
-        reason: "Duplicate message prevented by idempotency key" 
+        reason: "Duplicate prevented" 
       };
     }
   }
@@ -105,7 +98,6 @@ async function queueSMS(churchId, payload) {
     ? payload.message 
     : `${payload.message}${signature}`;
 
-  // 4. ADD TO QUEUE
   await queueRef.add({
     churchId,
     phone: formatPhone(payload.phone),
@@ -133,7 +125,7 @@ async function queueSMS(churchId, payload) {
 async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, type) {
   const walletSnap = await t.get(walletRef);
   const walletData = walletSnap.exists ? walletSnap.data() : { balance: 0 };
-  const currentBalance = walletData.balance || 0;
+  const currentBalance = Number(walletData.balance || 0);
 
   if (currentBalance < cost) {
     throw new Error("Insufficient SMS credits");
@@ -147,11 +139,13 @@ async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, t
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   });
 
-  t.update(churchRef, { 
-    "sms.credits": newBalance,
-    "sms.sent": admin.firestore.FieldValue.increment(1),
-    "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
-  });
+  t.set(churchRef, { 
+    sms: {
+      credits: newBalance,
+      sent: admin.firestore.FieldValue.increment(1),
+      lastSentAt: admin.firestore.FieldValue.serverTimestamp()
+    }
+  }, { merge: true });
 
   const txRef = admin.firestore().collection("smsTransactions").doc();
   t.set(txRef, {
@@ -177,7 +171,7 @@ async function refundWallet(churchId, amount, reason, messageId) {
   await db.runTransaction(async (t) => {
     const walletSnap = await t.get(walletRef);
     const walletData = walletSnap.exists ? walletSnap.data() : { balance: 0 };
-    const currentBalance = walletData.balance || 0;
+    const currentBalance = Number(walletData.balance || 0);
     const newBalance = currentBalance + amount;
 
     t.update(walletRef, {
@@ -185,10 +179,12 @@ async function refundWallet(churchId, amount, reason, messageId) {
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    t.update(churchRef, {
-      "sms.credits": newBalance,
-      "sms.refunded": admin.firestore.FieldValue.increment(1)
-    });
+    t.set(churchRef, {
+      sms: {
+        credits: newBalance,
+        refunded: admin.firestore.FieldValue.increment(1)
+      }
+    }, { merge: true });
 
     const txRef = db.collection("smsTransactions").doc();
     t.set(txRef, {
@@ -211,29 +207,32 @@ async function creditWallet(churchId, amount, reason = "topup", processedBy = "s
   const db = admin.firestore();
   const walletRef = db.collection("smsWallets").doc(churchId);
   const churchRef = db.collection("churches").doc(churchId);
+  const topupValue = Number(amount);
 
   await db.runTransaction(async (t) => {
     const walletSnap = await t.get(walletRef);
     const walletData = walletSnap.exists ? walletSnap.data() : { balance: 0, totalTopups: 0 };
-    const currentBalance = walletData.balance || 0;
-    const newBalance = currentBalance + amount;
+    const currentBalance = Number(walletData.balance || 0);
+    const newBalance = currentBalance + topupValue;
 
     t.set(walletRef, {
       balance: newBalance,
-      totalTopups: (walletData.totalTopups || 0) + amount,
+      totalTopups: (walletData.totalTopups || 0) + topupValue,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 
-    t.update(churchRef, {
-      "sms.credits": newBalance,
-      "sms.lastTopupAt": admin.firestore.FieldValue.serverTimestamp()
-    });
+    t.set(churchRef, {
+      sms: {
+        credits: newBalance,
+        lastTopupAt: admin.firestore.FieldValue.serverTimestamp()
+      }
+    }, { merge: true });
 
     const txRef = db.collection("smsTransactions").doc();
     t.set(txRef, {
       churchId,
       type: "credit",
-      amount,
+      amount: topupValue,
       balanceBefore: currentBalance,
       balanceAfter: newBalance,
       reason,
@@ -255,7 +254,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
   const logsRef = churchRef.collection("smsLogs");
   const reportsRef = db.collection("smsDeliveryReports");
 
-  // STEP 1: LOCK MESSAGE (Atomic Claim)
   const claimed = await db.runTransaction(async (t) => {
     const snap = await t.get(queueRef);
     if (!snap.exists) return false;
@@ -272,12 +270,10 @@ async function processSMSQueueItem(apiKey, messageId, data) {
   if (!claimed) return null;
 
   try {
-    // STEP 2: DEBIT WALLET
     await db.runTransaction(async (t) => {
       await debitWallet(t, walletRef, churchRef, data.cost || 1, churchId, messageId, data.type);
     });
 
-    // STEP 3: SEND SMS
     const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
     const response = await axios.post(url, {
       recipient: [data.phone],
@@ -298,7 +294,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
         providerMessageId: providerId
       });
       
-      // LOG TO AUDIT
       await logsRef.add({
         memberName: data.metadata?.memberName || "Recipient",
         memberId: data.metadata?.memberId,
@@ -312,7 +307,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
-      // CREATE DELIVERY REPORT BRIDGE
       await reportsRef.add({
         churchId,
         messageId,
@@ -341,20 +335,16 @@ async function processSMSQueueItem(apiKey, messageId, data) {
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
     } else {
-      // PERMANENT FAILURE
       await queueRef.update({ 
         status: "failed", 
         error: error.message,
         updatedAt: admin.firestore.FieldValue.serverTimestamp() 
       });
 
-      // Only refund if we successfully debited but then the provider failed
       if (error.message !== "Insufficient SMS credits") {
         try {
           await refundWallet(churchId, data.cost || 1, "sms_delivery_failed", messageId);
-        } catch (refundError) {
-          console.error(`[Refund System] Critical Error:`, refundError.message);
-        }
+        } catch (refundError) {}
       }
 
       try {
@@ -376,18 +366,12 @@ async function processSMSQueueItem(apiKey, messageId, data) {
 
 /**
  * MNOTIFY WEBHOOK HANDLER
- * Receives real-time delivery updates from provider.
  */
 async function handleMNotifyWebhook(req, res) {
   const db = admin.firestore();
   const payload = req.body; 
   
-  if (!payload.message_id) {
-    console.warn("[Webhook] Received request without message_id:", payload);
-    return res.status(200).send("Ignored: No message_id");
-  }
-
-  console.log(`[Webhook] Processing update for providerId: ${payload.message_id}, status: ${payload.status}`);
+  if (!payload.message_id) return res.status(200).send("Ignored: No message_id");
 
   try {
     const providerId = payload.message_id;
@@ -398,10 +382,7 @@ async function handleMNotifyWebhook(req, res) {
       .limit(1)
       .get();
 
-    if (reportsSnap.empty) {
-      console.warn(`[Webhook] No report found for providerId: ${providerId}`);
-      return res.status(200).send("Logged: Report not found");
-    }
+    if (reportsSnap.empty) return res.status(200).send("Logged: Not found");
 
     const reportDoc = reportsSnap.docs[0];
     const reportData = reportDoc.data();
@@ -436,9 +417,7 @@ async function handleMNotifyWebhook(req, res) {
     }
 
     return res.status(200).send("Webhook Processed");
-
   } catch (err) {
-    console.error("[Webhook Error]:", err.message);
     return res.status(500).send("Processing Error");
   }
 }
@@ -451,7 +430,7 @@ async function getPlatformStats() {
   try {
     const churchesSnap = await db.collection("churches").get();
     const walletsSnap = await db.collection("smsWallets").get();
-    const transactionsSnap = await db.collection("smsTransactions").where("type", "in", ["credit", "topup"]).get();
+    const transactionsSnap = await db.collection("smsTransactions").where("type", "in", ["credit"]).get();
 
     let totalSent = 0;
     let totalFailed = 0;
@@ -499,7 +478,6 @@ async function getPlatformStats() {
       timestamp: new Date().toISOString()
     };
   } catch (err) {
-    console.error("Error in getPlatformStats:", err);
     throw err;
   }
 }
