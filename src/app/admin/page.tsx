@@ -144,7 +144,7 @@ export default function SystemAdminPortal() {
       toast({ title: "Credits Allocated", description: `${topUpAmount} SMS credits added successfully.` });
       setManagingSmsId(null);
     } catch (e: any) {
-      toast({ title: "Top-up Failed", description: e.message, variant: "destructive" });
+      toast({ title: "Top-up Failed", description: e.message || "Internal error during credit allocation.", variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
