@@ -28,6 +28,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { useUser, useFirestore, useCollection, useAuth } from "@/firebase";
 import { doc, updateDoc, query, collection, where, limit } from "firebase/firestore";
 import { updatePassword } from "firebase/auth";
