@@ -9,22 +9,13 @@ import {
   MoreVertical,
   CheckCircle2,
   Loader2,
-  Pencil,
-  UserPlus,
   Trash2,
-  Mail,
-  Plus,
-  Hash,
-  LogOut,
-  Calendar,
-  KeyRound,
-  History,
   Smartphone,
-  CreditCard,
-  Ban,
-  CheckCircle,
+  LogOut,
+  Plus,
   Zap,
-  TrendingUp
+  CheckCircle,
+  Ban
 } from 'lucide-react';
 import {
   Card,
@@ -66,11 +57,7 @@ import {
   doc,
   updateDoc,
   query,
-  setDoc,
   serverTimestamp,
-  arrayUnion,
-  arrayRemove,
-  where,
   increment,
   addDoc,
 } from 'firebase/firestore';
@@ -89,14 +76,17 @@ export default function SystemAdminPortal() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [editingChurch, setEditingChurch] = useState<any>(null);
   const [managingSmsId, setManagingSmsId] = useState<string | null>(null);
   const [topUpAmount, setTopUpAmount] = useState('500');
 
-  const { data: rawChurches, loading: collectionLoading } = useCollection(
-    query(collection(db, 'churches'))
-  );
+  // Memoized query that only executes if the user is a verified super admin
+  const churchesQuery = useMemo(() => {
+    const email = user?.email?.toLowerCase().trim();
+    if (!user || !email || !SUPER_ADMINS.includes(email)) return null;
+    return query(collection(db, 'churches'));
+  }, [db, user]);
+
+  const { data: rawChurches, loading: collectionLoading } = useCollection(churchesQuery);
 
   const sortedChurches = useMemo(() => {
     if (!rawChurches) return [];
@@ -168,7 +158,14 @@ export default function SystemAdminPortal() {
     }
   };
 
-  if (userLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
+  // Block rendering and data fetching if unauthorized
+  if (userLoading || (user && !SUPER_ADMINS.includes(user.email?.toLowerCase() || ''))) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-8 space-y-8">
@@ -227,7 +224,14 @@ export default function SystemAdminPortal() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedChurches.map((church) => (
+              {collectionLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-20">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+                    <p className="mt-2 text-xs text-muted-foreground">Retrieving organization records...</p>
+                  </TableCell>
+                </TableRow>
+              ) : sortedChurches.map((church) => (
                 <TableRow key={church.id}>
                   <TableCell>
                     <div className="font-bold">{church.name}</div>
@@ -280,6 +284,13 @@ export default function SystemAdminPortal() {
                   </TableCell>
                 </TableRow>
               ))}
+              {!collectionLoading && sortedChurches.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">
+                    No organizations found matching your search.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -313,7 +324,7 @@ export default function SystemAdminPortal() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setManagingSmsId(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setManagingSmsId(null)}>Cancel</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
