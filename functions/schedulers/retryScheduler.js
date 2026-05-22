@@ -12,10 +12,12 @@ async function retryFailedSMS(apiKey) {
   for (const churchDoc of churchesSnap.docs) {
     const churchId = churchDoc.id;
 
-    // Query logs where status is failed and retryCount < 3
+    // Query logs where status is failed, retryCount < 3, and hasn't been requeued yet.
+    // This query requires a composite index: status (ASC), requeued (ASC), retryCount (ASC)
     const failedLogsSnap = await churchDoc.ref.collection("smsLogs")
       .where("status", "==", "failed")
       .where("retryCount", "<", 3)
+      .where("requeued", "!=", true)
       .limit(20)
       .get();
 
