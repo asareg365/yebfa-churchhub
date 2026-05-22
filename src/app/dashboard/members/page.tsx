@@ -1,7 +1,8 @@
+
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, Search, Download, MoreVertical, QrCode, Mail, Phone, Loader2, Users as UsersIcon, Trash2, FileUp, CheckCircle2, AlertCircle, ChevronDown, Check, Pencil } from "lucide-react";
+import { Plus, Search, MoreVertical, QrCode, Loader2, Users as UsersIcon, Trash2, FileUp, ChevronDown, Check, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -123,22 +124,17 @@ export default function MembersPage() {
   });
 
   /**
-   * Generates a searchable MM-DD string for efficient birthday querying
+   * Generates a searchable MMDD string for efficient birthday querying
    */
   const calculateBirthdayKey = (dobString: any) => {
     if (!dobString) return "";
-    
-    // Handle both string format and Firestore Timestamp
-    const dob = dobString.toDate 
-      ? dobString.toDate() 
-      : new Date(dobString);
-
+    const dob = new Date(dobString);
     if (isNaN(dob.getTime())) return "";
 
     const month = String(dob.getUTCMonth() + 1).padStart(2, '0');
     const day = String(dob.getUTCDate()).padStart(2, '0');
     
-    return `${month}-${day}`;
+    return `${month}${day}`;
   };
 
   const toggleSociety = (society: string, isEdit: boolean = false) => {

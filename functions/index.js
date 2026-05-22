@@ -1,5 +1,5 @@
 
-const { onRequest, onCall } = require("firebase-functions/v2/https");
+const { onCall } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
@@ -16,7 +16,7 @@ const { processVisitorFollowups } = require("./schedulers/visitorScheduler");
 const { processEventReminders } = require("./schedulers/eventScheduler");
 const { processScheduledCampaigns } = require("./schedulers/campaignScheduler");
 const { retryFailedSMS: processRetries } = require("./schedulers/retryScheduler");
-const { processSMSQueueItem } = require("./services/smsService");
+const { processSMSQueueItem, queueSMS } = require("./services/smsService");
 
 /**
  * SMS QUEUE DISPATCHER (Main Engine)
@@ -54,6 +54,7 @@ exports.runDailyAutomations = onSchedule(
 
 /**
  * CAMPAIGN PROCESSOR
+ * Checks every 10 mins for scheduled bulk messages.
  */
 exports.processSmsCampaigns = onSchedule(
   {
@@ -84,11 +85,10 @@ exports.resetMonthlyCredits = onSchedule(
       const planCredits = { "Basic": 100, "Standard": 1000, "Premium": 5000 };
       const credits = planCredits[plan] || 100;
       
-      const walletRef = db.collection("smsWallets").doc(doc.id);
-      await walletRef.set({
-        balance: credits,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      await doc.ref.update({
+        "sms.credits": credits,
+        "sms.resetAt": admin.firestore.FieldValue.serverTimestamp()
+      });
     }
     return null;
   }
@@ -96,10 +96,9 @@ exports.resetMonthlyCredits = onSchedule(
 
 /**
  * SECURE CALLABLE FOR FRONTEND
- * Replaced direct sending with Queue Writing for reliability.
+ * Bridges frontend requests to the centralized Queue.
  */
 exports.sendSMS = onCall(async (request) => {
-  const { queueSMS } = require("./services/smsService");
   const { phone, message, type, memberName, memberId, churchId } = request.data;
   
   if (!churchId) throw new Error("Missing churchId context");

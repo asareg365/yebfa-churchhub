@@ -6,9 +6,11 @@ const { parseTemplate } = require("../utils/templateEngine");
 
 /**
  * Global Birthday Dispatcher
+ * Optimized for Enterprise: Fast query by birthdayKey + Queue processing.
  */
 async function dispatchAllBirthdays(apiKey) {
   const db = admin.firestore();
+  
   const churchesSnap = await db.collection("churches")
     .where("settings.birthdaySmsEnabled", "==", true)
     .get();
@@ -27,8 +29,9 @@ async function processChurchBirthdays(churchDoc) {
   const churchData = churchDoc.data();
   const timezone = churchData.settings?.timezone || "Africa/Accra";
   
+  // Use MMDD format for indexed query
   const now = DateTime.now().setZone(timezone);
-  const todayKey = now.toFormat("MM-dd");
+  const todayKey = now.toFormat("MMdd");
   const todayDateStr = now.toFormat("yyyy-MM-dd");
 
   const membersSnap = await churchDoc.ref.collection("members")
@@ -43,19 +46,19 @@ async function processChurchBirthdays(churchDoc) {
     const member = memberDoc.data();
     if (!member.phone) continue;
 
-    // Idempotency Check
-    const historyId = `${memberDoc.id}_${todayDateStr}`;
+    // Idempotency Check (Don't double queue if scheduler runs twice)
+    const historyId = `bday_${memberDoc.id}_${todayDateStr}`;
     const historyRef = churchDoc.ref.collection("birthdayHistory").doc(historyId);
-    const alreadySent = await historyRef.get();
+    const alreadyQueued = await historyRef.get();
 
-    if (alreadySent.exists) continue;
+    if (alreadyQueued.exists) continue;
 
     const message = parseTemplate(template, {
       name: member.name,
       churchName: churchData.sms?.displayName || churchData.name || "Our Church"
     });
 
-    // QUEUE SMS instead of direct send
+    // PUSH TO GLOBAL QUEUE
     await queueSMS(churchId, {
       phone: member.phone,
       message,
@@ -64,10 +67,9 @@ async function processChurchBirthdays(churchDoc) {
       memberId: memberDoc.id
     });
 
-    // Record that it was queued for today
+    // Record local history for idempotency
     await historyRef.set({
       queuedAt: admin.firestore.FieldValue.serverTimestamp(),
-      phone: member.phone,
       status: "queued"
     });
   }

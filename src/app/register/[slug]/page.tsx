@@ -1,17 +1,12 @@
+
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
 import { 
-  Church, 
-  User, 
-  Phone, 
-  Calendar, 
-  Users, 
   CheckCircle2, 
   Loader2, 
   ArrowLeft,
-  Sparkles,
   Heart,
   ChevronDown,
   Check,
@@ -77,19 +72,19 @@ export default function PublicRegistrationPage() {
   });
 
   /**
-   * Generates a searchable MM-DD string for efficient birthday querying.
-   * Matches the format used in Admin UI and Cloud Functions.
+   * Generates a searchable MMDD string for efficient birthday querying.
+   * Matches the format used in Enterprise Architecture logic.
    */
   const calculateBirthdayKey = (dobString: string) => {
     if (!dobString) return "";
     const dob = new Date(dobString);
     if (isNaN(dob.getTime())) return "";
     
-    // Using UTC to match server-side logic
+    // MMDD format (e.g. 0521 for May 21st)
     const month = String(dob.getUTCMonth() + 1).padStart(2, '0');
     const day = String(dob.getUTCDate()).padStart(2, '0');
     
-    return `${month}-${day}`;
+    return `${month}${day}`;
   };
 
   useEffect(() => {
@@ -141,7 +136,7 @@ export default function PublicRegistrationPage() {
     try {
       const membersRef = collection(db, "churches", church.id, "members");
       
-      // Store optimized birthdayKey alongside original DOB
+      // Store optimized MMDD birthdayKey
       await addDoc(membersRef, {
         ...formData,
         birthdayKey: calculateBirthdayKey(formData.dateOfBirth),

@@ -5,12 +5,12 @@ const { formatPhone } = require("../utils/phoneFormatter");
 
 /**
  * SMS QUEUE WRITER
- * Validates and adds a message to the global delivery queue.
+ * Standard helper to validate and add a message to the global delivery queue.
  */
 async function queueSMS(churchId, payload) {
   const db = admin.firestore();
   
-  // 1. Initial Validation
+  // Initial Validation
   const churchDoc = await db.collection("churches").doc(churchId).get();
   if (!churchDoc.exists) return { success: false, error: "Organization not found" };
   
@@ -19,18 +19,22 @@ async function queueSMS(churchId, payload) {
   
   if (!isApproved) return { success: false, error: "SMS service not approved for this account" };
 
-  // 2. Add to Queue
+  // Add to Queue
   const queueRef = db.collection("smsQueue");
   await queueRef.add({
     churchId,
     phone: formatPhone(payload.phone),
     message: payload.message,
     type: payload.type || "other",
-    memberId: payload.memberId || null,
-    memberName: payload.memberName || null,
+    metadata: {
+      memberId: payload.memberId || null,
+      memberName: payload.memberName || null,
+    },
     status: "queued",
     retryCount: 0,
+    maxRetries: 3,
     cost: 1,
+    scheduledAt: payload.scheduledAt || admin.firestore.FieldValue.serverTimestamp(),
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   });
 
@@ -39,54 +43,55 @@ async function queueSMS(churchId, payload) {
 
 /**
  * SMS DISPATCHER WORKER (Main Engine)
- * Handles wallet checks, credit deduction, and actual mNotify dispatch.
+ * Triggered by Firestore onCreate(smsQueue/{id})
+ * Handles atomic wallet logic and mNotify dispatch.
  */
 async function processSMSQueueItem(apiKey, messageId, data) {
   const db = admin.firestore();
   const queueRef = db.collection("smsQueue").doc(messageId);
   const churchId = data.churchId;
-  const walletRef = db.collection("smsWallets").doc(churchId);
-  const logsRef = db.collection("churches").doc(churchId).collection("smsLogs");
-  const txRef = db.collection("churches").doc(churchId).collection("smsTransactions");
+  const churchRef = db.collection("churches").doc(churchId);
+  const logsRef = churchRef.collection("smsLogs");
+  const txRef = churchRef.collection("smsTransactions");
 
   try {
-    // 1. Atomic Wallet & Status Check (LOCKING)
+    // 1. LOCK & CHARGE (Atomic Transaction)
     const result = await db.runTransaction(async (t) => {
       const qSnap = await t.get(queueRef);
       if (!qSnap.exists || qSnap.data().status !== "queued") {
         throw new Error("Message already processed or invalid");
       }
 
-      const walletSnap = await t.get(walletRef);
-      let balance = 0;
+      const cSnap = await t.get(churchRef);
+      if (!cSnap.exists) throw new Error("Church not found");
       
-      // Fallback to legacy credits if wallet doesn't exist yet
-      if (!walletSnap.exists) {
-        const churchSnap = await t.get(db.collection("churches").doc(churchId));
-        balance = churchSnap.data()?.sms?.credits || 0;
-        t.set(walletRef, { balance: balance, churchId });
-      } else {
-        balance = walletSnap.data().balance || 0;
+      const churchData = cSnap.data();
+      const balance = churchData.sms?.credits || 0;
+      const cost = data.cost || 1;
+
+      if (balance < cost) {
+        throw new Error("Insufficient SMS credits");
       }
 
-      if (balance <= 0) {
-        throw new Error("Insufficient SMS credits in wallet");
-      }
-
-      // Deduct Credit & Mark Processing
-      const newBalance = balance - 1;
-      t.update(walletRef, { 
-        balance: newBalance,
-        totalUsed: admin.firestore.FieldValue.increment(1)
+      // Deduct Credit & Update organizational stats
+      const newBalance = balance - cost;
+      t.update(churchRef, { 
+        "sms.credits": newBalance,
+        "sms.sent": admin.firestore.FieldValue.increment(1),
+        "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
       });
 
-      t.update(queueRef, { status: "processing", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      // Mark processing in queue
+      t.update(queueRef, { 
+        status: "processing", 
+        updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+      });
 
       // Record Transaction Ledger
       const txDoc = txRef.doc();
       t.set(txDoc, {
         type: "debit",
-        amount: 1,
+        amount: cost,
         balanceBefore: balance,
         balanceAfter: newBalance,
         reason: data.type || "queue_send",
@@ -97,7 +102,7 @@ async function processSMSQueueItem(apiKey, messageId, data) {
       return { balanceAfter: newBalance };
     });
 
-    // 2. DISPATCH TO mNOTIFY
+    // 2. DISPATCH TO PROVIDER
     const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
     const response = await axios.post(url, {
       recipient: [data.phone],
@@ -111,10 +116,10 @@ async function processSMSQueueItem(apiKey, messageId, data) {
     if (isSent) {
       await queueRef.update({ status: "sent", sentAt: admin.firestore.FieldValue.serverTimestamp() });
       
-      // Log Analytics
+      // Log for dashboard
       await logsRef.add({
-        memberName: data.memberName || "Recipient",
-        memberId: data.memberId,
+        memberName: data.metadata?.memberName || "Recipient",
+        memberId: data.metadata?.memberId,
         phone: data.phone,
         message: data.message,
         status: "sent",
@@ -122,15 +127,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
         provider: "mnotify",
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
-
-      // Update Org counters (wrapped for safety)
-      try {
-        await db.collection("churches").doc(churchId).update({
-          "sms.credits": result.balanceAfter,
-          "sms.sent": admin.firestore.FieldValue.increment(1),
-          "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
-        });
-      } catch (e) {}
 
       return { success: true };
     } else {
@@ -147,20 +143,19 @@ async function processSMSQueueItem(apiKey, messageId, data) {
       updatedAt: admin.firestore.FieldValue.serverTimestamp() 
     });
 
-    // Log failure for tenant
-    await logsRef.add({
-      memberName: data.memberName || "Recipient",
-      phone: data.phone,
-      message: data.message,
-      status: "failed",
-      error: error.message,
-      type: data.type,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // Increment Org Failure count
+    // Log failure for analytics
     try {
-      await db.collection("churches").doc(churchId).update({
+      await logsRef.add({
+        memberName: data.metadata?.memberName || "Recipient",
+        phone: data.phone,
+        message: data.message,
+        status: "failed",
+        error: error.message,
+        type: data.type,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      await churchRef.update({
         "sms.failed": admin.firestore.FieldValue.increment(1)
       });
     } catch (e) {}
