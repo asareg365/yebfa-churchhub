@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo } from "react";
@@ -26,7 +25,8 @@ import {
   DialogHeader, 
   DialogTitle, 
   DialogTrigger,
-  DialogFooter
+  DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -130,6 +130,7 @@ export default function VisitorsPage() {
           <DialogContent className="glass">
             <DialogHeader>
               <DialogTitle>First-Time Visitor Details</DialogTitle>
+              <DialogDescription>Capture details for follow-up outreach.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
