@@ -139,13 +139,12 @@ async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, t
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   });
 
-  t.set(churchRef, { 
-    sms: {
-      credits: newBalance,
-      sent: admin.firestore.FieldValue.increment(1),
-      lastSentAt: admin.firestore.FieldValue.serverTimestamp()
-    }
-  }, { merge: true });
+  // ENTERPRISE FIX: Use dot notation for nested map update to avoid overwriting other sms settings
+  t.update(churchRef, { 
+    "sms.credits": newBalance,
+    "sms.sent": admin.firestore.FieldValue.increment(1),
+    "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
+  });
 
   const txRef = admin.firestore().collection("smsTransactions").doc();
   t.set(txRef, {
@@ -179,12 +178,10 @@ async function refundWallet(churchId, amount, reason, messageId) {
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    t.set(churchRef, {
-      sms: {
-        credits: newBalance,
-        refunded: admin.firestore.FieldValue.increment(1)
-      }
-    }, { merge: true });
+    t.update(churchRef, {
+      "sms.credits": newBalance,
+      "sms.refunded": admin.firestore.FieldValue.increment(1)
+    });
 
     const txRef = db.collection("smsTransactions").doc();
     t.set(txRef, {
@@ -209,24 +206,26 @@ async function creditWallet(churchId, amount, reason = "topup", processedBy = "s
   const churchRef = db.collection("churches").doc(churchId);
   const topupValue = Number(amount);
 
+  if (isNaN(topupValue)) throw new Error("Invalid top-up amount");
+
   await db.runTransaction(async (t) => {
     const walletSnap = await t.get(walletRef);
     const walletData = walletSnap.exists ? walletSnap.data() : { balance: 0, totalTopups: 0 };
     const currentBalance = Number(walletData.balance || 0);
     const newBalance = currentBalance + topupValue;
 
+    // Atomic upsert for wallet
     t.set(walletRef, {
       balance: newBalance,
-      totalTopups: (walletData.totalTopups || 0) + topupValue,
+      totalTopups: admin.firestore.FieldValue.increment(topupValue),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 
-    t.set(churchRef, {
-      sms: {
-        credits: newBalance,
-        lastTopupAt: admin.firestore.FieldValue.serverTimestamp()
-      }
-    }, { merge: true });
+    // Atomic update for church profile using dot notation
+    t.update(churchRef, {
+      "sms.credits": newBalance,
+      "sms.lastTopupAt": admin.firestore.FieldValue.serverTimestamp()
+    });
 
     const txRef = db.collection("smsTransactions").doc();
     t.set(txRef, {
@@ -454,7 +453,7 @@ async function getPlatformStats() {
 
     transactionsSnap.forEach(doc => {
       const data = doc.data();
-      totalRevenue += (data.amount || 0);
+      totalRevenue += Number(data.amount || 0);
     });
 
     const topSpenders = churchesSnap.docs
