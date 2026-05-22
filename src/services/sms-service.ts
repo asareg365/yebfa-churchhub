@@ -38,16 +38,18 @@ function normalizePhone(phone: string): string {
   if (!phone) return "";
   let cleaned = phone.replace(/\D/g, "").trim();
   
+  // Standardize common Ghana formats
   if (cleaned.startsWith("0")) {
     cleaned = "233" + cleaned.substring(1);
+  } else if (cleaned.length === 9) {
+    cleaned = "233" + cleaned;
   }
 
   return cleaned;
 }
 
 /**
- * Optimized send and log flow.
- * Note: Credits and Status validation now happen securely in Cloud Functions.
+ * Optimized send and log flow via secure Cloud Function bridge.
  */
 export async function sendAndLogSMS(
   db: Firestore,
@@ -65,8 +67,7 @@ export async function sendAndLogSMS(
   const sendSMSFn = httpsCallable(functions, "sendSMS");
 
   try {
-    console.log("DEBUG: Calling sendSMS callable for", payload.phone);
-    const result: any = await sendSMSFn({ 
+    const response: any = await sendSMSFn({ 
       phone: normalizePhone(payload.phone), 
       message: payload.message, 
       type: payload.type,
@@ -75,10 +76,8 @@ export async function sendAndLogSMS(
       churchId: churchId
     });
 
-    console.log("DEBUG: Callable response", result.data);
-
-    if (!result.data.success) {
-      return { success: false, error: result.data.error || 'Backend delivery failure' };
+    if (!response.data.success) {
+      return { success: false, error: response.data.error || 'Backend delivery failure' };
     }
 
     return { success: true };
@@ -89,41 +88,41 @@ export async function sendAndLogSMS(
 }
 
 /**
- * Optimized Birthday Processor using indexed birthdayKey query
+ * Optimized Birthday Processor using indexed birthdayKey query.
+ * Matches exactly celebrants for the current UTC day.
  */
 export async function processBirthdaysToday(db: Firestore, churchId: string) {
   const membersRef = collection(db, 'churches', churchId, 'members');
-  const today = new Date();
   
-  // Format MM-DD strictly using UTC to match the index pattern
+  // Strict UTC-based Today Key (MM-DD)
+  const today = new Date();
   const month = String(today.getUTCMonth() + 1).padStart(2, '0');
   const day = String(today.getUTCDate()).padStart(2, '0');
   const todayKey = `${month}-${day}`;
 
-  console.log("DEBUG: Running birthday check for Key:", todayKey);
+  console.log(`[SMS Bridge] Searching for birthdayKey: ${todayKey}`);
 
   const q = query(membersRef, where("birthdayKey", "==", todayKey));
   const membersSnap = await getDocs(q);
   
-  console.log("DEBUG: Found members celebrating:", membersSnap.size);
-
   const results = { sent: 0, failed: 0, skipped: 0 };
 
   if (membersSnap.empty) {
-    console.log("DEBUG: No members found with birthdayKey", todayKey);
+    console.log("[SMS Bridge] No celebrants found for today.");
     return results;
   }
 
+  console.log(`[SMS Bridge] Found ${membersSnap.size} member(s) celebrating today.`);
+
   for (const memberDoc of membersSnap.docs) {
     const member = memberDoc.data();
-    console.log("DEBUG: Processing member", member.name, "Phone:", member.phone);
-
+    
     if (!member.phone) {
-      console.log("DEBUG: Skipping member - missing phone number");
       results.skipped++;
       continue;
     }
 
+    // Individual send request
     const outcome = await sendAndLogSMS(db, churchId, {
       phone: member.phone,
       message: `Happy Birthday ${member.name}! May God bless your new age richly. — From your Church Family.`,
@@ -135,7 +134,6 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
     if (outcome.success) {
       results.sent++;
     } else {
-      console.error("DEBUG: Send failed for member", member.name, outcome.error);
       results.failed++;
     }
   }

@@ -31,8 +31,9 @@ async function sendSMS(apiKey, churchId, payload) {
       const errorMsg = "SMS service is not active or approved for this account.";
       await logsRef.add({
         memberName: memberName || "System Gatekeeper",
-        phone: formattedPhone || "N/A",
-        message: message.substring(0, 50) + "...",
+        memberId: memberId || null,
+        phone: formattedPhone || phone || "N/A",
+        message: (message || "").substring(0, 100),
         status: "failed",
         error: errorMsg,
         type: type || "other",
@@ -45,8 +46,9 @@ async function sendSMS(apiKey, churchId, payload) {
       const errorMsg = "Insufficient SMS credits";
       await logsRef.add({
         memberName: memberName || "System Gatekeeper",
-        phone: formattedPhone || "N/A",
-        message: message.substring(0, 50) + "...",
+        memberId: memberId || null,
+        phone: formattedPhone || phone || "N/A",
+        message: (message || "").substring(0, 100),
         status: "failed",
         error: errorMsg,
         type: type || "other",
@@ -64,7 +66,10 @@ async function sendSMS(apiKey, churchId, payload) {
       sender: finalSenderId,
       message: message,
       is_schedule: false
-    }, { timeout: 10000 });
+    }, { timeout: 15000 }).catch(err => {
+       console.error("mNotify Network Error:", err.message);
+       return { status: 500, data: { message: err.message } };
+    });
 
     // mNotify success is typically HTTP 200 with code "1000" in body
     const isSent = response.status === 200 && (response.data.code === "1000" || response.data.status === "success");
@@ -91,7 +96,7 @@ async function sendSMS(apiKey, churchId, payload) {
         });
       });
 
-      // 4. LOG COMMUNICATION
+      // 4. LOG SUCCESSFUL COMMUNICATION
       await logsRef.add({
         memberName: memberName || "Unknown",
         memberId: memberId || null,
@@ -114,8 +119,9 @@ async function sendSMS(apiKey, churchId, payload) {
 
       await logsRef.add({
         memberName: memberName || "Unknown",
-        phone: formattedPhone,
-        message,
+        memberId: memberId || null,
+        phone: formattedPhone || phone,
+        message: (message || "").substring(0, 160),
         status: "failed",
         error: response.data?.message || "Provider rejection",
         type: type || "other",
@@ -128,20 +134,22 @@ async function sendSMS(apiKey, churchId, payload) {
   } catch (error) {
     console.error(`[${churchId}] SMS Critical Error:`, error.message);
     
-    // Log unexpected code errors
-    await churchRef.update({
-      "sms.failed": admin.firestore.FieldValue.increment(1)
-    }).catch(() => {});
-
-    await logsRef.add({
-      memberName: memberName || "System Error",
-      phone: phone || "N/A",
-      message: message ? (message.substring(0, 50) + "...") : "N/A",
-      status: "failed",
-      error: error.message,
-      type: type || "other",
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    }).catch(() => {});
+    // Log unexpected code errors to the logs collection so user sees them
+    try {
+      await churchRef.update({ "sms.failed": admin.firestore.FieldValue.increment(1) });
+      await logsRef.add({
+        memberName: memberName || "System Error",
+        memberId: memberId || null,
+        phone: phone || "N/A",
+        message: message ? (message.substring(0, 50) + "...") : "N/A",
+        status: "failed",
+        error: error.message,
+        type: type || "other",
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (logErr) {
+       console.error("Nested logging failure:", logErr.message);
+    }
     
     return { success: false, error: error.message };
   }

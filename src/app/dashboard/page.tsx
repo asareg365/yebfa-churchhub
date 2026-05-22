@@ -1,17 +1,19 @@
+
 'use client';
 
+import { useState, useMemo } from 'react';
 import {
   Users,
-  Calendar,
   TrendingUp,
   CreditCard,
   Cake,
-  ArrowUpRight,
   Activity,
   DollarSign,
   Loader2,
   Gift,
   Search,
+  Send,
+  MessageSquare,
 } from 'lucide-react';
 import {
   Card,
@@ -29,18 +31,34 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from '@/lib/utils';
 import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, query, orderBy, limit, where } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { useMemo } from 'react';
 import { useSearch } from '@/context/search-context';
+import { sendAndLogSMS } from '@/services/sms-service';
+import { useToast } from '@/hooks/use-toast';
 
 export default function DashboardPage() {
   const db = useFirestore();
   const { user } = useUser();
   const { searchTerm } = useSearch();
+  const { toast } = useToast();
+
+  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [customMessage, setCustomMessage] = useState("");
+  const [isSending, setIsSending] = useState(false);
 
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
@@ -77,8 +95,7 @@ export default function DashboardPage() {
     return query(attendanceRef, orderBy('date', 'desc'), limit(10));
   }, [attendanceRef]);
 
-  const { data: attendance, loading: attendanceLoading } =
-    useCollection(attendanceQuery);
+  const { data: attendance } = useCollection(attendanceQuery);
   const { data: finances } = useCollection(financesRef);
 
   const stats = [
@@ -140,6 +157,37 @@ export default function DashboardPage() {
       curr.type === 'Expenditure' ? acc - curr.amount : acc + curr.amount,
     0
   );
+
+  const handleOpenSms = (member: any) => {
+    const churchDisplayName = currentChurch?.sms?.displayName || currentChurch?.name || "Our Church";
+    setSelectedMember(member);
+    setCustomMessage(`Happy Birthday ${member.name}! May God bless your new age with favor and joy. — ${churchDisplayName}`);
+  };
+
+  const handleSendGreeting = async () => {
+    if (!selectedMember || !currentChurch?.id) return;
+    setIsSending(true);
+    try {
+      const outcome = await sendAndLogSMS(db, currentChurch.id, {
+        phone: selectedMember.phone,
+        message: customMessage,
+        type: 'birthday',
+        memberName: selectedMember.name,
+        memberId: selectedMember.id
+      });
+
+      if (outcome.success) {
+        toast({ title: "Greeting Sent", description: `Message delivered to ${selectedMember.name}.` });
+        setSelectedMember(null);
+      } else {
+        toast({ title: "Send Failed", description: outcome.error, variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -333,24 +381,35 @@ export default function DashboardPage() {
                   {birthdayMembers.map((member) => (
                     <div
                       key={member.id}
-                      className="flex items-center gap-4 p-4 rounded-2xl bg-muted/20 border border-border hover:border-primary/30 transition-all"
+                      className="group flex flex-col p-4 rounded-2xl bg-muted/20 border border-border hover:border-primary/30 transition-all"
                     >
-                      <Avatar className="h-12 w-12 border border-primary/20">
-                        <AvatarImage src={member.photo} />
-                        <AvatarFallback>{member.name?.charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-bold text-foreground">
-                          {member.name}
-                        </p>
-                        <p className="text-sm text-primary flex items-center gap-1 font-medium">
-                          <Cake className="w-3 h-3" />
-                          {new Date(member.dateOfBirth).toLocaleDateString(
-                            'default',
-                            { month: 'long', day: 'numeric' }
-                          )}
-                        </p>
+                      <div className="flex items-center gap-4 mb-4">
+                        <Avatar className="h-12 w-12 border border-primary/20">
+                          <AvatarImage src={member.photo} />
+                          <AvatarFallback>{member.name?.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-foreground truncate">
+                            {member.name}
+                          </p>
+                          <p className="text-sm text-primary flex items-center gap-1 font-medium">
+                            <Cake className="w-3 h-3" />
+                            {new Date(member.dateOfBirth).toLocaleDateString(
+                              'default',
+                              { month: 'long', day: 'numeric' }
+                            )}
+                          </p>
+                        </div>
                       </div>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="w-full rounded-xl bg-white hover:bg-primary hover:text-white transition-colors border-border group-hover:border-primary/50"
+                        onClick={() => handleOpenSms(member)}
+                      >
+                        <Send className="w-3 h-3 mr-2" />
+                        Send Greeting
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -364,6 +423,41 @@ export default function DashboardPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Manual Greeting Dialog */}
+      <Dialog open={!!selectedMember} onOpenChange={(open) => !open && setSelectedMember(null)}>
+        <DialogContent className="glass">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-primary" />
+              Birthday Greeting
+            </DialogTitle>
+            <DialogDescription>
+              Sending personalized message to <strong>{selectedMember?.name}</strong> ({selectedMember?.phone}).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-muted-foreground uppercase">Message Content</label>
+              <Textarea 
+                value={customMessage} 
+                onChange={(e) => setCustomMessage(e.target.value)} 
+                className="min-h-[120px] bg-muted/30 rounded-xl resize-none"
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground italic">
+              Estimated Cost: 1 Credit
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedMember(null)}>Cancel</Button>
+            <Button onClick={handleSendGreeting} disabled={isSending || !customMessage} className="bg-primary px-8">
+              {isSending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+              Send SMS
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
