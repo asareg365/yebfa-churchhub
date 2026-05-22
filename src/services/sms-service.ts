@@ -3,16 +3,10 @@
 
 import { 
   collection, 
-  addDoc, 
-  serverTimestamp, 
-  Firestore,
   getDocs,
-  doc,
-  getDoc,
-  updateDoc,
-  increment,
   query,
-  where
+  where,
+  Firestore
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -71,6 +65,7 @@ export async function sendAndLogSMS(
   const sendSMSFn = httpsCallable(functions, "sendSMS");
 
   try {
+    console.log("DEBUG: Calling sendSMS callable for", payload.phone);
     const result: any = await sendSMSFn({ 
       phone: normalizePhone(payload.phone), 
       message: payload.message, 
@@ -79,6 +74,8 @@ export async function sendAndLogSMS(
       memberId: payload.memberId,
       churchId: churchId
     });
+
+    console.log("DEBUG: Callable response", result.data);
 
     if (!result.data.success) {
       return { success: false, error: result.data.error || 'Backend delivery failure' };
@@ -98,32 +95,49 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
   const membersRef = collection(db, 'churches', churchId, 'members');
   const today = new Date();
   
-  const currentMonth = today.getUTCMonth() + 1;
-  const currentDay = today.getUTCDate();
-  const todayKey = `${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+  // Format MM-DD strictly using UTC to match the index pattern
+  const month = String(today.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(today.getUTCDate()).padStart(2, '0');
+  const todayKey = `${month}-${day}`;
+
+  console.log("DEBUG: Running birthday check for Key:", todayKey);
 
   const q = query(membersRef, where("birthdayKey", "==", todayKey));
   const membersSnap = await getDocs(q);
   
+  console.log("DEBUG: Found members celebrating:", membersSnap.size);
+
   const results = { sent: 0, failed: 0, skipped: 0 };
+
+  if (membersSnap.empty) {
+    console.log("DEBUG: No members found with birthdayKey", todayKey);
+    return results;
+  }
 
   for (const memberDoc of membersSnap.docs) {
     const member = memberDoc.data();
+    console.log("DEBUG: Processing member", member.name, "Phone:", member.phone);
+
     if (!member.phone) {
+      console.log("DEBUG: Skipping member - missing phone number");
       results.skipped++;
       continue;
     }
 
     const outcome = await sendAndLogSMS(db, churchId, {
       phone: member.phone,
-      message: `Happy Birthday ${member.name}! May God bless your new age. — From your Church Family.`,
+      message: `Happy Birthday ${member.name}! May God bless your new age richly. — From your Church Family.`,
       type: 'birthday',
       memberId: memberDoc.id,
       memberName: member.name
     });
 
-    if (outcome.success) results.sent++;
-    else results.failed++;
+    if (outcome.success) {
+      results.sent++;
+    } else {
+      console.error("DEBUG: Send failed for member", member.name, outcome.error);
+      results.failed++;
+    }
   }
   
   return results;

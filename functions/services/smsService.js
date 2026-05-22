@@ -28,12 +28,31 @@ async function sendSMS(apiKey, churchId, payload) {
     const isApproved = smsConfig.approved === true || smsConfig.subscriptionStatus === 'active';
 
     if (!isApproved || !smsConfig.enabled) {
-      return { success: false, error: "SMS service is not active or approved for this account." };
+      const errorMsg = "SMS service is not active or approved for this account.";
+      await logsRef.add({
+        memberName: memberName || "System Gatekeeper",
+        phone: formattedPhone || "N/A",
+        message: message.substring(0, 50) + "...",
+        status: "failed",
+        error: errorMsg,
+        type: type || "other",
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return { success: false, error: errorMsg };
     }
 
     if ((smsConfig.credits || 0) <= 0) {
-      console.warn(`[${churchId}] Credits exhausted. Blocking send.`);
-      return { success: false, error: "Insufficient SMS credits" };
+      const errorMsg = "Insufficient SMS credits";
+      await logsRef.add({
+        memberName: memberName || "System Gatekeeper",
+        phone: formattedPhone || "N/A",
+        message: message.substring(0, 50) + "...",
+        status: "failed",
+        error: errorMsg,
+        type: type || "other",
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return { success: false, error: errorMsg };
     }
 
     // 2. DISPATCH TO mNOTIFY
@@ -109,22 +128,20 @@ async function sendSMS(apiKey, churchId, payload) {
   } catch (error) {
     console.error(`[${churchId}] SMS Critical Error:`, error.message);
     
-    // Log failure unless it was a pre-check rejection
-    if (!["Insufficient SMS credits", "Organization not found"].includes(error.message)) {
-      await churchRef.update({
-        "sms.failed": admin.firestore.FieldValue.increment(1)
-      });
+    // Log unexpected code errors
+    await churchRef.update({
+      "sms.failed": admin.firestore.FieldValue.increment(1)
+    }).catch(() => {});
 
-      await logsRef.add({
-        memberName: memberName || "Unknown",
-        phone: formattedPhone,
-        message,
-        status: "failed",
-        error: error.message,
-        type: type || "other",
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-    }
+    await logsRef.add({
+      memberName: memberName || "System Error",
+      phone: phone || "N/A",
+      message: message ? (message.substring(0, 50) + "...") : "N/A",
+      status: "failed",
+      error: error.message,
+      type: type || "other",
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    }).catch(() => {});
     
     return { success: false, error: error.message };
   }
