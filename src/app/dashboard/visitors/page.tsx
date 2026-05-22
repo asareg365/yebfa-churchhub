@@ -12,7 +12,9 @@ import {
   MessageSquare,
   CheckCircle2,
   Clock,
-  Heart
+  Heart,
+  MoreVertical,
+  Pencil
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,11 +28,18 @@ import {
   DialogTrigger,
   DialogFooter
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCollection, useFirestore, useUser } from "@/firebase";
-import { collection, addDoc, serverTimestamp, query, orderBy, limit, where, deleteDoc, doc } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, orderBy, limit, where, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -41,6 +50,8 @@ export default function VisitorsPage() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingVisitor, setEditingVisitor] = useState<any>(null);
 
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
@@ -77,6 +88,24 @@ export default function VisitorsPage() {
       toast({ title: "Visitor recorded", description: "Automated follow-up will be sent tomorrow." });
     } catch (e: any) {
       toast({ title: "Failed to save", variant: "destructive" });
+    }
+  };
+
+  const handleUpdateVisitor = async () => {
+    if (!editingVisitor || !visitorsRef) return;
+    try {
+      await updateDoc(doc(visitorsRef, editingVisitor.id), {
+        name: editingVisitor.name,
+        phone: editingVisitor.phone,
+        visitDate: editingVisitor.visitDate,
+        notes: editingVisitor.notes,
+        updatedAt: serverTimestamp()
+      });
+      setIsEditOpen(false);
+      setEditingVisitor(null);
+      toast({ title: "Visitor updated" });
+    } catch (e: any) {
+      toast({ title: "Failed to update", variant: "destructive" });
     }
   };
 
@@ -186,9 +215,25 @@ export default function VisitorsPage() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => deleteDoc(doc(visitorsRef!, v.id))}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="glass">
+                        <DropdownMenuItem onClick={() => {
+                          setEditingVisitor(v);
+                          setIsEditOpen(true);
+                        }}>
+                          <Pencil className="mr-2 h-4 w-4" /> Edit Details
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator className="border-white/5" />
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => deleteDoc(doc(visitorsRef!, v.id))}>
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete Record
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))}
@@ -204,6 +249,40 @@ export default function VisitorsPage() {
           </Table>
         )}
       </Card>
+
+      {/* Edit Visitor Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="glass">
+          <DialogHeader>
+            <DialogTitle>Edit Visitor Information</DialogTitle>
+            <DialogDescription>Update the records for {editingVisitor?.name}.</DialogDescription>
+          </DialogHeader>
+          {editingVisitor && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Full Name</Label>
+                <Input value={editingVisitor.name} onChange={e => setEditingVisitor({...editingVisitor, name: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Phone Number</Label>
+                <Input value={editingVisitor.phone} onChange={e => setEditingVisitor({...editingVisitor, phone: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Visit Date</Label>
+                <Input type="date" value={editingVisitor.visitDate} onChange={e => setEditingVisitor({...editingVisitor, visitDate: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Outreach Notes</Label>
+                <Textarea value={editingVisitor.notes} onChange={e => setEditingVisitor({...editingVisitor, notes: e.target.value})} className="h-20" />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
+            <Button onClick={handleUpdateVisitor}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
