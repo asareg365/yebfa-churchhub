@@ -1,4 +1,3 @@
-
 const axios = require("axios");
 const admin = require("firebase-admin");
 const { formatPhone } = require("../utils/phoneFormatter");
@@ -6,7 +5,7 @@ const { formatPhone } = require("../utils/phoneFormatter");
 /**
  * ABUSE PREVENTION CONFIG
  */
-const MAX_MESSAGE_LENGTH = 700; // ~4 SMS segments max
+const MAX_MESSAGE_LENGTH = 700;
 const SPAM_KEYWORDS = [
   "bitcoin", "crypto", "investment", "doubler", "prize", "won", 
   "password", "reset link", "otp", "verify account", "urgent action",
@@ -19,9 +18,6 @@ const PLAN_CONCURRENCY_LIMITS = {
   "Premium": 2000
 };
 
-/**
- * Content Inspection
- */
 function isPotentiallyMalicious(message) {
   const lowMsg = message.toLowerCase();
   return SPAM_KEYWORDS.some(keyword => lowMsg.includes(keyword));
@@ -68,10 +64,7 @@ async function queueSMS(churchId, payload) {
     .get();
 
   if (currentQueued.data().count >= limit) {
-    return { 
-      success: false, 
-      error: `Concurrency limit reached for ${currentPlan} plan.` 
-    };
+    return { success: false, error: `Concurrency limit reached for ${currentPlan} plan.` };
   }
 
   const cost = payload.cost || 1;
@@ -85,11 +78,7 @@ async function queueSMS(churchId, payload) {
       .get();
 
     if (!existing.empty) {
-      return { 
-        success: true, 
-        skipped: true, 
-        reason: "Duplicate prevented" 
-      };
+      return { success: true, skipped: true, reason: "Duplicate prevented" };
     }
   }
   
@@ -121,15 +110,14 @@ async function queueSMS(churchId, payload) {
 
 /**
  * WALLET DEBIT
+ * Uses Dot-Notation to preserve object integrity.
  */
 async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, type) {
   const walletSnap = await t.get(walletRef);
   const walletData = walletSnap.exists ? walletSnap.data() : { balance: 0 };
   const currentBalance = Number(walletData.balance || 0);
 
-  if (currentBalance < cost) {
-    throw new Error("Insufficient SMS credits");
-  }
+  if (currentBalance < cost) throw new Error("Insufficient SMS credits");
 
   const newBalance = currentBalance - cost;
 
@@ -139,7 +127,7 @@ async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, t
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   });
 
-  // Safe dot notation update to preserve other sms fields
+  // CRITICAL: Explicit dot-notation to avoid wiping out the 'sms' object
   t.update(churchRef, { 
     "sms.credits": newBalance,
     "sms.sent": admin.firestore.FieldValue.increment(1),
@@ -157,6 +145,61 @@ async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, t
     messageId: messageId,
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   });
+}
+
+/**
+ * WALLET CREDIT (Standardized to GH₵)
+ * Uses dot-notation for atomic field updates.
+ */
+async function creditWallet(churchId, amount, reason = "topup", processedBy = "system") {
+  const db = admin.firestore();
+  const walletRef = db.collection("smsWallets").doc(churchId);
+  const churchRef = db.collection("churches").doc(churchId);
+  const topupValue = Number(amount);
+
+  if (isNaN(topupValue) || topupValue <= 0) {
+    throw new Error("Invalid top-up amount. Must be a positive number.");
+  }
+
+  await db.runTransaction(async (t) => {
+    const [walletSnap, churchSnap] = await Promise.all([
+      t.get(walletRef),
+      t.get(churchRef)
+    ]);
+
+    if (!churchSnap.exists) throw new Error("Target church organization not found.");
+
+    const walletData = walletSnap.exists ? walletSnap.data() : { balance: 0, totalTopups: 0 };
+    const currentBalance = Number(walletData.balance || 0);
+    const newBalance = currentBalance + topupValue;
+
+    t.set(walletRef, {
+      balance: newBalance,
+      totalTopups: admin.firestore.FieldValue.increment(topupValue),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    // CRITICAL: Safe update via dot-notation
+    t.update(churchRef, {
+      "sms.credits": newBalance,
+      "sms.lastTopupAt": admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    const txRef = db.collection("smsTransactions").doc();
+    t.set(txRef, {
+      churchId,
+      type: "topup",
+      currency: "GHS",
+      amount: topupValue,
+      balanceBefore: currentBalance,
+      balanceAfter: newBalance,
+      reason,
+      processedBy,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+  });
+
+  return { success: true };
 }
 
 /**
@@ -195,69 +238,6 @@ async function refundWallet(churchId, amount, reason, messageId) {
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
   });
-}
-
-/**
- * WALLET CREDIT (Standardized to GH₵)
- */
-async function creditWallet(churchId, amount, reason = "topup", processedBy = "system") {
-  const db = admin.firestore();
-  const walletRef = db.collection("smsWallets").doc(churchId);
-  const churchRef = db.collection("churches").doc(churchId);
-  const topupValue = Number(amount);
-
-  if (isNaN(topupValue) || topupValue <= 0) {
-    throw new Error("Invalid top-up amount. Must be a positive number.");
-  }
-
-  await db.runTransaction(async (t) => {
-    const [walletSnap, churchSnap] = await Promise.all([
-      t.get(walletRef),
-      t.get(churchRef)
-    ]);
-
-    if (!churchSnap.exists) {
-      throw new Error("Target church organization not found.");
-    }
-
-    const walletData = walletSnap.exists ? walletSnap.data() : { balance: 0, totalTopups: 0 };
-    const currentBalance = Number(walletData.balance || 0);
-    const currentTotalTopups = Number(walletData.totalTopups || 0);
-    
-    const newBalance = currentBalance + topupValue;
-    const newTotalTopups = currentTotalTopups + topupValue;
-
-    // 1. Update Wallet (Atomic)
-    t.set(walletRef, {
-      balance: newBalance,
-      totalTopups: newTotalTopups,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
-
-    // 2. Update Church Object (SAFE MERGE)
-    // CRITICAL FIX: Use dot-notation to avoid wiping out the whole 'sms' object
-    // This preserves existing fields like sms.senderId and sms.enabled
-    t.update(churchRef, {
-      "sms.credits": newBalance,
-      "sms.lastTopupAt": admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // 3. Log Immutable Transaction
-    const txRef = db.collection("smsTransactions").doc();
-    t.set(txRef, {
-      churchId,
-      type: "topup",
-      currency: "GHS",
-      amount: topupValue,
-      balanceBefore: currentBalance,
-      balanceAfter: newBalance,
-      reason,
-      processedBy,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-  });
-
-  return { success: true, newBalance: topupValue };
 }
 
 /**

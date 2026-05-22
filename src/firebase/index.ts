@@ -24,7 +24,10 @@ export function initializeFirebase(): {
     const firestore = getFirestore(firebaseApp);
     const auth = getAuth(firebaseApp);
     
-    // CRITICAL: Explicitly set region to match backend deployment
+    /**
+     * CRITICAL REGIONAL ALIGNMENT
+     * Standardized to us-central1 across both frontend and backend.
+     */
     const functions = getFunctions(firebaseApp, "us-central1");
 
     return { firebaseApp, firestore, auth, functions };

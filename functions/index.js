@@ -19,7 +19,7 @@ const { processSMSQueueItem, queueSMS, creditWallet, getPlatformStats, handleMNo
 
 /**
  * SMS QUEUE DISPATCHER
- * Region: us-central1 (Consolidated to single region for performance)
+ * Region: us-central1 (Recreated for absolute regional consistency)
  */
 exports.onSmsQueued = onDocumentCreated(
   {
