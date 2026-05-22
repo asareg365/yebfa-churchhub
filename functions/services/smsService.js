@@ -86,7 +86,9 @@ async function sendSMS(apiKey, churchId, payload) {
           "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
         });
 
-        t.add(txRef, {
+        // Use transaction.set with a new doc ref instead of transaction.add
+        const newTxRef = txRef.doc();
+        t.set(newTxRef, {
           type: "debit",
           amount: 1,
           balanceBefore: currentCredits,
