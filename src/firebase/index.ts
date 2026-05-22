@@ -23,7 +23,9 @@ export function initializeFirebase(): {
     const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
     const firestore = getFirestore(firebaseApp);
     const auth = getAuth(firebaseApp);
-    const functions = getFunctions(firebaseApp);
+    
+    // CRITICAL: Explicitly set region to match backend deployment
+    const functions = getFunctions(firebaseApp, "us-central1");
 
     return { firebaseApp, firestore, auth, functions };
   } catch (error) {

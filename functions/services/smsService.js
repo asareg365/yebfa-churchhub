@@ -139,7 +139,7 @@ async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, t
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   });
 
-  // Safe dot notation update
+  // Safe dot notation update to preserve other sms fields
   t.update(churchRef, { 
     "sms.credits": newBalance,
     "sms.sent": admin.firestore.FieldValue.increment(1),
@@ -234,14 +234,13 @@ async function creditWallet(churchId, amount, reason = "topup", processedBy = "s
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 
-    // 2. Update Church Object (Safe Merge)
-    // This ensures we don't crash if churchData.sms is undefined
-    t.set(churchRef, {
-      sms: {
-        credits: newBalance,
-        lastTopupAt: admin.firestore.FieldValue.serverTimestamp()
-      }
-    }, { merge: true });
+    // 2. Update Church Object (SAFE MERGE)
+    // CRITICAL FIX: Use dot-notation to avoid wiping out the whole 'sms' object
+    // This preserves existing fields like sms.senderId and sms.enabled
+    t.update(churchRef, {
+      "sms.credits": newBalance,
+      "sms.lastTopupAt": admin.firestore.FieldValue.serverTimestamp()
+    });
 
     // 3. Log Immutable Transaction
     const txRef = db.collection("smsTransactions").doc();
