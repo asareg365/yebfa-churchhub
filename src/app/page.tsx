@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Sparkles, Shield, Users, Zap, ArrowRight, Check, Smartphone, Search, ShieldCheck } from "lucide-react";
+import { Sparkles, Shield, Users, Zap, ArrowRight, Check, Smartphone, Search, ShieldCheck, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -37,21 +37,39 @@ export default function LandingPage() {
       name: "Starter",
       price: "200",
       description: "Essential tools for small congregations.",
-      features: ["Up to 200 members", "Attendance tracking", "Basic reports", "Email support"],
+      features: [
+        "Up to 200 members", 
+        "100 Monthly SMS Credits",
+        "Attendance tracking", 
+        "Basic reports", 
+        "Email support"
+      ],
       accent: false
     },
     {
       name: "Growth",
       price: "500",
       description: "Advanced features for growing ministries.",
-      features: ["Up to 1,000 members", "Finance management", "AI Insights Lite", "Priority support"],
+      features: [
+        "Up to 1,000 members", 
+        "1,000 Monthly SMS Credits",
+        "Finance management", 
+        "AI Insights Lite", 
+        "Priority support"
+      ],
       accent: true
     },
     {
       name: "Premium",
       price: "1,200",
       description: "Full suite for enterprise organizations.",
-      features: ["Unlimited members", "Full AI Suite", "Bulk SMS engine", "Dedicated manager"],
+      features: [
+        "Unlimited members", 
+        "5,000 Monthly SMS Credits",
+        "Full AI Suite", 
+        "Bulk SMS engine", 
+        "Dedicated manager"
+      ],
       accent: false
     }
   ];
@@ -146,10 +164,10 @@ export default function LandingPage() {
             </div>
             <div className="bg-white p-8 rounded-3xl space-y-4 border border-border hover:border-primary/30 transition-colors shadow-sm">
               <div className="h-12 w-12 rounded-2xl bg-primary/20 flex items-center justify-center text-primary">
-                <Users className="w-6 h-6" />
+                <MessageSquare className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold font-headline text-foreground">Community First</h3>
-              <p className="text-muted-foreground">Automated birthday SMS, QR check-ins, and sophisticated member management.</p>
+              <h3 className="text-xl font-bold font-headline text-foreground">SMS Quotas</h3>
+              <p className="text-muted-foreground">Integrated SMS plan system for automated greetings, notifications, and pastoral care.</p>
             </div>
           </div>
         </section>
@@ -180,7 +198,7 @@ export default function LandingPage() {
                       <div className="h-5 w-5 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
                         <Check className="h-3 w-3 text-accent" />
                       </div>
-                      <span>{feature}</span>
+                      <span className={feature.includes("SMS Credits") ? "font-bold text-primary" : ""}>{feature}</span>
                     </li>
                   ))}
                 </ul>
@@ -201,7 +219,7 @@ export default function LandingPage() {
               <div className="space-y-2">
                 <h4 className="text-xl font-bold text-foreground">How to Pay</h4>
                 <p className="text-muted-foreground text-sm">
-                  To activate your ministry account, please send the plan cost via MoMo to <span className="text-primary font-bold">0248472474</span>. 
+                  To activate your ministry account and receive your SMS allocation, please send the plan cost via MoMo to <span className="text-primary font-bold">0248472474</span>. 
                   Use your <span className="underline decoration-primary">Church Name</span> as the transaction reference. 
                   Approvals are typically processed within 1 hour.
                 </p>

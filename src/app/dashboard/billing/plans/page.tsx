@@ -6,12 +6,9 @@ import {
   Zap, 
   Shield, 
   Rocket,
-  Plus,
   ArrowRight,
-  TrendingUp,
-  Users,
   Smartphone,
-  Info
+  MessageSquare
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,10 +21,11 @@ const PLANS = [
   {
     id: 'Basic',
     name: 'Starter / Basic',
-    price: '99',
+    price: '200',
     description: 'Perfect for small congregations.',
     features: [
       '100 SMS Credits per month',
+      'Up to 200 Church Members',
       '1 Church Administrator',
       'Member Directory',
       'Attendance Tracking',
@@ -39,11 +37,11 @@ const PLANS = [
   {
     id: 'Standard',
     name: 'Ministry Growth',
-    price: '299',
+    price: '500',
     description: 'Advanced tools for active churches.',
     features: [
       '1,000 SMS Credits per month',
-      'Unlimited Church Members',
+      'Up to 1,000 Church Members',
       'Financial Management Suite',
       'AI Communication Assistant',
       'Priority WhatsApp Support'
@@ -55,10 +53,11 @@ const PLANS = [
   {
     id: 'Premium',
     name: 'Enterprise / Premium',
-    price: '599',
+    price: '1,200',
     description: 'Full suite for large organizations.',
     features: [
-      'Unlimited SMS (Fair Use)',
+      '5,000 SMS Credits per month',
+      'Unlimited Church Members',
       'AI Pastoral Insight Tool',
       'Multi-Branch Support',
       'Custom Data Reports',
@@ -81,13 +80,13 @@ export default function PlansPage() {
   const { data: churches } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
-  const currentPlanId = currentChurch?.subscription?.plan || 'Basic';
+  const currentPlanId = currentChurch?.plan || 'Basic';
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="text-center space-y-2 max-w-2xl mx-auto">
         <h2 className="text-4xl font-bold tracking-tight">Flexible Ministry Plans</h2>
-        <p className="text-muted-foreground">Select the tier that best fits your congregation's current growth stage.</p>
+        <p className="text-muted-foreground">Select the tier that best fits your congregation's current growth stage and SMS needs.</p>
       </div>
 
       <div className="grid gap-8 md:grid-cols-3">
@@ -125,7 +124,9 @@ export default function PlansPage() {
                     <div className="h-5 w-5 rounded-full bg-accent/10 flex items-center justify-center shrink-0">
                       <Check className="w-3 h-3 text-accent" />
                     </div>
-                    <span className="text-muted-foreground">{feature}</span>
+                    <span className={cn("text-muted-foreground", feature.includes("SMS") && "font-bold text-primary")}>
+                      {feature}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -151,12 +152,12 @@ export default function PlansPage() {
 
       <div className="max-w-4xl mx-auto p-8 rounded-3xl glass border-primary/10 flex flex-col md:flex-row items-center gap-8 shadow-xl">
         <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
-          <Smartphone className="h-8 w-8" />
+          <MessageSquare className="h-8 w-8" />
         </div>
         <div className="flex-1 space-y-2">
-          <h3 className="text-xl font-bold">Payment Instructions</h3>
+          <h3 className="text-xl font-bold">SMS Credits & Activation</h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Subscription upgrades are currently manual via Mobile Money. Send the plan cost to <span className="text-primary font-bold">0248472474</span> with your <span className="underline decoration-primary">Church Name</span> as reference. Accounts are typically updated within 1 hour.
+            Credits are reset on the 1st of every month. Basic plans receive 100, Growth plans receive 1,000, and Premium plans receive 5,000 credits. Need more? Contact support for custom top-ups.
           </p>
         </div>
         <Button variant="outline" className="h-12 px-8 rounded-xl font-bold text-xs" onClick={() => window.open('https://wa.me/233248472474')}>
