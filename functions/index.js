@@ -10,14 +10,17 @@ if (admin.apps.length === 0) {
 
 const MNOTIFY_API_KEY = defineSecret("MNOTIFY_API_KEY");
 
-const { dispatchAllBirthdays, processChurchBirthdays } = require("./schedulers/birthdayScheduler");
+const { dispatchAllBirthdays } = require("./schedulers/birthdayScheduler");
+const { processVisitorFollowups } = require("./schedulers/visitorScheduler");
+const { processEventReminders } = require("./schedulers/eventScheduler");
+const { processScheduledCampaigns } = require("./schedulers/campaignScheduler");
 const { retryFailedSMS: processRetries } = require("./schedulers/retryScheduler");
 
 /**
- * GLOBAL BIRTHDAY DISPATCHER
+ * GLOBAL AUTOMATION DISPATCHERS
  * Runs daily at 06:00 UTC.
  */
-exports.sendBirthdaySMS = onSchedule(
+exports.runDailyAutomations = onSchedule(
   {
     schedule: "0 6 * * *",
     timeZone: "UTC",
@@ -26,13 +29,31 @@ exports.sendBirthdaySMS = onSchedule(
     memory: "512MiB"
   },
   async (event) => {
-    return dispatchAllBirthdays(MNOTIFY_API_KEY.value());
+    const key = MNOTIFY_API_KEY.value();
+    await dispatchAllBirthdays(key);
+    await processVisitorFollowups(key);
+    await processEventReminders(key);
+    return null;
+  }
+);
+
+/**
+ * CAMPAIGN PROCESSOR
+ * Runs every 10 minutes to process scheduled announcements.
+ */
+exports.processSmsCampaigns = onSchedule(
+  {
+    schedule: "*/10 * * * *",
+    timeZone: "UTC",
+    secrets: [MNOTIFY_API_KEY]
+  },
+  async (event) => {
+    return processScheduledCampaigns(MNOTIFY_API_KEY.value());
   }
 );
 
 /**
  * MONTHLY CREDIT RESET
- * Runs on the 1st of every month to reset plan credits.
  */
 exports.resetMonthlyCredits = onSchedule(
   {

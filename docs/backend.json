@@ -13,6 +13,18 @@
         "birthdayKey": { "type": "string", "description": "MM-DD index" }
       }
     },
+    "Visitor": {
+      "title": "Visitor",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "visitDate": { "type": "string", "format": "date" },
+        "followupSent": { "type": "boolean" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
     "SMSLog": {
       "title": "SMS Log",
       "type": "object",
@@ -21,7 +33,7 @@
         "phone": { "type": "string" },
         "message": { "type": "string" },
         "status": { "type": "string", "enum": ["sent", "failed", "pending", "retrying"] },
-        "type": { "type": "string", "enum": ["birthday", "announcement", "test", "reminder", "other"] },
+        "type": { "type": "string", "enum": ["birthday", "announcement", "test", "reminder", "followup", "other"] },
         "retryCount": { "type": "number" },
         "cost": { "type": "number" },
         "error": { "type": "string" },
@@ -50,6 +62,16 @@
       "schema": "Member",
       "description": "Tenant isolated member directory."
     },
+    "/churches/{churchId}/visitors/{visitorId}": {
+      "schema": "Visitor",
+      "description": "Guest and visitor tracking for outreach."
+    },
+    "/churches/{churchId}/events/{eventId}": {
+      "description": "Church events with SMS reminder settings."
+    },
+    "/churches/{churchId}/scheduledSms/{campaignId}": {
+      "description": "Queue for scheduled announcements and campaigns."
+    },
     "/churches/{churchId}/smsLogs/{logId}": {
       "schema": "SMSLog",
       "description": "Tenant isolated communication logs."
@@ -57,9 +79,6 @@
     "/churches/{churchId}/smsTransactions/{txId}": {
       "schema": "SMSTransaction",
       "description": "Ledger of credit additions and deductions."
-    },
-    "/churches/{churchId}/smsTemplates/{templateId}": {
-      "description": "Tenant isolated reusable message structures."
     }
   }
 }

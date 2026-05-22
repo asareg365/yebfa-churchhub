@@ -17,9 +17,12 @@ import {
   Layout,
   History,
   TrendingDown,
-  Info
+  Info,
+  Calendar,
+  Filter,
+  Users
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -29,10 +32,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { aiCommunicationAssistant } from '@/ai/flows/ai-communication-assistant';
 import { useToast } from '@/hooks/use-toast';
 import { useCollection, useFirestore, useUser } from '@/firebase';
-import { collection, query, where, limit, addDoc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { collection, query, where, limit, addDoc, serverTimestamp, orderBy, deleteDoc, doc } from 'firebase/firestore';
 import { sendAndLogSMS, processBirthdaysToday } from '@/services/sms-service';
-import { startOfDay, startOfMonth, format, subDays } from 'date-fns';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { startOfDay, format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
@@ -40,7 +42,6 @@ import { cn } from '@/lib/utils';
 import SMSLogsPage from './logs/page';
 import FailedMessagesPage from './failed/page';
 import SMSTemplatesPage from './templates/page';
-import SMSAnalyticsPage from './analytics/page';
 
 export default function SMSCenterHub() {
   const db = useFirestore();
@@ -52,8 +53,10 @@ export default function SMSCenterHub() {
   const [targetAudience, setTargetAudience] = useState('all members');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isScheduling, setIsScheduling] = useState(false);
   const [isProcessingBirthdays, setIsProcessingBirthdays] = useState(false);
   const [draft, setDraft] = useState('');
+  const [scheduledAt, setScheduledAt] = useState('');
 
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
@@ -63,7 +66,10 @@ export default function SMSCenterHub() {
   const currentChurch = churches?.[0];
 
   const smsRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'smsLogs') : null, [db, currentChurch?.id]);
+  const campaignRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'scheduledSms') : null, [db, currentChurch?.id]);
+  
   const { data: allLogs } = useCollection(smsRef ? query(smsRef, orderBy('createdAt', 'desc'), limit(100)) : null);
+  const { data: campaigns } = useCollection(campaignRef ? query(campaignRef, orderBy('scheduledAt', 'desc')) : null);
 
   const stats = useMemo(() => {
     const sms = currentChurch?.sms || { credits: 0, enabled: false, subscriptionStatus: 'pending' };
@@ -91,6 +97,28 @@ export default function SMSCenterHub() {
     } finally { setIsGenerating(false); }
   };
 
+  const handleScheduleCampaign = async () => {
+    if (!draft || !scheduledAt || !campaignRef) return;
+    setIsScheduling(true);
+    try {
+      await addDoc(campaignRef, {
+        message: draft,
+        target: targetAudience,
+        scheduledAt: new Date(scheduledAt),
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
+      toast({ title: 'Campaign Scheduled', description: 'Message queued for automatic delivery.' });
+      setDraft('');
+      setScheduledAt('');
+      setActiveTab('campaigns');
+    } catch (e: any) {
+      toast({ title: 'Scheduling failed', variant: 'destructive' });
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
   const handleSendTest = async () => {
     if (!draft || !currentChurch?.id) return;
     setIsSending(true);
@@ -100,20 +128,10 @@ export default function SMSCenterHub() {
         message: draft,
         type: 'test'
       });
-      if (outcome.success) toast({ title: 'SMS Sent Successfully' });
+      if (outcome.success) toast({ title: 'Test SMS Sent Successfully' });
       else toast({ title: 'Send Failed', description: outcome.error, variant: 'destructive' });
     } catch (e: any) { toast({ title: 'Error', description: e.message, variant: 'destructive' }); }
     finally { setIsSending(false); }
-  };
-
-  const handleRunBirthdayCheck = async () => {
-    if (!currentChurch?.id) return;
-    setIsProcessingBirthdays(true);
-    try {
-      const results = await processBirthdaysToday(db, currentChurch.id);
-      toast({ title: 'Process Complete', description: `Sent: ${results.sent}, Failed: ${results.failed}` });
-    } catch (e: any) { toast({ title: 'Error', description: e.message, variant: 'destructive' }); }
-    finally { setIsProcessingBirthdays(false); }
   };
 
   return (
@@ -128,31 +146,16 @@ export default function SMSCenterHub() {
             </Badge>
           </div>
         </div>
-        <Button variant="outline" className="glass border-primary/20 text-primary" onClick={handleRunBirthdayCheck} disabled={isProcessingBirthdays || stats.status !== 'active'}>
+        <Button variant="outline" className="glass border-primary/20 text-primary" onClick={() => processBirthdaysToday(db, currentChurch!.id)} disabled={isProcessingBirthdays || stats.status !== 'active'}>
           {isProcessingBirthdays ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Cake className="w-4 h-4 mr-2" />}
           Run Birthday Check
         </Button>
       </div>
 
-      {stats.status !== 'active' && (
-        <Card className="bg-amber-50 border-amber-200">
-          <CardHeader className="py-4">
-            <div className="flex items-center gap-3 text-amber-800">
-              <Info className="h-5 w-5" />
-              <div>
-                <CardTitle className="text-sm font-bold">Service Approval Pending</CardTitle>
-                <CardDescription className="text-amber-700 text-xs">
-                  Your SMS service is awaiting activation by the System Administrator. Manual sending and automation will be enabled once approved.
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-        </Card>
-      )}
-
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="glass border-white/10 p-1 rounded-2xl">
           <TabsTrigger value="dashboard" className="rounded-xl px-6"><MessageSquare className="w-4 h-4 mr-2" />Dashboard</TabsTrigger>
+          <TabsTrigger value="campaigns" className="rounded-xl px-6"><Calendar className="w-4 h-4 mr-2" />Campaigns</TabsTrigger>
           <TabsTrigger value="logs" className="rounded-xl px-6"><History className="w-4 h-4 mr-2" />Logs</TabsTrigger>
           <TabsTrigger value="failed" className="rounded-xl px-6"><AlertTriangle className="w-4 h-4 mr-2" />Failed</TabsTrigger>
           <TabsTrigger value="templates" className="rounded-xl px-6"><Layout className="w-4 h-4 mr-2" />Templates</TabsTrigger>
@@ -163,48 +166,118 @@ export default function SMSCenterHub() {
             <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Available Credits</p><h3 className="text-2xl font-bold text-primary">{stats.remaining.toLocaleString()}</h3></CardContent></Card>
             <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sent Today</p><h3 className="text-2xl font-bold text-accent">{stats.today}</h3></CardContent></Card>
             <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Failures</p><h3 className="text-2xl font-bold text-destructive">{stats.failed}</h3></CardContent></Card>
-            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Service Health</p><h3 className="text-2xl font-bold">{stats.enabled ? 'Active' : 'Offline'}</h3></CardContent></Card>
+            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Service Status</p><h3 className="text-2xl font-bold capitalize">{stats.status}</h3></CardContent></Card>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
-            <Card className="glass border-primary/20 shadow-xl overflow-hidden flex flex-col">
+            <Card className="glass border-primary/20 shadow-xl flex flex-col">
               <CardHeader className="bg-primary/5 border-b">
-                <CardTitle className="text-lg flex items-center gap-2"><Sparkles className="w-5 h-5 text-primary" />AI Campaign Assistant</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2"><Sparkles className="w-5 h-5 text-primary" />AI Message Builder</CardTitle>
+                <CardDescription>Tailor your announcements for maximum impact.</CardDescription>
               </CardHeader>
-              <CardContent className="p-6 space-y-4 flex-1">
+              <CardContent className="p-6 space-y-4">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Message Topic</Label>
-                    <Input placeholder="e.g. 2026 Easter Convention" value={topic} onChange={(e) => setTopic(e.target.value)} className="bg-muted/30 h-11"/>
+                    <Label>Announcement Topic</Label>
+                    <Input placeholder="e.g. Youth Prayer Night" value={topic} onChange={(e) => setTopic(e.target.value)} className="bg-muted/30 h-11"/>
                   </div>
                   <div className="space-y-2">
-                    <Label>Target Audience</Label>
+                    <Label>Target Group</Label>
                     <Select value={targetAudience} onValueChange={setTargetAudience}>
                       <SelectTrigger className="bg-muted/30 h-11"><SelectValue /></SelectTrigger>
-                      <SelectContent><SelectItem value="all members">All Members</SelectItem><SelectItem value="youth group">Youth Group</SelectItem><SelectItem value="church elders">Church Elders</SelectItem></SelectContent>
+                      <SelectContent>
+                        <SelectItem value="all members">Entire Congregation</SelectItem>
+                        <SelectItem value="Youth">Youth Department</SelectItem>
+                        <SelectItem value="Music">Music Team</SelectItem>
+                        <SelectItem value="Media">Media Department</SelectItem>
+                      </SelectContent>
                     </Select>
                   </div>
                   <Button className="w-full bg-primary h-11" onClick={handleGenerate} disabled={isGenerating || stats.status !== 'active'}>
                     {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                    Generate Draft
+                    Generate with AI
                   </Button>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="glass overflow-hidden flex flex-col">
-              <CardHeader className="bg-muted/10 border-b"><CardTitle className="text-lg">Message Editor</CardTitle></CardHeader>
+            <Card className="glass flex flex-col shadow-xl">
+              <CardHeader className="bg-muted/10 border-b"><CardTitle className="text-lg">Scheduling & Sending</CardTitle></CardHeader>
               <CardContent className="p-0 flex-1 flex flex-col">
-                <Textarea className="flex-1 p-6 bg-transparent border-0 resize-none min-h-[180px] focus-visible:ring-0" placeholder="Type or generate your message..." value={draft} onChange={(e) => setDraft(e.target.value)}/>
-                <div className="p-4 bg-muted/20 border-t flex gap-2">
-                  <Button className="flex-1 bg-accent" onClick={handleSendTest} disabled={!draft || isSending || stats.status !== 'active'}>
-                    {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-                    Send Test SMS
-                  </Button>
+                <Textarea className="flex-1 p-6 bg-transparent border-0 resize-none min-h-[180px] focus-visible:ring-0" placeholder="Your message draft..." value={draft} onChange={(e) => setDraft(e.target.value)}/>
+                <div className="p-4 bg-muted/20 border-t space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase font-bold text-muted-foreground">Schedule for later (Optional)</Label>
+                    <div className="flex gap-2">
+                       <Input type="datetime-local" className="bg-white h-11" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} />
+                       <Button className="bg-primary px-6" onClick={handleScheduleCampaign} disabled={!draft || !scheduledAt || isScheduling}>
+                         {isScheduling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
+                       </Button>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1 h-11" onClick={handleSendTest} disabled={!draft || isSending}>
+                      {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                      Send Test SMS
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="campaigns">
+           <Card className="glass overflow-hidden">
+             <CardHeader className="bg-muted/20 border-b">
+               <CardTitle>Scheduled Campaigns</CardTitle>
+               <CardDescription>Track pending and completed bulk announcements.</CardDescription>
+             </CardHeader>
+             <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                   <table className="w-full text-sm text-left">
+                     <thead className="bg-muted/10 text-muted-foreground border-b border-border">
+                        <tr>
+                          <th className="p-4 font-bold text-[10px] uppercase">Message</th>
+                          <th className="p-4 font-bold text-[10px] uppercase">Target</th>
+                          <th className="p-4 font-bold text-[10px] uppercase">Scheduled Time</th>
+                          <th className="p-4 font-bold text-[10px] uppercase">Status</th>
+                          <th className="p-4 font-bold text-[10px] uppercase text-right">Action</th>
+                        </tr>
+                     </thead>
+                     <tbody className="divide-y divide-border">
+                        {campaigns?.map(camp => (
+                          <tr key={camp.id} className="hover:bg-muted/5 transition-colors">
+                            <td className="p-4 max-w-[200px] truncate font-medium">{camp.message}</td>
+                            <td className="p-4"><Badge variant="outline" className="capitalize">{camp.target}</Badge></td>
+                            <td className="p-4 text-xs">
+                              {camp.scheduledAt?.toDate ? format(camp.scheduledAt.toDate(), 'MMM d, HH:mm') : 'N/A'}
+                            </td>
+                            <td className="p-4">
+                              <Badge className={cn(
+                                "text-[10px] font-bold uppercase",
+                                camp.status === 'completed' ? "bg-accent" : "bg-primary"
+                              )}>
+                                {camp.status}
+                              </Badge>
+                            </td>
+                            <td className="p-4 text-right">
+                              {camp.status === 'pending' && (
+                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteDoc(doc(campaignRef!, camp.id))}>
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        {campaigns?.length === 0 && (
+                          <tr><td colSpan={5} className="p-20 text-center text-muted-foreground italic">No campaigns scheduled.</td></tr>
+                        )}
+                     </tbody>
+                   </table>
+                </div>
+             </CardContent>
+           </Card>
         </TabsContent>
 
         <TabsContent value="logs"><SMSLogsPage /></TabsContent>
