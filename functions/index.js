@@ -1,5 +1,5 @@
 
-const { onCall } = require("firebase-functions/v2/https");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
@@ -16,11 +16,10 @@ const { processVisitorFollowups } = require("./schedulers/visitorScheduler");
 const { processEventReminders } = require("./schedulers/eventScheduler");
 const { processScheduledCampaigns } = require("./schedulers/campaignScheduler");
 const { retryFailedSMS: processRetries } = require("./schedulers/retryScheduler");
-const { processSMSQueueItem, queueSMS } = require("./services/smsService");
+const { processSMSQueueItem, queueSMS, creditWallet, getPlatformStats } = require("./services/smsService");
 
 /**
  * SMS QUEUE DISPATCHER (Main Engine)
- * Triggered whenever a new message is added to the queue.
  */
 exports.onSmsQueued = onDocumentCreated(
   {
@@ -31,6 +30,47 @@ exports.onSmsQueued = onDocumentCreated(
     return processSMSQueueItem(MNOTIFY_API_KEY.value(), event.params.messageId, event.data.data());
   }
 );
+
+/**
+ * ADMIN CALLABLES
+ */
+exports.getSystemStats = onCall(async (request) => {
+  const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+  if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email.toLowerCase())) {
+    throw new HttpsError("permission-denied", "Unauthorized access to system stats");
+  }
+  return getPlatformStats();
+});
+
+exports.adminTopUpWallet = onCall(async (request) => {
+  const { churchId, amount } = request.data;
+  const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+  
+  if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email.toLowerCase())) {
+    throw new HttpsError("permission-denied", "Only system admins can top up wallets");
+  }
+
+  await creditWallet(churchId, amount, `admin_manual_topup`, request.auth.token.email);
+  return { success: true };
+});
+
+exports.updateChurchStatus = onCall(async (request) => {
+  const { churchId, status } = request.data;
+  const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+  
+  if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email.toLowerCase())) {
+    throw new HttpsError("permission-denied", "Only system admins can manage status");
+  }
+
+  const db = admin.firestore();
+  await db.collection("churches").doc(churchId).update({
+    "sms.subscriptionStatus": status,
+    "sms.approved": status === "active",
+    "sms.enabled": status === "active"
+  });
+
+  return { success: true };
+});
 
 /**
  * GLOBAL AUTOMATION DISPATCHERS
@@ -54,7 +94,6 @@ exports.runDailyAutomations = onSchedule(
 
 /**
  * CAMPAIGN PROCESSOR
- * Checks every 10 mins for scheduled bulk messages.
  */
 exports.processSmsCampaigns = onSchedule(
   {
@@ -68,41 +107,11 @@ exports.processSmsCampaigns = onSchedule(
 );
 
 /**
- * MONTHLY CREDIT RESET
- */
-exports.resetMonthlyCredits = onSchedule(
-  {
-    schedule: "0 0 1 * *",
-    timeZone: "Africa/Accra"
-  },
-  async (event) => {
-    const db = admin.firestore();
-    const churchesSnap = await db.collection("churches").get();
-    
-    for (const doc of churchesSnap.docs) {
-      const data = doc.data();
-      const plan = data.plan || "Basic";
-      const planCredits = { "Basic": 100, "Standard": 1000, "Premium": 5000 };
-      const credits = planCredits[plan] || 100;
-      
-      await doc.ref.update({
-        "sms.credits": credits,
-        "sms.resetAt": admin.firestore.FieldValue.serverTimestamp()
-      });
-    }
-    return null;
-  }
-);
-
-/**
  * SECURE CALLABLE FOR FRONTEND
- * Bridges frontend requests to the centralized Queue.
  */
 exports.sendSMS = onCall(async (request) => {
   const { phone, message, type, memberName, memberId, churchId } = request.data;
-  
-  if (!churchId) throw new Error("Missing churchId context");
-
+  if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId context");
   return queueSMS(churchId, {
     phone, message, type, memberName, memberId
   });

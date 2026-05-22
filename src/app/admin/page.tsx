@@ -15,7 +15,10 @@ import {
   Plus,
   Zap,
   CheckCircle,
-  Ban
+  Ban,
+  Activity,
+  CreditCard,
+  History
 } from 'lucide-react';
 import {
   Card,
@@ -51,18 +54,14 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { useCollection, useFirestore, useUser, useAuth } from '@/firebase';
+import { useCollection, useFirestore, useUser, useAuth, useFunctions } from '@/firebase';
 import {
   collection,
   doc,
-  updateDoc,
   query,
-  serverTimestamp,
-  increment,
-  addDoc,
-  setDoc,
-  runTransaction
+  limit,
 } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { signOut } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -73,6 +72,7 @@ export default function SystemAdminPortal() {
   const { user, loading: userLoading } = useUser();
   const auth = useAuth();
   const db = useFirestore();
+  const functions = useFunctions();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -80,11 +80,12 @@ export default function SystemAdminPortal() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [managingSmsId, setManagingSmsId] = useState<string | null>(null);
   const [topUpAmount, setTopUpAmount] = useState('500');
+  const [platformStats, setPlatformStats] = useState<any>(null);
 
   const churchesQuery = useMemo(() => {
     const email = user?.email?.toLowerCase().trim();
     if (!user || !email || !SUPER_ADMINS.includes(email)) return null;
-    return query(collection(db, 'churches'));
+    return query(collection(db, 'churches'), limit(100));
   }, [db, user]);
 
   const { data: rawChurches, loading: collectionLoading } = useCollection(churchesQuery);
@@ -109,86 +110,35 @@ export default function SystemAdminPortal() {
     }
   }, [user, userLoading, router]);
 
-  const handleApproveSms = async (churchId: string) => {
-    const churchRef = doc(db, 'churches', churchId);
-    const walletRef = doc(db, 'smsWallets', churchId);
-    try {
-      await updateDoc(churchRef, {
-        "sms.subscriptionStatus": "active",
-        "sms.approved": true,
-        "sms.enabled": true,
-        "sms.credits": 100,
-        "sms.approvedAt": serverTimestamp(),
-        "sms.approvedBy": user?.email
+  useEffect(() => {
+    if (user && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
+      const fetchStats = httpsCallable(functions, 'getSystemStats');
+      fetchStats().then((res: any) => {
+        setPlatformStats(res.data);
       });
-      
-      // Initialize Source of Truth Wallet
-      await setDoc(walletRef, {
-        churchId,
-        balance: 100,
-        totalTopups: 100,
-        totalSpent: 0,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-
-      toast({ title: "SMS Service Activated", description: "Source-of-truth wallet initialized with 100 credits." });
-    } catch (e: any) {
-      toast({ title: "Activation Failed", description: e.message, variant: "destructive" });
     }
-  };
+  }, [user, functions]);
 
-  const handleToggleSms = async (churchId: string, currentStatus: boolean) => {
+  const handleUpdateStatus = async (churchId: string, status: string) => {
+    setIsProcessing(true);
+    const updateFn = httpsCallable(functions, 'updateChurchStatus');
     try {
-      await updateDoc(doc(db, 'churches', churchId), { "sms.enabled": !currentStatus });
-      toast({ title: currentStatus ? "SMS Suspended" : "SMS Re-activated" });
+      await updateFn({ churchId, status });
+      toast({ title: `Organization ${status.toUpperCase()}`, description: "Status updated in high-integrity ledger." });
     } catch (e: any) {
-      toast({ title: "Operation Failed", variant: "destructive" });
+      toast({ title: "Operation Failed", description: e.message, variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleTopUp = async () => {
     if (!managingSmsId || !topUpAmount) return;
     setIsProcessing(true);
-    
-    const churchRef = doc(db, 'churches', managingSmsId);
-    const walletRef = doc(db, 'smsWallets', managingSmsId);
-    const txRef = doc(collection(db, 'smsTransactions'));
-    const amount = parseInt(topUpAmount);
-
+    const topUpFn = httpsCallable(functions, 'adminTopUpWallet');
     try {
-      await runTransaction(db, async (transaction) => {
-        const walletSnap = await transaction.get(walletRef);
-        const walletData = walletSnap.exists() ? walletSnap.data() : { balance: 0, totalTopups: 0 };
-        const currentBalance = walletData.balance || 0;
-        const newBalance = currentBalance + amount;
-
-        // 1. Update Source-of-truth Wallet
-        transaction.set(walletRef, {
-          balance: newBalance,
-          totalTopups: (walletData.totalTopups || 0) + amount,
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-
-        // 2. Update Display Cache
-        transaction.update(churchRef, {
-          "sms.credits": newBalance,
-          "sms.lastTopupAt": serverTimestamp()
-        });
-
-        // 3. Record Immutable Ledger Entry
-        transaction.set(txRef, {
-          churchId: managingSmsId,
-          type: "credit",
-          amount,
-          balanceBefore: currentBalance,
-          balanceAfter: newBalance,
-          reason: "admin_manual_topup",
-          processedBy: user?.email,
-          createdAt: serverTimestamp()
-        });
-      });
-
-      toast({ title: "Credits Allocated", description: `${amount} credits added to ${activeChurchSms?.name} with transaction log.` });
+      await topUpFn({ churchId: managingSmsId, amount: parseInt(topUpAmount) });
+      toast({ title: "Credits Allocated", description: `${topUpAmount} credits added with transaction audit.` });
       setManagingSmsId(null);
     } catch (e: any) {
       toast({ title: "Top-up Failed", description: e.message, variant: "destructive" });
@@ -213,7 +163,7 @@ export default function SystemAdminPortal() {
             <ShieldCheck className="h-10 w-10 text-primary" />
             System Control Center
           </h2>
-          <p className="text-muted-foreground text-lg">Multi-tenant organizational management & resource allocation.</p>
+          <p className="text-muted-foreground text-lg">Platform-wide multi-tenant resource management.</p>
         </div>
         <Button variant="outline" onClick={() => signOut(auth)} className="rounded-xl">
           <LogOut className="mr-2 h-4 w-4" /> Logout
@@ -221,21 +171,21 @@ export default function SystemAdminPortal() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-4">
-        <Card className="glass">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground">Total Tenants</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold">{sortedChurches.length}</div></CardContent>
+        <Card className="glass border-primary/20">
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Total Tenants</CardTitle></CardHeader>
+          <CardContent><div className="text-3xl font-bold">{platformStats?.totalTenants || sortedChurches.length}</div></CardContent>
+        </Card>
+        <Card className="glass border-accent/20">
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Global Sent</CardTitle></CardHeader>
+          <CardContent><div className="text-3xl font-bold text-accent">{(platformStats?.totalSent || 0).toLocaleString()}</div></CardContent>
         </Card>
         <Card className="glass">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground">Active SMS Nodes</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold text-accent">{sortedChurches.filter(c => c.sms?.enabled).length}</div></CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Credit Pool</CardTitle></CardHeader>
+          <CardContent><div className="text-3xl font-bold text-primary">{(platformStats?.globalCreditPool || 0).toLocaleString()}</div></CardContent>
         </Card>
-        <Card className="glass">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground">Pending Approvals</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold text-amber-600">{sortedChurches.filter(c => !c.sms?.approved && c.sms?.subscriptionStatus !== 'active').length}</div></CardContent>
-        </Card>
-        <Card className="glass">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground">System Health</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold text-primary">Stable</div></CardContent>
+        <Card className="glass border-destructive/20">
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Global Failures</CardTitle></CardHeader>
+          <CardContent><div className="text-3xl font-bold text-destructive">{(platformStats?.totalFailed || 0).toLocaleString()}</div></CardContent>
         </Card>
       </div>
 
@@ -243,11 +193,11 @@ export default function SystemAdminPortal() {
         <CardHeader className="flex flex-row items-center justify-between pb-7">
           <div>
             <CardTitle>Organization Directory</CardTitle>
-            <CardDescription>Manage tenant lifecycles and SMS wallet allocation.</CardDescription>
+            <CardDescription>Manage tenant lifecycles and source-of-truth wallets.</CardDescription>
           </div>
           <div className="relative w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search churches..." className="pl-10 h-11" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <Input placeholder="Search ministries..." className="pl-10 h-11" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
         </CardHeader>
         <CardContent>
@@ -256,8 +206,8 @@ export default function SystemAdminPortal() {
               <TableRow>
                 <TableHead>Ministry</TableHead>
                 <TableHead>Plan</TableHead>
-                <TableHead>SMS Status</TableHead>
-                <TableHead>SMS Balance</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Balance</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -277,17 +227,18 @@ export default function SystemAdminPortal() {
                   </TableCell>
                   <TableCell><Badge variant="outline">{church.plan || 'Starter'}</Badge></TableCell>
                   <TableCell>
-                    {church.sms?.approved || church.sms?.subscriptionStatus === 'active' ? (
-                      <Badge className={cn(church.sms?.enabled ? "bg-accent text-white" : "bg-destructive text-white")}>
-                        {church.sms?.enabled ? 'Active' : 'Suspended'}
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="bg-amber-100 text-amber-700">Pending Approval</Badge>
-                    )}
+                    <Badge className={cn(
+                      "uppercase text-[9px] font-bold px-2 py-0.5",
+                      church.sms?.subscriptionStatus === 'active' ? "bg-accent text-white" : 
+                      church.sms?.subscriptionStatus === 'suspended' ? "bg-destructive text-white" : 
+                      "bg-amber-100 text-amber-700"
+                    )}>
+                      {church.sms?.subscriptionStatus || 'Pending'}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <Smartphone className="h-3 w-3 text-muted-foreground" />
+                      <CreditCard className="h-3 w-3 text-muted-foreground" />
                       <span className="font-mono font-bold">{(church.sms?.credits || 0).toLocaleString()}</span>
                     </div>
                   </TableCell>
@@ -296,27 +247,23 @@ export default function SystemAdminPortal() {
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {(!church.sms?.approved && church.sms?.subscriptionStatus !== 'active') ? (
-                          <DropdownMenuItem onClick={() => handleApproveSms(church.id)} className="text-accent font-bold">
-                            <CheckCircle className="mr-2 h-4 w-4" /> Approve & Init Wallet
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem onClick={() => setManagingSmsId(church.id)} className="font-bold text-primary">
+                          <Zap className="mr-2 h-4 w-4" /> Top-up Wallet
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {church.sms?.subscriptionStatus !== 'active' ? (
+                          <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'active')}>
+                            <CheckCircle className="mr-2 h-4 w-4 text-accent" /> Activate Organization
                           </DropdownMenuItem>
                         ) : (
-                          <>
-                            <DropdownMenuItem onClick={() => setManagingSmsId(church.id)}>
-                              <Zap className="mr-2 h-4 w-4 text-primary" /> SMS Top-up
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleToggleSms(church.id, church.sms?.enabled)}>
-                              {church.sms?.enabled ? (
-                                <><Ban className="mr-2 h-4 w-4 text-destructive" /> Suspend Service</>
-                              ) : (
-                                <><CheckCircle2 className="mr-2 h-4 w-4 text-accent" /> Activate Service</>
-                              )}
-                            </DropdownMenuItem>
-                          </>
+                          <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'suspended')} className="text-destructive">
+                            <Ban className="mr-2 h-4 w-4" /> Suspend Service
+                          </DropdownMenuItem>
                         )}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete Tenant</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => router.push(`/dashboard?impersonate=${church.id}`)}>
+                          <Activity className="mr-2 h-4 w-4" /> View Analytics
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -328,10 +275,10 @@ export default function SystemAdminPortal() {
       </Card>
 
       <Dialog open={!!managingSmsId} onOpenChange={(o) => !o && setManagingSmsId(null)}>
-        <DialogContent>
+        <DialogContent className="glass">
           <DialogHeader>
-            <DialogTitle>SMS Credit Management</DialogTitle>
-            <DialogDescription>Allocating source-of-truth resources for <strong>{activeChurchSms?.name}</strong>.</DialogDescription>
+            <DialogTitle>Source-of-Truth Allocation</DialogTitle>
+            <DialogDescription>Adding credits for <strong>{activeChurchSms?.name}</strong>. This action is recorded in the immutable ledger.</DialogDescription>
           </DialogHeader>
           <div className="py-6 space-y-4">
             <div className="p-4 rounded-xl bg-muted/20 border flex justify-between items-center">
@@ -339,17 +286,17 @@ export default function SystemAdminPortal() {
               <span className="text-xl font-bold">{(activeChurchSms?.sms?.credits || 0).toLocaleString()}</span>
             </div>
             <div className="space-y-2">
-              <Label>Credits to Add</Label>
+              <Label>Amount to Add</Label>
               <div className="flex gap-2">
-                <Input type="number" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} />
-                <Button className="bg-primary" onClick={handleTopUp} disabled={isProcessing}>
+                <Input type="number" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="h-12 bg-white" />
+                <Button className="bg-primary h-12 px-6" onClick={handleTopUp} disabled={isProcessing}>
                   {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setManagingSmsId(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setManagingSmsId(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
