@@ -1,5 +1,5 @@
 
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
@@ -16,7 +16,7 @@ const { processVisitorFollowups } = require("./schedulers/visitorScheduler");
 const { processEventReminders } = require("./schedulers/eventScheduler");
 const { processScheduledCampaigns } = require("./schedulers/campaignScheduler");
 const { retryFailedSMS: processRetries } = require("./schedulers/retryScheduler");
-const { processSMSQueueItem, queueSMS, creditWallet, getPlatformStats } = require("./services/smsService");
+const { processSMSQueueItem, queueSMS, creditWallet, getPlatformStats, handleMNotifyWebhook } = require("./services/smsService");
 
 /**
  * SMS QUEUE DISPATCHER
@@ -30,6 +30,14 @@ exports.onSmsQueued = onDocumentCreated(
     return processSMSQueueItem(MNOTIFY_API_KEY.value(), event.params.messageId, event.data.data());
   }
 );
+
+/**
+ * MNOTIFY WEBHOOK
+ * Receives delivery updates from provider.
+ */
+exports.mnotifyDeliveryWebhook = onRequest(async (req, res) => {
+  return handleMNotifyWebhook(req, res);
+});
 
 /**
  * ADMIN CALLABLES

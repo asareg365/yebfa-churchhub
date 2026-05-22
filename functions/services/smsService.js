@@ -313,6 +313,81 @@ async function processSMSQueueItem(apiKey, messageId, data) {
 }
 
 /**
+ * MNOTIFY WEBHOOK HANDLER
+ * Receives real-time delivery updates from provider.
+ */
+async function handleMNotifyWebhook(req, res) {
+  const db = admin.firestore();
+  const payload = req.body; 
+  // Expecting: { message_id, status, recipient, network, ... }
+  
+  if (!payload.message_id) {
+    console.warn("[Webhook] Received request without message_id:", payload);
+    return res.status(200).send("Ignored: No message_id");
+  }
+
+  console.log(`[Webhook] Processing update for providerId: ${payload.message_id}, status: ${payload.status}`);
+
+  try {
+    const providerId = payload.message_id;
+    const status = payload.status?.toLowerCase() || "unknown";
+
+    // 1. Find the technical report bridge
+    const reportsSnap = await db.collection("smsDeliveryReports")
+      .where("providerMessageId", "==", providerId)
+      .limit(1)
+      .get();
+
+    if (reportsSnap.empty) {
+      console.warn(`[Webhook] No report found for providerId: ${providerId}`);
+      return res.status(200).send("Logged: Report not found");
+    }
+
+    const reportDoc = reportsSnap.docs[0];
+    const reportData = reportDoc.data();
+    const { churchId, messageId } = reportData;
+
+    // 2. Update technical report
+    await reportDoc.ref.update({
+      status: status,
+      network: payload.network || reportData.network || "unknown",
+      deliveredAt: status === "delivered" ? admin.firestore.FieldValue.serverTimestamp() : null,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // 3. Update global queue status
+    if (messageId) {
+      await db.collection("smsQueue").doc(messageId).update({
+        providerStatus: status,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    // 4. Update organization log
+    const logsSnap = await db.collection("churches").doc(churchId).collection("smsLogs")
+      .where("providerMessageId", "==", providerId)
+      .limit(1)
+      .get();
+
+    if (!logsSnap.empty) {
+      const logRef = logsSnap.docs[0].ref;
+      await logRef.update({
+        providerStatus: status,
+        // Map carrier status to internal log status
+        status: status === "delivered" ? "sent" : (status === "failed" || status === "undelivered" ? "failed" : "sent"),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    return res.status(200).send("Webhook Processed");
+
+  } catch (err) {
+    console.error("[Webhook Error]:", err.message);
+    return res.status(500).send("Processing Error");
+  }
+}
+
+/**
  * ADMIN ANALYTICS HELPERS
  */
 async function getPlatformStats() {
@@ -355,5 +430,6 @@ module.exports = {
   queueSMS, 
   processSMSQueueItem, 
   creditWallet, 
-  getPlatformStats 
+  getPlatformStats,
+  handleMNotifyWebhook
 };
