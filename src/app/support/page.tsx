@@ -4,14 +4,19 @@ import Link from "next/link";
 import { ArrowLeft, Mail, Smartphone, ShieldCheck, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useUser } from "@/firebase";
 
 export default function SupportPage() {
+  const { user } = useUser();
+  const backHref = user ? "/dashboard" : "/";
+  const backLabel = user ? "Back to Dashboard" : "Back to Home";
+
   return (
     <div className="min-h-screen bg-background py-20 px-6">
       <div className="max-w-4xl mx-auto space-y-8">
-        <Link href="/">
+        <Link href={backHref}>
           <Button variant="ghost" className="mb-8">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Home
+            <ArrowLeft className="mr-2 h-4 w-4" /> {backLabel}
           </Button>
         </Link>
 

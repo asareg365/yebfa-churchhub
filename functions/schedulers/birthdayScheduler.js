@@ -1,3 +1,4 @@
+
 const admin = require("firebase-admin");
 const { DateTime } = require("luxon");
 const { sendSMS } = require("../services/smsService");
@@ -35,6 +36,7 @@ async function dispatchAllBirthdays(apiKey) {
 
 /**
  * Per-Church Worker Logic
+ * Processes one church with timezone awareness and duplicate protection.
  */
 async function processChurchBirthdays(apiKey, churchDoc) {
   const db = admin.firestore();
@@ -42,13 +44,14 @@ async function processChurchBirthdays(apiKey, churchDoc) {
   const churchData = churchDoc.data();
   const timezone = churchData.settings?.timezone || "Africa/Accra";
   
-  // Use Luxon for accurate local time matching
+  // 1. Determine local "Today" for this church
   const now = DateTime.now().setZone(timezone);
   const todayKey = now.toFormat("MM-dd");
   const todayDateStr = now.toFormat("yyyy-MM-dd");
 
   console.log(`[${churchId}] Processing birthdays for ${todayKey} (Timezone: ${timezone})`);
 
+  // 2. Query only members celebrating today
   const membersSnap = await churchDoc.ref.collection("members")
     .where("birthdayKey", "==", todayKey)
     .get();
@@ -59,7 +62,6 @@ async function processChurchBirthdays(apiKey, churchDoc) {
 
   const results = { sent: 0, failed: 0 };
   const template = churchData.smsTemplates?.birthday || "Happy Birthday {{name}}! May God bless your new age richly. — {{churchName}}";
-  const churchDisplayName = churchData.sms?.displayName || churchData.name || "Our Church";
 
   for (const memberDoc of membersSnap.docs) {
     const member = memberDoc.data();
@@ -67,7 +69,7 @@ async function processChurchBirthdays(apiKey, churchDoc) {
 
     if (!member.phone) continue;
 
-    // Idempotency: Duplicate Protection
+    // 3. Duplicate Protection (Idempotency)
     const historyId = `${memberId}_${todayDateStr}`;
     const historyRef = churchDoc.ref.collection("birthdayHistory").doc(historyId);
     const alreadySent = await historyRef.get();
@@ -77,11 +79,13 @@ async function processChurchBirthdays(apiKey, churchDoc) {
       continue;
     }
 
+    // 4. Personalize Message using SaaS branding pattern
     const message = parseTemplate(template, {
       name: member.name,
-      churchName: churchDisplayName
+      churchName: churchData.sms?.displayName || churchData.name || "Our Church"
     });
 
+    // 5. Send and Record
     try {
       const outcome = await sendSMS(apiKey, churchId, {
         phone: member.phone,
