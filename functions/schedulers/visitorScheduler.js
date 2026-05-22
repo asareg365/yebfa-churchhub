@@ -1,4 +1,3 @@
-
 const admin = require("firebase-admin");
 const { DateTime } = require("luxon");
 const { sendSMS } = require("../services/smsService");
@@ -16,7 +15,7 @@ async function processVisitorFollowups(apiKey) {
     const churchData = churchDoc.data();
     const timezone = churchData.settings?.timezone || "Africa/Accra";
     
-    // Get "Yesterday" in church's local time
+    // Luxon yesterday check
     const yesterday = DateTime.now().setZone(timezone).minus({ days: 1 }).toFormat("yyyy-MM-dd");
 
     const visitorsSnap = await churchDoc.ref.collection("visitors")

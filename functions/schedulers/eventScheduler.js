@@ -1,4 +1,3 @@
-
 const admin = require("firebase-admin");
 const { DateTime } = require("luxon");
 const { sendSMS } = require("../services/smsService");
@@ -16,7 +15,7 @@ async function processEventReminders(apiKey) {
     const churchData = churchDoc.data();
     const timezone = churchData.settings?.timezone || "Africa/Accra";
     
-    // Date of tomorrow
+    // Luxon tomorrow check
     const tomorrow = DateTime.now().setZone(timezone).plus({ days: 1 }).toFormat("yyyy-MM-dd");
 
     const eventsSnap = await churchDoc.ref.collection("events")
@@ -26,7 +25,6 @@ async function processEventReminders(apiKey) {
 
     if (eventsSnap.empty) continue;
 
-    // Fetch members to notify (could be filtered by target group in future)
     const membersSnap = await churchDoc.ref.collection("members")
       .where("status", "==", "Active")
       .get();
