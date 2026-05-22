@@ -134,18 +134,39 @@ async function processSMSQueueItem(apiKey, messageId, data) {
   const walletRef = db.collection("smsWallets").doc(churchId);
   const logsRef = churchRef.collection("smsLogs");
 
-  if (data.status !== "queued") return null;
+  // STEP 1: LOCK MESSAGE (Transactional status claim)
+  const claimed = await db.runTransaction(async (t) => {
+    const snap = await t.get(queueRef);
 
-  try {
-    await queueRef.update({ 
+    if (!snap.exists) return false;
+
+    const current = snap.data();
+
+    // Already claimed or finished
+    if (current.status !== "queued") {
+      return false;
+    }
+
+    t.update(queueRef, {
       status: "processing",
-      updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+      processingStartedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
+    return true;
+  });
+
+  if (!claimed) {
+    console.log(`Message ${messageId} already claimed or status changed`);
+    return null;
+  }
+
+  try {
+    // STEP 2: DEBIT WALLET
     await db.runTransaction(async (t) => {
       await debitWallet(t, walletRef, churchRef, data.cost || 1, churchId, messageId, data.type);
     });
 
+    // STEP 3: SEND SMS
     const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
     const response = await axios.post(url, {
       recipient: [data.phone],
