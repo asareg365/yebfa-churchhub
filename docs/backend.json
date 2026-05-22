@@ -13,97 +13,27 @@
         "birthdayKey": { "type": "string", "description": "MMDD index" }
       }
     },
-    "Visitor": {
-      "title": "Visitor",
-      "type": "object",
-      "properties": {
-        "name": { "type": "string" },
-        "phone": { "type": "string" },
-        "visitDate": { "type": "string", "format": "date" },
-        "followupSent": { "type": "boolean" },
-        "notes": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "SMSQueue": {
-      "title": "SMS Queue",
-      "type": "object",
-      "properties": {
-        "churchId": { "type": "string" },
-        "phone": { "type": "string" },
-        "message": { "type": "string" },
-        "status": { "type": "string", "enum": ["queued", "processing", "sent", "failed"] },
-        "type": { "type": "string" },
-        "cost": { "type": "number" },
-        "retryCount": { "type": "number" },
-        "dedupeKey": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "scheduledAt": { "type": "string", "format": "date-time" }
-      }
-    },
     "SMSWallet": {
       "title": "SMS Wallet",
       "type": "object",
       "properties": {
         "churchId": { "type": "string" },
         "balance": { "type": "number" },
+        "reserved": { "type": "number" },
         "totalTopups": { "type": "number" },
         "totalSpent": { "type": "number" },
-        "lastTopupAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       }
     },
-    "SMSLog": {
-      "title": "SMS Log",
+    "SMSLedger": {
+      "title": "SMS Ledger",
       "type": "object",
       "properties": {
         "churchId": { "type": "string" },
-        "memberName": { "type": "string" },
-        "phone": { "type": "string" },
-        "message": { "type": "string" },
-        "status": { "type": "string" },
-        "type": { "type": "string" },
-        "error": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "SMSTransaction": {
-      "title": "SMS Transaction",
-      "type": "object",
-      "properties": {
-        "churchId": { "type": "string" },
-        "type": { "type": "string", "enum": ["debit", "credit", "topup", "adjustment", "refund"] },
+        "messageId": { "type": "string" },
+        "type": { "type": "string", "enum": ["DEBIT", "REFUND"] },
         "amount": { "type": "number" },
-        "balanceBefore": { "type": "number" },
-        "balanceAfter": { "type": "number" },
-        "reason": { "type": "string" },
-        "messageId": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "SMSDeliveryReport": {
-      "title": "SMS Delivery Report",
-      "type": "object",
-      "properties": {
-        "churchId": { "type": "string" },
-        "messageId": { "type": "string" },
-        "providerMessageId": { "type": "string" },
-        "phone": { "type": "string" },
-        "status": { "type": "string" },
-        "network": { "type": "string" },
-        "deliveredAt": { "type": "string", "format": "date-time" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "SMSAbuseLog": {
-      "title": "SMS Abuse Log",
-      "type": "object",
-      "properties": {
-        "churchId": { "type": "string" },
-        "churchName": { "type": "string" },
-        "phone": { "type": "string" },
-        "message": { "type": "string" },
-        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["RESERVED", "COMMITTED", "SENT", "FAILED", "REFUNDED"] },
         "createdAt": { "type": "string", "format": "date-time" }
       }
     }
@@ -114,29 +44,20 @@
     },
     "/smsWallets/{churchId}": {
       "schema": "SMSWallet",
-      "description": "Source of truth for organization credit balance."
+      "description": "Transactional source of truth for organization credit balance."
+    },
+    "/smsLedger/{ledgerId}": {
+      "schema": "SMSLedger",
+      "description": "Immutable financial audit trail for every SMS movement."
+    },
+    "/smsLocks/{churchId}": {
+      "description": "Distributed locks to prevent parallel processing race conditions."
     },
     "/smsQueue/{messageId}": {
-      "schema": "SMSQueue",
       "description": "Global queue for all outgoing messages."
     },
     "/smsTransactions/{txId}": {
-      "schema": "SMSTransaction",
-      "description": "Global immutable ledger for all financial movements."
-    },
-    "/smsDeliveryReports/{reportId}": {
-      "schema": "SMSDeliveryReport",
-      "description": "Detailed provider-level delivery tracking."
-    },
-    "/smsAbuseLogs/{logId}": {
-      "schema": "SMSAbuseLog",
-      "description": "Logs of blocked attempts due to security/spam filters."
-    },
-    "/churches/{churchId}/members/{memberId}": {
-      "schema": "Member"
-    },
-    "/churches/{churchId}/smsLogs/{logId}": {
-      "schema": "SMSLog"
+      "description": "Legacy transaction log for top-ups and adjustments."
     }
   }
 }

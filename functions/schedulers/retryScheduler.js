@@ -2,61 +2,47 @@
 const admin = require("firebase-admin");
 
 /**
- * Retries failed SMS logs by placing them back into the global queue
- * instead of sending directly. This maintains the 'Charge-Then-Send' integrity.
+ * Exponential Backoff Strategy
+ * Attempts: 1 (60s), 2 (120s), 3 (240s)...
  */
+function getBackoffSeconds(retryCount) {
+  return Math.min(60 * Math.pow(2, retryCount), 3600); // Max 1 hour
+}
+
 async function retryFailedSMS(apiKey) {
   const db = admin.firestore();
-  const churchesSnap = await db.collection("churches").get();
+  const now = admin.firestore.Timestamp.now();
 
-  for (const churchDoc of churchesSnap.docs) {
-    const churchId = churchDoc.id;
+  // Query failed messages that are eligible for retry
+  const failedQuery = await db.collection("smsQueue")
+    .where("status", "==", "failed")
+    .where("retryCount", "<", 5) // Max 5 attempts
+    .limit(50)
+    .get();
 
-    // Query logs where status is failed, retryCount < 3, and hasn't been requeued yet.
-    // This query requires a composite index: status (ASC), requeued (ASC), retryCount (ASC)
-    const failedLogsSnap = await churchDoc.ref.collection("smsLogs")
-      .where("status", "==", "failed")
-      .where("retryCount", "<", 3)
-      .where("requeued", "!=", true)
-      .limit(20)
-      .get();
+  if (failedQuery.empty) return { success: true, count: 0 };
 
-    if (failedLogsSnap.empty) continue;
+  const batch = db.batch();
+  let processed = 0;
 
-    const queueRef = db.collection("smsQueue");
+  for (const doc of failedQuery.docs) {
+    const data = doc.data();
+    
+    // Determine if enough time has passed based on backoff
+    const lastUpdate = data.updatedAt?.toMillis() || Date.now();
+    const waitTime = getBackoffSeconds(data.retryCount || 0) * 1000;
 
-    for (const logDoc of failedLogsSnap.docs) {
-      const log = logDoc.data();
-      
-      // Re-enqueue the message
-      await queueRef.add({
-        churchId,
-        phone: log.phone,
-        message: log.message,
-        type: log.type,
+    if (Date.now() - lastUpdate >= waitTime) {
+      batch.update(doc.ref, {
         status: "queued",
-        retryCount: (log.retryCount || 0) + 1,
-        maxRetries: 3,
-        cost: log.cost || 1,
-        metadata: {
-          memberId: log.memberId || null,
-          memberName: log.memberName || null,
-        },
-        scheduledAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
-
-      // Enterprise Fix: NEVER delete logs. Mark as requeued and change status
-      // so the next run of this scheduler doesn't process the same log again.
-      await logDoc.ref.update({
-        status: "requeued",
-        requeued: true,
-        requeuedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      processed++;
     }
   }
-  
-  return { success: true };
+
+  await batch.commit();
+  return { success: true, count: processed };
 }
 
 module.exports = { retryFailedSMS };

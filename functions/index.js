@@ -1,3 +1,4 @@
+
 const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
@@ -14,12 +15,11 @@ const { dispatchAllBirthdays } = require("./schedulers/birthdayScheduler");
 const { processVisitorFollowups } = require("./schedulers/visitorScheduler");
 const { processEventReminders } = require("./schedulers/eventScheduler");
 const { processScheduledCampaigns } = require("./schedulers/campaignScheduler");
-const { retryFailedSMS: processRetries } = require("./schedulers/retryScheduler");
-const { processSMSQueueItem, queueSMS, creditWallet, getPlatformStats, handleMNotifyWebhook } = require("./services/smsService");
+const { retryFailedSMS } = require("./schedulers/retryScheduler");
+const { processSMSQueueItem, queueSMS, creditWallet } = require("./services/smsService");
 
 /**
- * SMS QUEUE DISPATCHER
- * Region: us-central1 (Recreated for absolute regional consistency)
+ * MISSION CRITICAL WORKER
  */
 exports.onSmsQueued = onDocumentCreated(
   {
@@ -28,83 +28,73 @@ exports.onSmsQueued = onDocumentCreated(
     secrets: [MNOTIFY_API_KEY]
   },
   async (event) => {
-    return processSMSQueueItem(MNOTIFY_API_KEY.value(), event.params.messageId, event.data.data());
+    const data = event.data.data();
+    if (data.status !== "queued") return null;
+    return processSMSQueueItem(MNOTIFY_API_KEY.value(), event.params.messageId, data);
   }
 );
 
 /**
- * MNOTIFY WEBHOOK
- * Region: us-central1
+ * AUTO-RETRY ENGINE (Exponential Backoff)
  */
-exports.mnotifyDeliveryWebhook = onRequest(
-  { region: "us-central1" },
-  async (req, res) => {
-    return handleMNotifyWebhook(req, res);
+exports.retryFailedSmsEngine = onSchedule(
+  {
+    schedule: "every 5 minutes",
+    timeZone: "Africa/Accra",
+    region: "us-central1",
+    secrets: [MNOTIFY_API_KEY]
+  },
+  async (event) => {
+    return retryFailedSMS(MNOTIFY_API_KEY.value());
   }
 );
 
 /**
- * ADMIN CALLABLES
+ * RECONCILIATION & AUDIT (Nightly)
  */
-exports.getSystemStats = onCall(
-  { region: "us-central1" },
-  async (request) => {
-    const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
-    const userEmail = request.auth?.token?.email?.toLowerCase() || "";
-    
-    if (!request.auth || !SUPER_ADMINS.includes(userEmail)) {
-      throw new HttpsError("permission-denied", "Unauthorized access to system stats");
-    }
-
-    try {
-      const stats = await getPlatformStats();
-      return stats;
-    } catch (error) {
-      console.error("System Stats Error:", error);
-      throw new HttpsError("internal", error.message || "Failed to retrieve platform stats");
-    }
+exports.nightlyWalletAudit = onSchedule(
+  {
+    schedule: "0 2 * * *",
+    timeZone: "Africa/Accra",
+    region: "us-central1"
+  },
+  async (event) => {
+    console.log("Nightly financial reconciliation started...");
+    // Future: Implementation of re-summing ledger vs wallet balance
+    return null;
   }
 );
 
+/**
+ * ADMINISTRATIVE INTERFACES
+ */
 exports.adminTopUpWallet = onCall(
   { region: "us-central1" },
   async (request) => {
-    const { churchId, amount } = request.data;
     const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
     const userEmail = request.auth?.token?.email?.toLowerCase() || "";
     
     if (!request.auth || !SUPER_ADMINS.includes(userEmail)) {
-      throw new HttpsError("permission-denied", "Only system admins can top up wallets");
+      throw new HttpsError("permission-denied", "Unauthorized");
     }
 
+    const { churchId, amount } = request.data;
     try {
-      await creditWallet(churchId, amount, `admin_manual_topup`, userEmail);
-      return { success: true };
+      return await creditWallet(churchId, amount, "admin_manual", userEmail);
     } catch (error) {
       throw new HttpsError("internal", error.message);
     }
   }
 );
 
-exports.updateChurchStatus = onCall(
+exports.sendSMS = onCall(
   { region: "us-central1" },
   async (request) => {
-    const { churchId, status } = request.data;
-    const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
-    const userEmail = request.auth?.token?.email?.toLowerCase() || "";
+    const { phone, message, type, churchId } = request.data;
+    if (!churchId) throw new HttpsError("invalid-argument", "Missing church context");
     
-    if (!request.auth || !SUPER_ADMINS.includes(userEmail)) {
-      throw new HttpsError("permission-denied", "Only system admins can manage status");
-    }
-
     try {
-      const db = admin.firestore();
-      await db.collection("churches").doc(churchId).update({
-        "sms.subscriptionStatus": status,
-        "sms.approved": status === "active",
-        "sms.enabled": status === "active"
-      });
-      return { success: true };
+      return await queueSMS(churchId, { phone, message, type });
     } catch (error) {
       throw new HttpsError("internal", error.message);
     }
@@ -112,7 +102,7 @@ exports.updateChurchStatus = onCall(
 );
 
 /**
- * GLOBAL AUTOMATION DISPATCHERS
+ * DAILY AUTOMATIONS
  */
 exports.runDailyAutomations = onSchedule(
   {
@@ -129,54 +119,5 @@ exports.runDailyAutomations = onSchedule(
     await processVisitorFollowups(key);
     await processEventReminders(key);
     return null;
-  }
-);
-
-/**
- * CAMPAIGN PROCESSOR
- */
-exports.processSmsCampaigns = onSchedule(
-  {
-    schedule: "*/10 * * * *",
-    timeZone: "Africa/Accra",
-    region: "us-central1",
-    secrets: [MNOTIFY_API_KEY]
-  },
-  async (event) => {
-    return processScheduledCampaigns(MNOTIFY_API_KEY.value());
-  }
-);
-
-/**
- * SECURE CALLABLE FOR FRONTEND
- */
-exports.sendSMS = onCall(
-  { region: "us-central1" },
-  async (request) => {
-    const { phone, message, type, memberName, memberId, churchId } = request.data;
-    if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId context");
-    
-    try {
-      return await queueSMS(churchId, {
-        phone, message, type, memberName, memberId
-      });
-    } catch (error) {
-      throw new HttpsError("internal", error.message);
-    }
-  }
-);
-
-/**
- * RETRY ENGINE
- */
-exports.retryFailedSMS = onSchedule(
-  {
-    schedule: "every 30 minutes",
-    timeZone: "Africa/Accra",
-    region: "us-central1",
-    secrets: [MNOTIFY_API_KEY],
-  },
-  async (event) => {
-    return processRetries(MNOTIFY_API_KEY.value());
   }
 );
