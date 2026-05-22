@@ -1,3 +1,4 @@
+
 const { onRequest, onCall } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
@@ -9,21 +10,19 @@ if (admin.apps.length === 0) {
 
 const MNOTIFY_API_KEY = defineSecret("MNOTIFY_API_KEY");
 
-// Import logic components
 const { dispatchAllBirthdays, processChurchBirthdays } = require("./schedulers/birthdayScheduler");
 const { retryFailedSMS: processRetries } = require("./schedulers/retryScheduler");
 
 /**
- * GLOBAL BIRTHDAY SCHEDULER (V2)
- * Runs daily at 06:00 UTC. 
- * Triggers the fanout/iteration logic for all churches.
+ * GLOBAL BIRTHDAY DISPATCHER
+ * Runs daily at 06:00 UTC.
  */
 exports.sendBirthdaySMS = onSchedule(
   {
     schedule: "0 6 * * *",
     timeZone: "UTC",
     secrets: [MNOTIFY_API_KEY],
-    timeoutSeconds: 540, // Increased for large tenant processing
+    timeoutSeconds: 540,
     memory: "512MiB"
   },
   async (event) => {
@@ -32,29 +31,53 @@ exports.sendBirthdaySMS = onSchedule(
 );
 
 /**
- * MANUAL TEST ENDPOINT (V2)
- * Allows developers to trigger birthday processing for a specific church ID via HTTP.
+ * MONTHLY CREDIT RESET
+ * Runs on the 1st of every month to reset plan credits.
+ */
+exports.resetMonthlyCredits = onSchedule(
+  {
+    schedule: "0 0 1 * *",
+    timeZone: "Africa/Accra"
+  },
+  async (event) => {
+    const db = admin.firestore();
+    const churchesSnap = await db.collection("churches").get();
+    const batch = db.batch();
+
+    const planCredits = {
+      "Basic": 100,
+      "Standard": 1000,
+      "Premium": 5000
+    };
+
+    churchesSnap.docs.forEach(doc => {
+      const data = doc.data();
+      const plan = data.plan || "Basic";
+      const credits = planCredits[plan] || 100;
+      batch.update(doc.ref, { "sms.credits": credits });
+    });
+
+    return batch.commit();
+  }
+);
+
+/**
+ * MANUAL TEST ENDPOINT
  */
 exports.testBirthdaySMS = onRequest(
-  {
-    secrets: [MNOTIFY_API_KEY],
-  },
+  { secrets: [MNOTIFY_API_KEY] },
   async (req, res) => {
     const churchId = req.query.churchId || req.body.churchId;
-    if (!churchId) return res.status(400).send("Missing ?churchId= in request.");
+    if (!churchId) return res.status(400).send("Missing churchId");
 
     try {
       const db = admin.firestore();
       const churchDoc = await db.collection("churches").doc(churchId).get();
-      
-      if (!churchDoc.exists) {
-        return res.status(404).send({ success: false, error: "Church not found" });
-      }
+      if (!churchDoc.exists) return res.status(404).send("Church not found");
 
       const result = await processChurchBirthdays(MNOTIFY_API_KEY.value(), churchDoc);
       res.status(200).send({ success: true, result });
     } catch (error) {
-      console.error("testBirthdaySMS Error:", error);
       res.status(500).send({ success: false, error: error.message });
     }
   }
@@ -64,36 +87,22 @@ exports.testBirthdaySMS = onRequest(
  * SECURE CALLABLE FOR FRONTEND
  */
 exports.sendSMS = onCall(
-  {
-    secrets: [MNOTIFY_API_KEY],
-  },
+  { secrets: [MNOTIFY_API_KEY] },
   async (request) => {
-    const { phone, message, senderId } = request.data;
-    const axios = require("axios");
-    const apiKey = MNOTIFY_API_KEY.value();
-    const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
+    const { sendSMS: coreSend } = require("./services/smsService");
+    const { phone, message, type, memberName, memberId, churchId } = request.data;
+    
+    // Authorization check: User should be member of church (Simplified for now)
+    if (!churchId) throw new Error("Missing churchId context");
 
-    try {
-      const response = await axios.post(url, {
-        recipient: [phone],
-        sender: senderId || "YEBFA",
-        message: message,
-        is_schedule: false
-      }, { timeout: 10000 });
-
-      return {
-        success: response.status === 200,
-        data: response.data
-      };
-    } catch (error) {
-      console.error("sendSMS Error:", error.message);
-      return { success: false, error: error.message };
-    }
+    return coreSend(MNOTIFY_API_KEY.value(), churchId, {
+      phone, message, type, memberName, memberId
+    });
   }
 );
 
 /**
- * FAILED SMS RETRY ENGINE
+ * RETRY ENGINE
  */
 exports.retryFailedSMS = onSchedule(
   {

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -15,7 +16,8 @@ import {
   CreditCard,
   Layout,
   History,
-  TrendingDown
+  TrendingDown,
+  Info
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,8 +33,10 @@ import { collection, query, where, limit, addDoc, serverTimestamp, orderBy } fro
 import { sendAndLogSMS, processBirthdaysToday } from '@/services/sms-service';
 import { startOfDay, startOfMonth, format, subDays } from 'date-fns';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
-// Sub-page components (simplified for hub view)
+// Sub-page components
 import SMSLogsPage from './logs/page';
 import FailedMessagesPage from './failed/page';
 import SMSTemplatesPage from './templates/page';
@@ -51,7 +55,6 @@ export default function SMSCenterHub() {
   const [isProcessingBirthdays, setIsProcessingBirthdays] = useState(false);
   const [draft, setDraft] = useState('');
 
-  // Tenant Context
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
     return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
@@ -59,51 +62,33 @@ export default function SMSCenterHub() {
   const { data: churches } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
-  const templatesRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'smsTemplates') : null, [db, currentChurch?.id]);
-  const logsRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'smsLogs') : null, [db, currentChurch?.id]);
-  const { data: allLogs } = useCollection(logsRef ? query(logsRef, orderBy('createdAt', 'desc'), limit(100)) : null);
+  const smsRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'smsLogs') : null, [db, currentChurch?.id]);
+  const { data: allLogs } = useCollection(smsRef ? query(smsRef, orderBy('createdAt', 'desc'), limit(100)) : null);
 
   const stats = useMemo(() => {
-    if (!allLogs || !currentChurch) return { today: 0, failed: 0, monthly: 0, remaining: 0, pendingRetry: 0, totalCost: 0 };
+    const sms = currentChurch?.sms || { credits: 0, enabled: false, subscriptionStatus: 'pending' };
+    if (!allLogs) return { today: 0, failed: 0, remaining: sms.credits, enabled: sms.enabled, status: sms.subscriptionStatus };
     const today = startOfDay(new Date());
-    const month = startOfMonth(new Date());
-    const sub = currentChurch.subscription || { smsCredits: 0, smsUsed: 0 };
     const logsToday = allLogs.filter(l => l.createdAt?.toDate?.() >= today);
     return {
       today: logsToday.filter(l => l.status === 'sent').length,
       failed: logsToday.filter(l => l.status === 'failed').length,
-      monthly: allLogs.filter(l => l.createdAt?.toDate?.() >= month && l.status === 'sent').length,
-      remaining: Math.max(0, (sub.smsCredits || 0) - (sub.smsUsed || 0)),
-      pendingRetry: allLogs.filter(l => l.status === 'failed' && (l.retryCount || 0) < 3).length,
-      totalCost: sub.smsUsed || 0
+      remaining: sms.credits || 0,
+      enabled: sms.enabled,
+      status: sms.subscriptionStatus
     };
   }, [allLogs, currentChurch]);
 
-  const chartData = useMemo(() => {
-    if (!allLogs) return [];
-    const last7Days = Array.from({ length: 7 }, (_, i) => {
-      const d = subDays(new Date(), i);
-      return format(d, 'MMM dd');
-    }).reverse();
-    return last7Days.map(day => {
-      const dayLogs = allLogs.filter(l => l.createdAt?.toDate && format(l.createdAt.toDate(), 'MMM dd') === day);
-      return {
-        name: day,
-        sent: dayLogs.filter(l => l.status === 'sent').length,
-        failed: dayLogs.filter(l => l.status === 'failed').length,
-      };
-    });
-  }, [allLogs]);
-
   const handleGenerate = async () => {
-    if (!topic) { toast({ title: 'Topic required', variant: 'destructive' }); return; }
+    if (!topic) return toast({ title: 'Topic required', variant: 'destructive' });
     setIsGenerating(true);
     try {
       const result = await aiCommunicationAssistant({ topic, targetAudience });
       setDraft(result.draftMessage);
-      toast({ title: 'Draft generated successfully!' });
-    } catch (error) { toast({ title: 'Generation failed', variant: 'destructive' }); }
-    finally { setIsGenerating(false); }
+      toast({ title: 'AI Draft Ready' });
+    } catch (e) {
+      toast({ title: 'Generation failed', variant: 'destructive' });
+    } finally { setIsGenerating(false); }
   };
 
   const handleSendTest = async () => {
@@ -115,18 +100,10 @@ export default function SMSCenterHub() {
         message: draft,
         type: 'test'
       });
-      if (outcome.success) toast({ title: 'Test SMS queued' });
-      else toast({ title: 'Delivery failed', description: outcome.error, variant: 'destructive' });
-    } catch (error: any) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); }
+      if (outcome.success) toast({ title: 'SMS Sent Successfully' });
+      else toast({ title: 'Send Failed', description: outcome.error, variant: 'destructive' });
+    } catch (e: any) { toast({ title: 'Error', description: e.message, variant: 'destructive' }); }
     finally { setIsSending(false); }
-  };
-
-  const handleSaveAsTemplate = async () => {
-    if (!draft || !templatesRef) return;
-    try {
-      await addDoc(templatesRef, { name: topic || 'New Template', content: draft, createdAt: serverTimestamp() });
-      toast({ title: 'Template saved' });
-    } catch (error) { toast({ title: 'Save failed', variant: 'destructive' }); }
   };
 
   const handleRunBirthdayCheck = async () => {
@@ -134,8 +111,8 @@ export default function SMSCenterHub() {
     setIsProcessingBirthdays(true);
     try {
       const results = await processBirthdaysToday(db, currentChurch.id);
-      toast({ title: 'Birthday check complete', description: `Sent: ${results.sent}, Failed: ${results.failed}` });
-    } catch (error: any) { toast({ title: 'Failed', description: error.message, variant: 'destructive' }); }
+      toast({ title: 'Process Complete', description: `Sent: ${results.sent}, Failed: ${results.failed}` });
+    } catch (e: any) { toast({ title: 'Error', description: e.message, variant: 'destructive' }); }
     finally { setIsProcessingBirthdays(false); }
   };
 
@@ -144,63 +121,86 @@ export default function SMSCenterHub() {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold tracking-tight mb-1">SMS Center</h2>
-          <p className="text-muted-foreground">Unified communication hub for {currentChurch?.name || 'your ministry'}.</p>
+          <div className="flex items-center gap-2">
+            <p className="text-muted-foreground text-sm">Communication management for {currentChurch?.name}.</p>
+            <Badge className={cn("text-[10px] py-0", stats.status === 'active' ? "bg-accent" : "bg-amber-500")}>
+              Service: {stats.status.toUpperCase()}
+            </Badge>
+          </div>
         </div>
-        <Button variant="outline" className="glass border-primary/20 text-primary" onClick={handleRunBirthdayCheck} disabled={isProcessingBirthdays || !currentChurch}>
+        <Button variant="outline" className="glass border-primary/20 text-primary" onClick={handleRunBirthdayCheck} disabled={isProcessingBirthdays || stats.status !== 'active'}>
           {isProcessingBirthdays ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Cake className="w-4 h-4 mr-2" />}
           Run Birthday Check
         </Button>
       </div>
 
+      {stats.status !== 'active' && (
+        <Card className="bg-amber-50 border-amber-200">
+          <CardHeader className="py-4">
+            <div className="flex items-center gap-3 text-amber-800">
+              <Info className="h-5 w-5" />
+              <div>
+                <CardTitle className="text-sm font-bold">Service Approval Pending</CardTitle>
+                <CardDescription className="text-amber-700 text-xs">
+                  Your SMS service is awaiting activation by the System Administrator. Manual sending and automation will be enabled once approved.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="glass border-white/10 p-1 rounded-2xl w-full md:w-auto">
+        <TabsList className="glass border-white/10 p-1 rounded-2xl">
           <TabsTrigger value="dashboard" className="rounded-xl px-6"><MessageSquare className="w-4 h-4 mr-2" />Dashboard</TabsTrigger>
           <TabsTrigger value="logs" className="rounded-xl px-6"><History className="w-4 h-4 mr-2" />Logs</TabsTrigger>
           <TabsTrigger value="failed" className="rounded-xl px-6"><AlertTriangle className="w-4 h-4 mr-2" />Failed</TabsTrigger>
           <TabsTrigger value="templates" className="rounded-xl px-6"><Layout className="w-4 h-4 mr-2" />Templates</TabsTrigger>
-          <TabsTrigger value="analytics" className="rounded-xl px-6"><BarChart3 className="w-4 h-4 mr-2" />Analytics</TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard" className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
-            <Card className="glass border-accent/20"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sent Today</p><h3 className="text-2xl font-bold text-accent">{stats.today}</h3></CardContent></Card>
-            <Card className="glass border-destructive/20"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Failed Today</p><h3 className="text-2xl font-bold text-destructive">{stats.failed}</h3></CardContent></Card>
-            <Card className="glass border-amber-500/20"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Pending Retry</p><h3 className="text-2xl font-bold text-amber-600">{stats.pendingRetry}</h3></CardContent></Card>
-            <Card className="glass border-primary/20"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Credits Left</p><h3 className="text-2xl font-bold text-primary">{stats.remaining}</h3></CardContent></Card>
-            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Monthly Usage</p><h3 className="text-2xl font-bold">{stats.monthly}</h3></CardContent></Card>
-            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Total Usage</p><h3 className="text-2xl font-bold"><CreditCard className="w-4 h-4 inline mr-1" />{stats.totalCost}</h3></CardContent></Card>
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Available Credits</p><h3 className="text-2xl font-bold text-primary">{stats.remaining.toLocaleString()}</h3></CardContent></Card>
+            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sent Today</p><h3 className="text-2xl font-bold text-accent">{stats.today}</h3></CardContent></Card>
+            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Failures</p><h3 className="text-2xl font-bold text-destructive">{stats.failed}</h3></CardContent></Card>
+            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Service Health</p><h3 className="text-2xl font-bold">{stats.enabled ? 'Active' : 'Offline'}</h3></CardContent></Card>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
-            <Card className="glass h-[400px]">
-              <CardHeader><CardTitle className="text-lg flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" />Activity Trends (Last 7 Days)</CardTitle></CardHeader>
-              <CardContent className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <defs><linearGradient id="colorSent" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/></linearGradient></defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis fontSize={12} tickLine={false} axisLine={false} />
-                    <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }}/>
-                    <Area type="monotone" dataKey="sent" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorSent)" strokeWidth={3} />
-                    <Area type="monotone" dataKey="failed" stroke="hsl(var(--destructive))" fill="transparent" strokeWidth={2} strokeDasharray="5 5" />
-                  </AreaChart>
-                </ResponsiveContainer>
+            <Card className="glass border-primary/20 shadow-xl overflow-hidden flex flex-col">
+              <CardHeader className="bg-primary/5 border-b">
+                <CardTitle className="text-lg flex items-center gap-2"><Sparkles className="w-5 h-5 text-primary" />AI Campaign Assistant</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6 space-y-4 flex-1">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Message Topic</Label>
+                    <Input placeholder="e.g. 2026 Easter Convention" value={topic} onChange={(e) => setTopic(e.target.value)} className="bg-muted/30 h-11"/>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Target Audience</Label>
+                    <Select value={targetAudience} onValueChange={setTargetAudience}>
+                      <SelectTrigger className="bg-muted/30 h-11"><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="all members">All Members</SelectItem><SelectItem value="youth group">Youth Group</SelectItem><SelectItem value="church elders">Church Elders</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                  <Button className="w-full bg-primary h-11" onClick={handleGenerate} disabled={isGenerating || stats.status !== 'active'}>
+                    {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                    Generate Draft
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
-            <Card className="glass flex flex-col">
-              <CardHeader className="bg-primary/5 border-b border-border"><CardTitle className="text-lg flex items-center gap-2"><Sparkles className="w-5 h-5 text-primary" />AI Draft Assistant</CardTitle></CardHeader>
-              <CardContent className="flex-1 p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>Main Topic</Label><Input placeholder="e.g. Easter Youth Camp" value={topic} onChange={(e) => setTopic(e.target.value)} className="bg-muted/30"/></div>
-                  <div className="space-y-2"><Label>Target Audience</Label><Select value={targetAudience} onValueChange={setTargetAudience}><SelectTrigger className="bg-muted/30"><SelectValue /></SelectTrigger><SelectContent className="glass"><SelectItem value="all members">All Members</SelectItem><SelectItem value="youth group">Youth Group</SelectItem><SelectItem value="church elders">Church Elders</SelectItem></SelectContent></Select></div>
-                </div>
-                <Textarea className="min-h-[120px] bg-muted/20 border-0 resize-none rounded-xl" placeholder="Your AI draft will appear here..." value={draft} onChange={(e) => setDraft(e.target.value)}/>
-                <div className="flex gap-2">
-                  <Button className="flex-1 bg-primary text-primary-foreground" onClick={handleGenerate} disabled={isGenerating}>{isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}Generate Draft</Button>
-                  <Button variant="outline" className="flex-1" onClick={handleSaveAsTemplate} disabled={!draft}>Save Template</Button>
-                  <Button className="bg-accent text-white" onClick={handleSendTest} disabled={!draft || isSending}>{isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}</Button>
+            <Card className="glass overflow-hidden flex flex-col">
+              <CardHeader className="bg-muted/10 border-b"><CardTitle className="text-lg">Message Editor</CardTitle></CardHeader>
+              <CardContent className="p-0 flex-1 flex flex-col">
+                <Textarea className="flex-1 p-6 bg-transparent border-0 resize-none min-h-[180px] focus-visible:ring-0" placeholder="Type or generate your message..." value={draft} onChange={(e) => setDraft(e.target.value)}/>
+                <div className="p-4 bg-muted/20 border-t flex gap-2">
+                  <Button className="flex-1 bg-accent" onClick={handleSendTest} disabled={!draft || isSending || stats.status !== 'active'}>
+                    {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                    Send Test SMS
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -210,7 +210,6 @@ export default function SMSCenterHub() {
         <TabsContent value="logs"><SMSLogsPage /></TabsContent>
         <TabsContent value="failed"><FailedMessagesPage /></TabsContent>
         <TabsContent value="templates"><SMSTemplatesPage /></TabsContent>
-        <TabsContent value="analytics"><SMSAnalyticsPage /></TabsContent>
       </Tabs>
     </div>
   );

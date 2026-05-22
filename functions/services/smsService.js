@@ -1,33 +1,40 @@
+
 const axios = require("axios");
 const admin = require("firebase-admin");
 const { formatPhone } = require("../utils/phoneFormatter");
 
 /**
- * Core SMS Sending Service with Credit Enforcement
+ * Enterprise SMS Service with Credit & Approval Enforcement
  */
 async function sendSMS(apiKey, churchId, payload) {
   const db = admin.firestore();
   const churchRef = db.collection("churches").doc(churchId);
   const logsRef = churchRef.collection("smsLogs");
+  const txRef = churchRef.collection("smsTransactions");
 
   const { phone, message, type, memberName, memberId, senderId } = payload;
   const formattedPhone = formatPhone(phone);
 
   try {
-    // 1. Validate Credits
+    // 1. Validate Church Status & Credits
     const churchDoc = await churchRef.get();
+    if (!churchDoc.exists) throw new Error("Organization not found");
+    
     const churchData = churchDoc.data();
-    const sub = churchData.subscription || { smsCredits: 0, smsUsed: 0 };
+    const smsConfig = churchData.sms || { enabled: false, credits: 0, subscriptionStatus: 'pending' };
 
-    if (sub.smsUsed >= sub.smsCredits) {
-      console.warn(`[${churchId}] Credits exhausted. Blocking send.`);
-      return { success: false, error: "Insufficient credits" };
+    if (smsConfig.subscriptionStatus !== 'active' || !smsConfig.enabled) {
+      return { success: false, error: "SMS service is not active or approved for this account." };
     }
 
-    // 2. Prepare API Call
+    if (smsConfig.credits <= 0) {
+      console.warn(`[${churchId}] Credits exhausted. Blocking send.`);
+      return { success: false, error: "Insufficient SMS credits" };
+    }
+
+    // 2. Prepare API Call (mNotify)
     const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
-    // Hardcoded approved sender ID for testing as recommended
-    const finalSenderId = "YEBFA";
+    const finalSenderId = "YEBFA"; // Hardcoded approved sender
 
     const response = await axios.post(url, {
       recipient: [formattedPhone],
@@ -38,41 +45,51 @@ async function sendSMS(apiKey, churchId, payload) {
 
     const isSent = response.status === 200;
 
-    // 3. Log Result
-    const logData = {
+    if (isSent) {
+      const balanceBefore = smsConfig.credits;
+      const balanceAfter = balanceBefore - 1;
+
+      // 3. Atomically deduct credit & log transaction
+      await db.runTransaction(async (t) => {
+        t.update(churchRef, { "sms.credits": balanceAfter });
+        t.add(txRef, {
+          type: "debit",
+          amount: 1,
+          balanceBefore,
+          balanceAfter,
+          reason: type || "manual_send",
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      });
+    }
+
+    // 4. Log Communication Result
+    await logsRef.add({
       memberName: memberName || "Unknown",
       memberId: memberId || null,
       phone: formattedPhone,
-      message: message,
+      message,
       status: isSent ? "sent" : "failed",
       provider: "mnotify",
       type: type || "other",
       retryCount: payload.retryCount || 0,
-      cost: 1,
+      cost: isSent ? 1 : 0,
       providerResponse: response.data || {},
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    };
-
-    await logsRef.add(logData);
-
-    // 4. Increment usage on success
-    if (isSent) {
-      await churchRef.update({
-        "subscription.smsUsed": admin.firestore.FieldValue.increment(1)
-      });
-    }
+    });
 
     return { success: isSent, data: response.data };
+
   } catch (error) {
     console.error(`[${churchId}] SMS Service Error:`, error.message);
     
-    // Log initial failure if not a credit error
-    if (error.message !== "Insufficient credits") {
+    // Log failure for audit trail if it wasn't a pre-check error
+    if (!["Insufficient SMS credits", "Organization not found"].includes(error.message)) {
       await logsRef.add({
         memberName: memberName || "Unknown",
         phone: formattedPhone,
-        message: message,
+        message,
         status: "failed",
         error: error.message,
         type: type || "other",

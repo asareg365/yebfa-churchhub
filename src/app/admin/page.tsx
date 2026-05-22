@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -13,16 +14,17 @@ import {
   Trash2,
   Mail,
   Plus,
-  PlusCircle,
   Hash,
   LogOut,
   Calendar,
   KeyRound,
-  Copy,
-  Info,
-  SendHorizontal,
-  Lock,
-  Church as ChurchIcon
+  History,
+  Smartphone,
+  CreditCard,
+  Ban,
+  CheckCircle,
+  Zap,
+  TrendingUp
 } from 'lucide-react';
 import {
   Card,
@@ -56,20 +58,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCollection, useFirestore, useUser, useAuth } from '@/firebase';
 import {
   collection,
@@ -81,34 +71,14 @@ import {
   arrayUnion,
   arrayRemove,
   where,
+  increment,
+  addDoc,
 } from 'firebase/firestore';
-import {
-  signOut,
-  createUserWithEmailAndPassword,
-  getAuth,
-  signOut as authSignOut,
-  sendPasswordResetEmail,
-} from 'firebase/auth';
-import { initializeApp, deleteApp } from 'firebase/app';
-import { firebaseConfig } from '@/firebase/config';
+import { signOut } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 
 const SUPER_ADMINS = ['asareg365@gmail.com', 'frankyeb@gmail.com'];
-
-const MODULES = [
-  { id: 'members', label: 'Members Management' },
-  { id: 'attendance', label: 'Attendance Tracking' },
-  { id: 'events', label: 'Event Planning' },
-  { id: 'finances', label: 'Financial Records' },
-  { id: 'communication', label: 'AI Communications' },
-  { id: 'insights', label: 'Pastoral Insights' },
-  { id: 'reports', label: 'Detailed Reports' },
-];
-
-const DENOMINATIONS = ["Catholic", "Pentecostal", "Methodist", "Baptist", "Other"];
 
 export default function SystemAdminPortal() {
   const { user, loading: userLoading } = useUser();
@@ -119,847 +89,234 @@ export default function SystemAdminPortal() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingChurch, setEditingChurch] = useState<any>(null);
-  const [managingUsersId, setManagingUsersId] = useState<string | null>(null);
+  const [managingSmsId, setManagingSmsId] = useState<string | null>(null);
+  const [topUpAmount, setTopUpAmount] = useState('500');
 
-  const [newAdminEmail, setNewAdminEmail] = useState('');
-  const [newAdminPassword, setNewAdminPassword] = useState('');
-  const [adminToRemove, setAdminToRemove] = useState<{
-    email: string;
-    churchId: string;
-  } | null>(null);
-
-  const initialChurchState = {
-    name: '',
-    slug: '',
-    denomination: 'Pentecostal',
-    adminEmail: '',
-    adminPassword: '',
-    plan: 'Starter' as const,
-    status: 'Approved' as const,
-    enabledModules: ['members', 'attendance'],
-  };
-
-  const [newChurch, setNewChurch] = useState(initialChurchState);
-
-  const churchesQuery = useMemo(() => {
-    if (!user?.email) return null;
-    const email = user.email.toLowerCase().trim();
-    if (SUPER_ADMINS.includes(email)) {
-      return query(collection(db, 'churches'));
-    }
-    return query(
-      collection(db, 'churches'),
-      where('adminEmails', 'array-contains', email)
-    );
-  }, [db, user?.email]);
-
-  const { data: rawChurches, loading: collectionLoading } =
-    useCollection(churchesQuery);
+  const { data: rawChurches, loading: collectionLoading } = useCollection(
+    query(collection(db, 'churches'))
+  );
 
   const sortedChurches = useMemo(() => {
     if (!rawChurches) return [];
-    const filtered = rawChurches.filter(
-      (c) =>
+    return rawChurches
+      .filter((c) =>
         c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.adminEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.slug?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    return [...filtered].sort((a: any, b: any) => {
-      const dateA = a.registeredAt?.toDate?.() || new Date(0);
-      const dateB = b.registeredAt?.toDate?.() || new Date(0);
-      return dateB.getTime() - dateA.getTime();
-    });
+      )
+      .sort((a, b) => (b.registeredAt?.seconds || 0) - (a.registeredAt?.seconds || 0));
   }, [rawChurches, searchTerm]);
 
-  const managingUsers = useMemo(() => {
-    return sortedChurches.find((c) => c.id === managingUsersId) || null;
-  }, [sortedChurches, managingUsersId]);
+  const activeChurchSms = useMemo(() => 
+    sortedChurches.find(c => c.id === managingSmsId), 
+  [sortedChurches, managingSmsId]);
 
   useEffect(() => {
-    if (!userLoading) {
-      if (!user) {
-        router.push('/admin/login');
-      } else if (!SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
-        router.push('/dashboard');
-      }
+    if (!userLoading && (!user || !SUPER_ADMINS.includes(user.email?.toLowerCase() || ''))) {
+      router.push('/admin/login');
     }
   }, [user, userLoading, router]);
 
-  const handleLogout = async () => {
+  const handleApproveSms = async (churchId: string) => {
+    const churchRef = doc(db, 'churches', churchId);
     try {
-      await signOut(auth);
-      router.push('/admin/login');
-      toast({
-        title: 'Logged out',
-        description: 'Administrator session securely ended.',
+      await updateDoc(churchRef, {
+        "sms.subscriptionStatus": "active",
+        "sms.enabled": true,
+        "sms.credits": 100,
+        "sms.approvedAt": serverTimestamp(),
+        "sms.approvedBy": user?.email
       });
-    } catch (error: any) {
-      toast({
-        title: 'Logout failed',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: "SMS Service Activated", description: "Default 100 credits allocated." });
+    } catch (e: any) {
+      toast({ title: "Activation Failed", description: e.message, variant: "destructive" });
     }
   };
 
-  const generateSlug = (name: string) => {
-    return name
-      .toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace(/[^a-z0-9-]/g, '')
-      .trim();
+  const handleToggleSms = async (churchId: string, currentStatus: boolean) => {
+    try {
+      await updateDoc(doc(db, 'churches', churchId), { "sms.enabled": !currentStatus });
+      toast({ title: currentStatus ? "SMS Suspended" : "SMS Re-activated" });
+    } catch (e: any) {
+      toast({ title: "Operation Failed", variant: "destructive" });
+    }
   };
 
-  const handleAddChurch = async () => {
-    if (!newChurch.name || !newChurch.adminEmail || !newChurch.adminPassword) {
-      toast({
-        title: 'Missing fields',
-        description: 'Name, email, and password are required.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
+  const handleTopUp = async () => {
+    if (!managingSmsId || !topUpAmount) return;
     setIsProcessing(true);
-    const finalSlug = newChurch.slug || generateSlug(newChurch.name);
-    const churchDocRef = doc(db, 'churches', finalSlug);
-
-    const normalizedAdminEmail = newChurch.adminEmail.toLowerCase().trim();
-    const authorizedEmails = Array.from(
-      new Set([
-        normalizedAdminEmail,
-        ...SUPER_ADMINS.map((email) => email.toLowerCase().trim()),
-      ])
-    );
-
-    const churchData = {
-      name: newChurch.name,
-      slug: finalSlug,
-      denomination: newChurch.denomination,
-      adminEmail: normalizedAdminEmail,
-      adminEmails: authorizedEmails,
-      plan: newChurch.plan,
-      status: newChurch.status,
-      enabledModules: newChurch.enabledModules,
-      mustChangePassword: true,
-      registeredAt: serverTimestamp(),
-      settings: {
-        birthdaySmsEnabled: true,
-        lowCreditAlertEnabled: true,
-        dailyReportsEnabled: false,
-      },
-    };
+    const churchRef = doc(db, 'churches', managingSmsId);
+    const txRef = collection(db, 'churches', managingSmsId, 'smsTransactions');
+    const amount = parseInt(topUpAmount);
 
     try {
-      await setDoc(churchDocRef, churchData);
-
-      const secondaryApp = initializeApp(
-        firebaseConfig,
-        `AuthCreation-${Date.now()}`
-      );
-      const secondaryAuth = getAuth(secondaryApp);
-
-      try {
-        await createUserWithEmailAndPassword(
-          secondaryAuth,
-          normalizedAdminEmail,
-          newChurch.adminPassword
-        );
-        await authSignOut(secondaryAuth);
-      } catch (authError: any) {
-        if (authError.code !== 'auth/email-already-in-use') {
-          console.error('Auth creation failed:', authError);
-        }
-      } finally {
-        await deleteApp(secondaryApp);
-      }
-
-      setIsAddDialogOpen(false);
-      setNewChurch(initialChurchState);
-      toast({
-        title: 'Ministry Registered',
-        description: `Tenant ID: ${finalSlug} is now active.`,
+      await updateDoc(churchRef, { "sms.credits": increment(amount) });
+      await addDoc(txRef, {
+        type: "credit",
+        amount,
+        reason: "admin_manual_topup",
+        processedBy: user?.email,
+        createdAt: serverTimestamp()
       });
-    } catch (error: any) {
-      const permissionError = new FirestorePermissionError({
-        path: churchDocRef.path,
-        operation: 'create',
-        requestResourceData: churchData,
-      });
-      errorEmitter.emit('permission-error', permissionError);
+      toast({ title: "Credits Added Successfully", description: `${amount} credits added to ${activeChurchSms?.name}` });
+      setManagingSmsId(null);
+    } catch (e: any) {
+      toast({ title: "Top-up Failed", variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleUpdateStatus = (churchId: string, newStatus: string) => {
-    const churchDoc = doc(db, 'churches', churchId);
-    updateDoc(churchDoc, { status: newStatus })
-      .then(() => {
-        toast({ title: `Status updated to ${newStatus}` });
-      })
-      .catch(async (error) => {
-        const permissionError = new FirestorePermissionError({
-          path: churchDoc.path,
-          operation: 'update',
-          requestResourceData: { status: newStatus },
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      });
-  };
-
-  const handleSaveChurchDetails = () => {
-    if (!editingChurch) return;
-    const churchDoc = doc(db, 'churches', editingChurch.id);
-    const updateData = {
-      name: editingChurch.name,
-      denomination: editingChurch.denomination,
-      plan: editingChurch.plan,
-      status: editingChurch.status,
-      enabledModules: editingChurch.enabledModules || [],
-    };
-
-    updateDoc(churchDoc, updateData)
-      .then(() => {
-        setEditingChurch(null);
-        toast({ title: 'Ministry details updated' });
-      })
-      .catch(async (error) => {
-        const permissionError = new FirestorePermissionError({
-          path: churchDoc.path,
-          operation: 'update',
-          requestResourceData: updateData,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      });
-  };
-
-  const toggleModuleInState = (state: any, setState: any, moduleId: string) => {
-    const currentModules = state.enabledModules || [];
-    const updatedModules = currentModules.includes(moduleId)
-      ? currentModules.filter((id: string) => id !== moduleId)
-      : [...currentModules, moduleId];
-    setState({ ...state, enabledModules: updatedModules });
-  };
-
-  const handleAddAdmin = async () => {
-    if (
-      !managingUsers ||
-      !newAdminEmail ||
-      !newAdminEmail.includes('@') ||
-      !newAdminPassword
-    ) {
-      toast({
-        title: 'Required',
-        description: 'Email and password are required.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsProcessing(true);
-    const churchDoc = doc(db, 'churches', managingUsers.id);
-    const normalizedEmail = newAdminEmail.toLowerCase().trim();
-
-    try {
-      const secondaryApp = initializeApp(
-        firebaseConfig,
-        `AuthAdmin-${Date.now()}`
-      );
-      const secondaryAuth = getAuth(secondaryApp);
-
-      try {
-        await createUserWithEmailAndPassword(
-          secondaryAuth,
-          normalizedEmail,
-          newAdminPassword
-        );
-        await authSignOut(secondaryAuth);
-      } catch (authError: any) {
-        if (authError.code !== 'auth/email-already-in-use') {
-          console.error('Auth creation failed:', authError);
-        }
-      } finally {
-        await deleteApp(secondaryApp);
-      }
-
-      await updateDoc(churchDoc, {
-        adminEmails: arrayUnion(normalizedEmail),
-      });
-
-      setNewAdminEmail('');
-      setNewAdminPassword('');
-      toast({ title: 'Admin user added' });
-    } catch (error: any) {
-      const permissionError = new FirestorePermissionError({
-        path: churchDoc.path,
-        operation: 'update',
-      });
-      errorEmitter.emit('permission-error', permissionError);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleRemoveAdmin = (email: string, churchId: string) => {
-    const churchDoc = doc(db, 'churches', churchId);
-    updateDoc(churchDoc, {
-      adminEmails: arrayRemove(email),
-    })
-      .then(() => {
-        setAdminToRemove(null);
-        toast({ title: 'Admin user access revoked' });
-      })
-      .catch(async (error) => {
-        const permissionError = new FirestorePermissionError({
-          path: churchDoc.path,
-          operation: 'update',
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      });
-  };
-
-  const handleTriggerReset = (email: string) => {
-    sendPasswordResetEmail(auth, email)
-      .then(() => {
-        toast({
-          title: 'Reset link sent',
-          description: `A password reset link was sent to ${email}.`,
-        });
-      })
-      .catch((error) => {
-        toast({
-          title: 'Error',
-          description: error.message,
-          variant: 'destructive',
-        });
-      });
-  };
-
-  const formatTimestamp = (ts: any) => {
-    if (!ts) return 'Just now';
-    if (ts.toDate) return ts.toDate().toLocaleDateString();
-    return 'Processing...';
-  };
-
-  if (userLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
-      </div>
-    );
-  }
+  if (userLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
 
   return (
-    <div className="min-h-screen bg-background p-8 space-y-8 animate-in fade-in duration-700">
+    <div className="min-h-screen bg-background p-8 space-y-8">
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-4xl font-bold tracking-tight mb-2 flex items-center gap-3">
             <ShieldCheck className="h-10 w-10 text-primary" />
-            System Admin Portal
+            System Control Center
           </h2>
-          <p className="text-muted-foreground text-lg">
-            Manage organizational tenants, slugs, and system module access.
-          </p>
+          <p className="text-muted-foreground text-lg">Multi-tenant organizational management & resource allocation.</p>
         </div>
-        <div className="flex gap-4">
-          <Button
-            onClick={() => setIsAddDialogOpen(true)}
-            className="bg-primary hover:bg-primary/90 rounded-xl"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add New Ministry
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleLogout}
-            className="border-border hover:bg-muted"
-          >
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
-          </Button>
-        </div>
+        <Button variant="outline" onClick={() => signOut(auth)} className="rounded-xl">
+          <LogOut className="mr-2 h-4 w-4" /> Logout
+        </Button>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-4">
+        <Card className="glass">
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground">Total Tenants</CardTitle></CardHeader>
+          <CardContent><div className="text-2xl font-bold">{sortedChurches.length}</div></CardContent>
+        </Card>
+        <Card className="glass">
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground">Active SMS Nodes</CardTitle></CardHeader>
+          <CardContent><div className="text-2xl font-bold text-accent">{sortedChurches.filter(c => c.sms?.enabled).length}</div></CardContent>
+        </Card>
+        <Card className="glass">
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground">Pending Approvals</CardTitle></CardHeader>
+          <CardContent><div className="text-2xl font-bold text-amber-600">{sortedChurches.filter(c => c.sms?.subscriptionStatus === 'pending').length}</div></CardContent>
+        </Card>
+        <Card className="glass">
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground">System Health</CardTitle></CardHeader>
+          <CardContent><div className="text-2xl font-bold text-primary">Stable</div></CardContent>
+        </Card>
       </div>
 
       <Card className="glass">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-7">
+        <CardHeader className="flex flex-row items-center justify-between pb-7">
           <div>
-            <CardTitle className="text-xl">Tenant Directory</CardTitle>
-            <CardDescription>
-              Configure ministry identification slugs and manage system
-              administrators.
-            </CardDescription>
+            <CardTitle>Organization Directory</CardTitle>
+            <CardDescription>Manage tenant lifecycles and SMS credit allocation.</CardDescription>
           </div>
           <div className="relative w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name or slug..."
-              className="pl-10 bg-muted/20 border-border rounded-xl"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <Input placeholder="Search churches..." className="pl-10 h-11" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
         </CardHeader>
         <CardContent>
-          {collectionLoading ? (
-            <div className="p-20 flex justify-center">
-              <Loader2 className="w-10 h-10 animate-spin text-primary" />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader className="bg-muted/30">
-                <TableRow>
-                  <TableHead>Ministry Name</TableHead>
-                  <TableHead>Tenant ID (Slug)</TableHead>
-                  <TableHead>Denomination</TableHead>
-                  <TableHead>Registered</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedChurches.map((church) => (
-                  <TableRow
-                    key={church.id}
-                    className="hover:bg-muted/20 transition-colors"
-                  >
-                    <TableCell className="font-bold">{church.name}</TableCell>
-                    <TableCell>
-                      <code className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-bold">
-                        {church.slug}
-                      </code>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {church.denomination || 'Unknown'}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Ministry</TableHead>
+                <TableHead>Plan</TableHead>
+                <TableHead>SMS Status</TableHead>
+                <TableHead>SMS Balance</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedChurches.map((church) => (
+                <TableRow key={church.id}>
+                  <TableCell>
+                    <div className="font-bold">{church.name}</div>
+                    <code className="text-[10px] text-primary">{church.slug}</code>
+                  </TableCell>
+                  <TableCell><Badge variant="outline">{church.plan || 'Starter'}</Badge></TableCell>
+                  <TableCell>
+                    {church.sms?.subscriptionStatus === 'active' ? (
+                      <Badge className={cn(church.sms?.enabled ? "bg-accent text-white" : "bg-destructive text-white")}>
+                        {church.sms?.enabled ? 'Active' : 'Suspended'}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-3 w-3 opacity-50" />
-                        {formatTimestamp(church.registeredAt)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={cn(
-                          'capitalize',
-                          church.status === 'Approved'
-                            ? 'bg-green-500/10 text-green-600 border-green-200'
-                            : church.status === 'Pending'
-                              ? 'bg-amber-500/10 text-amber-600 border-amber-200'
-                              : 'bg-destructive/10 text-destructive border-destructive/20'
+                    ) : (
+                      <Badge variant="secondary" className="bg-amber-100 text-amber-700">Pending Approval</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="h-3 w-3 text-muted-foreground" />
+                      <span className="font-mono font-bold">{(church.sms?.credits || 0).toLocaleString()}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {church.sms?.subscriptionStatus !== 'active' ? (
+                          <DropdownMenuItem onClick={() => handleApproveSms(church.id)} className="text-accent font-bold">
+                            <CheckCircle className="mr-2 h-4 w-4" /> Approve SMS
+                          </DropdownMenuItem>
+                        ) : (
+                          <>
+                            <DropdownMenuItem onClick={() => setManagingSmsId(church.id)}>
+                              <Zap className="mr-2 h-4 w-4" /> Allocate Credits
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleToggleSms(church.id, church.sms?.enabled)}>
+                              {church.sms?.enabled ? (
+                                <><Ban className="mr-2 h-4 w-4 text-destructive" /> Suspend Service</>
+                              ) : (
+                                <><CheckCircle2 className="mr-2 h-4 w-4 text-accent" /> Activate Service</>
+                              )}
+                            </DropdownMenuItem>
+                          </>
                         )}
-                      >
-                        {church.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => setEditingChurch(church)}
-                          >
-                            <Pencil className="mr-2 h-4 w-4" /> Edit Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setManagingUsersId(church.id)}
-                          >
-                            <UserPlus className="mr-2 h-4 w-4" /> Manage Admins
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-green-600 focus:text-green-600"
-                            onClick={() =>
-                              handleUpdateStatus(church.id, 'Approved')
-                            }
-                          >
-                            <CheckCircle2 className="mr-2 h-4 w-4" /> Approve
-                            Tenant
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete Tenant</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
-      {/* Onboard New Ministry Dialog */}
-      <Dialog
-        open={isAddDialogOpen}
-        onOpenChange={(open) => {
-          setIsAddDialogOpen(open);
-          if (!open) setNewChurch(initialChurchState);
-        }}
-      >
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      {/* Credit Allocation Dialog */}
+      <Dialog open={!!managingSmsId} onOpenChange={(o) => !o && setManagingSmsId(null)}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Onboard New Organization</DialogTitle>
-            <DialogDescription>
-              Assign a permanent name, Tenant ID, and initial access password.
-            </DialogDescription>
+            <DialogTitle>SMS Credit Management</DialogTitle>
+            <DialogDescription>Allocating resources for <strong>{activeChurchSms?.name}</strong>.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Ministry Name</Label>
-              <Input
-                placeholder="e.g. Hope Sanctuary"
-                value={newChurch.name}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setNewChurch({
-                    ...newChurch,
-                    name: val,
-                    slug: generateSlug(val),
-                  });
-                }}
-                className="bg-muted/20"
-              />
+          <div className="py-6 space-y-4">
+            <div className="p-4 rounded-xl bg-muted/20 border flex justify-between items-center">
+              <span className="text-sm font-medium">Current Balance:</span>
+              <span className="text-xl font-bold">{(activeChurchSms?.sms?.credits || 0).toLocaleString()}</span>
             </div>
             <div className="space-y-2">
-              <Label>Tenant ID (Permanent Slug)</Label>
-              <div className="relative">
-                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={newChurch.slug}
-                  onChange={(e) =>
-                    setNewChurch({ ...newChurch, slug: generateSlug(e.target.value) })
-                  }
-                  placeholder="hope-sanctuary"
-                  className="pl-10 bg-muted/20 font-mono"
-                />
+              <Label>Credits to Add</Label>
+              <div className="flex gap-2">
+                <Input type="number" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} />
+                <Button className="bg-primary" onClick={handleTopUp} disabled={isProcessing}>
+                  {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                </Button>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Denomination</Label>
-              <Select value={newChurch.denomination} onValueChange={(v) => setNewChurch({...newChurch, denomination: v})}>
-                <SelectTrigger className="bg-muted/20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {DENOMINATIONS.map(d => (
-                    <SelectItem key={d} value={d}>{d}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Admin Email</Label>
-                <Input
-                  type="email"
-                  placeholder="admin@email.org"
-                  value={newChurch.adminEmail}
-                  onChange={(e) =>
-                    setNewChurch({ ...newChurch, adminEmail: e.target.value })
-                  }
-                  className="bg-muted/20"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Admin Password</Label>
-                <Input
-                  type="password"
-                  placeholder="Enter secure password"
-                  value={newChurch.adminPassword}
-                  onChange={(e) =>
-                    setNewChurch({
-                      ...newChurch,
-                      adminPassword: e.target.value,
-                    })
-                  }
-                  className="bg-muted/20"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-3 pt-4 border-t border-border">
-              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Features to Enable
-              </Label>
-              <div className="grid grid-cols-2 gap-2">
-                {MODULES.map((module) => (
-                  <div
-                    key={module.id}
-                    className="flex items-center space-x-3 p-2 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
-                  >
-                    <Checkbox
-                      id={`new-${module.id}`}
-                      checked={newChurch.enabledModules.includes(module.id)}
-                      onCheckedChange={() =>
-                        toggleModuleInState(newChurch, setNewChurch, module.id)
-                      }
-                    />
-                    <label
-                      htmlFor={`new-${module.id}`}
-                      className="text-sm cursor-pointer flex-1"
-                    >
-                      {module.label}
-                    </label>
-                  </div>
-                ))}
-              </div>
+            <div className="grid grid-cols-3 gap-2">
+              {['100', '500', '1000', '2000', '5000'].map(val => (
+                <Button key={val} variant="outline" size="sm" onClick={() => setTopUpAmount(val)}>+{val}</Button>
+              ))}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddChurch} disabled={isProcessing}>
-              {isProcessing ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : null}
-              Register & Create Account
-            </Button>
+            <Button variant="ghost" onClick={() => setManagingSmsId(null)}>Cancel</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Edit Church Dialog */}
-      <Dialog
-        open={!!editingChurch}
-        onOpenChange={(open) => !open && setEditingChurch(null)}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Edit Organization Configuration</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Ministry Name</Label>
-              <Input
-                value={editingChurch?.name || ''}
-                onChange={(e) =>
-                  setEditingChurch({ ...editingChurch, name: e.target.value })
-                }
-                className="bg-muted/20"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Denomination</Label>
-              <Select value={editingChurch?.denomination || 'Other'} onValueChange={(v) => setEditingChurch({...editingChurch, denomination: v})}>
-                <SelectTrigger className="bg-muted/20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {DENOMINATIONS.map(d => (
-                    <SelectItem key={d} value={d}>{d}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-3 pt-4 border-t border-border">
-              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Features Enabled
-              </Label>
-              <div className="grid grid-cols-2 gap-2">
-                {MODULES.map((module) => (
-                  <div
-                    key={module.id}
-                    className="flex items-center space-x-3 p-2 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
-                  >
-                    <Checkbox
-                      id={`edit-${module.id}`}
-                      checked={editingChurch?.enabledModules?.includes(module.id)}
-                      onCheckedChange={() =>
-                        toggleModuleInState(
-                          editingChurch,
-                          setEditingChurch,
-                          module.id
-                        )
-                      }
-                    />
-                    <label
-                      htmlFor={`edit-${module.id}`}
-                      className="text-sm cursor-pointer flex-1"
-                    >
-                      {module.label}
-                    </label>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingChurch(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveChurchDetails}>Save Changes</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Manage Admins Dialog */}
-      <Dialog
-        open={!!managingUsersId}
-        onOpenChange={(open) => !open && setManagingUsersId(null)}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Authorized Administrators</DialogTitle>
-            <DialogDescription>
-              Manage access for {managingUsers?.name}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-6 py-4">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                  Add New Admin
-                </Label>
-                <div className="flex flex-col gap-2">
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Email Address"
-                      value={newAdminEmail}
-                      onChange={(e) => setNewAdminEmail(e.target.value)}
-                      className="pl-10 bg-muted/20"
-                    />
-                  </div>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      type="password"
-                      placeholder="Assign Password"
-                      value={newAdminPassword}
-                      onChange={(e) => setNewAdminPassword(e.target.value)}
-                      className="pl-10 bg-muted/20"
-                    />
-                  </div>
-                  <Button
-                    onClick={handleAddAdmin}
-                    disabled={!newAdminEmail || !newAdminPassword || isProcessing}
-                    className="w-full"
-                  >
-                    {isProcessing ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <PlusCircle className="h-4 w-4 mr-2" />
-                    )}
-                    Add Administrator
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Active Admins
-              </Label>
-              <div className="rounded-xl border border-border overflow-hidden">
-                {managingUsers?.adminEmails?.length > 0 ? (
-                  Array.from(new Set(managingUsers.adminEmails as string[])).map(
-                    (email: string) => (
-                      <div
-                        key={email}
-                        className="flex items-center justify-between p-3 bg-card border-b border-border last:border-0 group"
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium">{email}</span>
-                          {email === managingUsers.adminEmail && (
-                            <span className="text-[10px] text-primary uppercase font-bold">
-                              Owner
-                            </span>
-                          )}
-                          {SUPER_ADMINS.includes(email) && (
-                            <span className="text-[10px] text-accent uppercase font-bold">
-                              System Admin
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-primary hover:bg-primary/10"
-                            onClick={() => handleTriggerReset(email)}
-                            title="Send Password Reset"
-                          >
-                            <SendHorizontal className="h-4 w-4" />
-                          </Button>
-                          {!SUPER_ADMINS.includes(email) && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                if (managingUsersId) {
-                                  setAdminToRemove({
-                                    email,
-                                    churchId: managingUsersId,
-                                  });
-                                }
-                              }}
-                              title="Remove Admin"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  )
-                ) : (
-                  <div className="p-4 text-center text-sm text-muted-foreground">
-                    Only the primary admin has access.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button className="w-full" onClick={() => setManagingUsersId(null)}>
-              Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Admin Removal Alert Dialog */}
-      <AlertDialog
-        open={!!adminToRemove}
-        onOpenChange={(open) => !open && setAdminToRemove(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Revoke Admin Access?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to remove <strong>{adminToRemove?.email}</strong>?
-              They will immediately lose access to this organization's dashboard.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setAdminToRemove(null)}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                if (adminToRemove) {
-                  handleRemoveAdmin(adminToRemove.email, adminToRemove.churchId);
-                }
-              }}
-              className="bg-destructive hover:bg-destructive/90 text-white"
-            >
-              Confirm Removal
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

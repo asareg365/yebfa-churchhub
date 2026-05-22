@@ -1,3 +1,4 @@
+
 'use client';
 
 import { 
@@ -51,36 +52,8 @@ function normalizePhone(phone: string): string {
 }
 
 /**
- * Sends SMS via Firebase Cloud Function (Secure)
- */
-async function sendSMSViaCloudFunction(phone: string, message: string, senderId: string) {
-  const functions = getFunctions();
-  const sendSMSFn = httpsCallable(functions, "sendSMS");
-
-  try {
-    const result: any = await sendSMSFn({ 
-      phone: normalizePhone(phone), 
-      message, 
-      senderId 
-    });
-
-    return { 
-      success: result.data.success, 
-      data: result.data.data,
-      error: result.data.error
-    };
-  } catch (error: any) {
-    return { 
-      success: false, 
-      error: error.message 
-    };
-  }
-}
-
-/**
- * SMS CREDIT ENGINE: 
- * 1. Checks limits before send.
- * 2. Increments usage after successful send.
+ * Optimized send and log flow.
+ * Note: Credits and Status validation now happen securely in Cloud Functions.
  */
 export async function sendAndLogSMS(
   db: Firestore,
@@ -94,65 +67,26 @@ export async function sendAndLogSMS(
     retryCount?: number;
   }
 ) {
-  const logsRef = collection(db, 'churches', churchId, 'smsLogs');
-  const churchRef = doc(db, 'churches', churchId);
-  const normalizedPhone = normalizePhone(payload.phone);
-  
+  const functions = getFunctions();
+  const sendSMSFn = httpsCallable(functions, "sendSMS");
+
   try {
-    const churchSnap = await getDoc(churchRef);
-    const churchData = churchSnap.data();
-    const sub = churchData?.subscription || { smsCredits: 0, smsUsed: 0 };
-
-    if (sub.smsUsed >= sub.smsCredits) {
-      throw new Error("Insufficient credits");
-    }
-
-    // Hardcoded approved sender ID for reliability during testing
-    const senderId = "YEBFA";
-    const outcome = await sendSMSViaCloudFunction(normalizedPhone, payload.message, senderId);
-    
-    const logData: Omit<SMSLog, 'id'> = {
-      churchId,
-      memberId: payload.memberId || undefined,
-      memberName: payload.memberName || "Unknown",
-      phone: normalizedPhone,
-      message: payload.message,
-      status: outcome.success ? 'sent' : 'failed',
+    const result: any = await sendSMSFn({ 
+      phone: normalizePhone(payload.phone), 
+      message: payload.message, 
       type: payload.type,
-      provider: 'mNotify',
-      retryCount: payload.retryCount || 0,
-      providerResponse: outcome.data || null,
-      error: outcome.success ? undefined : (outcome.error || 'Delivery Failed'),
-      cost: outcome.success ? 1 : 0,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    };
-
-    const docRef = await addDoc(logsRef, logData);
-
-    if (outcome.success) {
-      await updateDoc(churchRef, {
-        "subscription.smsUsed": increment(1)
-      });
-    }
-
-    return { success: outcome.success, error: outcome.success ? undefined : outcome.error, id: docRef.id };
-  } catch (error: any) {
-    await addDoc(logsRef, {
-      churchId,
-      memberId: payload.memberId || undefined,
-      memberName: payload.memberName || "Unknown",
-      phone: normalizedPhone,
-      message: payload.message,
-      status: 'failed',
-      type: payload.type,
-      provider: 'mNotify',
-      retryCount: payload.retryCount || 0,
-      error: error.message,
-      cost: 0,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+      memberName: payload.memberName,
+      memberId: payload.memberId,
+      churchId: churchId
     });
+
+    if (!result.data.success) {
+      return { success: false, error: result.data.error || 'Backend delivery failure' };
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("SMS Bridge Error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -164,26 +98,17 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
   const membersRef = collection(db, 'churches', churchId, 'members');
   const today = new Date();
   
-  // Use UTC to avoid timezone discrepancies
   const currentMonth = today.getUTCMonth() + 1;
   const currentDay = today.getUTCDate();
-  
-  // Format MM-DD for indexed search
   const todayKey = `${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
 
-  console.log("Birthday check started (UTC Key):", todayKey);
-
-  // Optimized Query: Only fetch members with matching birthdayKey
   const q = query(membersRef, where("birthdayKey", "==", todayKey));
   const membersSnap = await getDocs(q);
   
   const results = { sent: 0, failed: 0, skipped: 0 };
 
-  console.log(`Found ${membersSnap.size} celebrants for today.`);
-
-  for (const doc of membersSnap.docs) {
-    const member = doc.data();
-    
+  for (const memberDoc of membersSnap.docs) {
+    const member = memberDoc.data();
     if (!member.phone) {
       results.skipped++;
       continue;
@@ -191,9 +116,9 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
 
     const outcome = await sendAndLogSMS(db, churchId, {
       phone: member.phone,
-      message: `Happy Birthday ${member.name}! May God bless your new age with favor, health, and prosperity. — ${member.churchName || 'Our Church'}.`,
+      message: `Happy Birthday ${member.name}! May God bless your new age. — From your Church Family.`,
       type: 'birthday',
-      memberId: doc.id,
+      memberId: memberDoc.id,
       memberName: member.name
     });
 

@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Member": {
@@ -8,7 +9,8 @@
         "phone": { "type": "string" },
         "status": { "type": "string" },
         "joined": { "type": "string" },
-        "dateOfBirth": { "type": "string", "format": "date" }
+        "dateOfBirth": { "type": "string", "format": "date" },
+        "birthdayKey": { "type": "string", "description": "MM-DD index" }
       }
     },
     "SMSLog": {
@@ -26,44 +28,38 @@
         "createdAt": { "type": "string", "format": "date-time" }
       }
     },
-    "Transaction": {
-      "title": "Transaction",
+    "SMSTransaction": {
+      "title": "SMS Transaction",
       "type": "object",
       "properties": {
+        "churchId": { "type": "string" },
+        "type": { "type": "string", "enum": ["debit", "credit"] },
         "amount": { "type": "number" },
-        "reference": { "type": "string" },
-        "status": { "type": "string" },
-        "provider": { "type": "string" }
+        "balanceBefore": { "type": "number" },
+        "balanceAfter": { "type": "number" },
+        "reason": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
       }
     }
   },
   "firestore": {
     "/churches/{churchId}": {
-      "description": "Tenant organization. Admin access restricted to users in adminEmails array."
+      "description": "Tenant organization. Contains organizational settings, plan info, and SMS credits."
     },
     "/churches/{churchId}/members/{memberId}": {
       "schema": "Member",
-      "description": "Tenant isolated member directory. Access authorized via adminEmails."
+      "description": "Tenant isolated member directory."
     },
     "/churches/{churchId}/smsLogs/{logId}": {
       "schema": "SMSLog",
-      "description": "Tenant isolated communication logs. Access authorized via adminEmails."
+      "description": "Tenant isolated communication logs."
+    },
+    "/churches/{churchId}/smsTransactions/{txId}": {
+      "schema": "SMSTransaction",
+      "description": "Ledger of credit additions and deductions."
     },
     "/churches/{churchId}/smsTemplates/{templateId}": {
-      "description": "Tenant isolated reusable message structures. Access authorized via adminEmails."
-    },
-    "/churches/{churchId}/attendance/{attendanceId}": {
-      "description": "Tenant isolated service attendance records. Access authorized via adminEmails."
-    },
-    "/churches/{churchId}/finances/{financeId}": {
-      "description": "Tenant isolated tithing and offering records. Access authorized via adminEmails."
-    },
-    "/churches/{churchId}/events/{eventId}": {
-      "description": "Tenant isolated event planning. Access authorized via adminEmails."
-    },
-    "/churches/{churchId}/transactions/{txId}": {
-      "schema": "Transaction",
-      "description": "Tenant isolated billing history. Access authorized via adminEmails."
+      "description": "Tenant isolated reusable message structures."
     }
   }
 }
