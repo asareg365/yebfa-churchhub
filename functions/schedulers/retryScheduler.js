@@ -44,8 +44,13 @@ async function retryFailedSMS(apiKey) {
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
-      // Remove the old failed log to keep history clean (a new one will be created)
-      await logDoc.ref.delete();
+      // Enterprise Fix: NEVER delete logs. Mark as requeued and change status
+      // so the next run of this scheduler doesn't process the same log again.
+      await logDoc.ref.update({
+        status: "requeued",
+        requeued: true,
+        requeuedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
     }
   }
   
