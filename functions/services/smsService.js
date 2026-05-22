@@ -395,10 +395,13 @@ async function getPlatformStats() {
   try {
     const churchesSnap = await db.collection("churches").get();
     const walletsSnap = await db.collection("smsWallets").get();
+    const transactionsSnap = await db.collection("smsTransactions").where("type", "==", "credit").get();
 
     let totalSent = 0;
     let totalFailed = 0;
     let totalCredits = 0;
+    let totalRevenue = 0;
+    let activeChurchesCount = 0;
 
     walletsSnap.forEach(doc => {
       const data = doc.data();
@@ -410,14 +413,35 @@ async function getPlatformStats() {
       if (data && data.sms) {
         totalSent += (data.sms.sent || 0);
         totalFailed += (data.sms.failed || 0);
+        if (data.sms.subscriptionStatus === 'active') activeChurchesCount++;
       }
     });
 
+    // Calculate revenue from credits (assuming credits are roughly 1 GHS for simplicity, or sum of transaction amounts)
+    transactionsSnap.forEach(doc => {
+      const data = doc.data();
+      totalRevenue += (data.amount || 0);
+    });
+
+    // Get Top Spenders (Sort churches by sms.sent descending)
+    const topSpenders = churchesSnap.docs
+      .map(doc => ({
+        id: doc.id,
+        name: doc.data().name,
+        sent: doc.data().sms?.sent || 0,
+        balance: doc.data().sms?.credits || 0
+      }))
+      .sort((a, b) => b.sent - a.sent)
+      .slice(0, 5);
+
     return {
       totalTenants: churchesSnap.size || 0,
+      activeTenants: activeChurchesCount,
       totalSent,
       totalFailed,
       globalCreditPool: totalCredits,
+      totalRevenue,
+      topSpenders,
       timestamp: new Date().toISOString()
     };
   } catch (err) {

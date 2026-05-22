@@ -18,7 +18,10 @@ import {
   Ban,
   Activity,
   CreditCard,
-  History
+  History,
+  TrendingUp,
+  DollarSign,
+  Users
 } from 'lucide-react';
 import {
   Card,
@@ -179,107 +182,152 @@ export default function SystemAdminPortal() {
 
       <div className="grid gap-6 md:grid-cols-4">
         <Card className="glass border-primary/20">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Total Tenants</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold">{platformStats?.totalTenants || sortedChurches.length}</div></CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Users className="w-3 h-3"/> Total Tenants</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{platformStats?.totalTenants || sortedChurches.length}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">{platformStats?.activeTenants || 0} Active Organizations</p>
+          </CardContent>
         </Card>
         <Card className="glass border-accent/20">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Global Sent</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold text-accent">{(platformStats?.totalSent || 0).toLocaleString()}</div></CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><DollarSign className="w-3 h-3"/> Platform Revenue</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-accent">GH₵{(platformStats?.totalRevenue || 0).toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">All-time credit top-ups</p>
+          </CardContent>
         </Card>
         <Card className="glass">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Credit Pool</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold text-primary">{(platformStats?.globalCreditPool || 0).toLocaleString()}</div></CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><TrendingUp className="w-3 h-3"/> Global Sent</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-primary">{(platformStats?.totalSent || 0).toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">Total platform messages</p>
+          </CardContent>
         </Card>
         <Card className="glass border-destructive/20">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Global Failures</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold text-destructive">{(platformStats?.totalFailed || 0).toLocaleString()}</div></CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Ban className="w-3 h-3"/> Global Failures</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-destructive">{(platformStats?.totalFailed || 0).toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">System-wide error rate</p>
+          </CardContent>
         </Card>
       </div>
 
-      <Card className="glass">
-        <CardHeader className="flex flex-row items-center justify-between pb-7">
-          <div>
-            <CardTitle>Organization Directory</CardTitle>
-            <CardDescription>Manage tenant lifecycles and source-of-truth wallets.</CardDescription>
-          </div>
-          <div className="relative w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search ministries..." className="pl-10 h-11" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Ministry</TableHead>
-                <TableHead>Plan</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Balance</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {collectionLoading ? (
+      <div className="grid gap-6 md:grid-cols-3">
+        <Card className="glass md:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-7">
+            <div>
+              <CardTitle>Organization Directory</CardTitle>
+              <CardDescription>Manage tenant lifecycles and source-of-truth wallets.</CardDescription>
+            </div>
+            <div className="relative w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search ministries..." className="pl-10 h-11" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-20">
-                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
-                    <p className="mt-2 text-xs text-muted-foreground">Retrieving organization records...</p>
-                  </TableCell>
+                  <TableHead>Ministry</TableHead>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Balance</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ) : sortedChurches.map((church) => (
-                <TableRow key={church.id}>
-                  <TableCell>
-                    <div className="font-bold">{church.name}</div>
-                    <code className="text-[10px] text-primary">{church.slug}</code>
-                  </TableCell>
-                  <TableCell><Badge variant="outline">{church.plan || 'Starter'}</Badge></TableCell>
-                  <TableCell>
-                    <Badge className={cn(
-                      "uppercase text-[9px] font-bold px-2 py-0.5",
-                      church.sms?.subscriptionStatus === 'active' ? "bg-accent text-white" : 
-                      church.sms?.subscriptionStatus === 'suspended' ? "bg-destructive text-white" : 
-                      "bg-amber-100 text-amber-700"
-                    )}>
-                      {church.sms?.subscriptionStatus || 'Pending'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <CreditCard className="h-3 w-3 text-muted-foreground" />
-                      <span className="font-mono font-bold">{(church.sms?.credits || 0).toLocaleString()}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem onClick={() => setManagingSmsId(church.id)} className="font-bold text-primary">
-                          <Zap className="mr-2 h-4 w-4" /> Top-up Wallet
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        {church.sms?.subscriptionStatus !== 'active' ? (
-                          <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'active')}>
-                            <CheckCircle className="mr-2 h-4 w-4 text-accent" /> Activate Organization
+              </TableHeader>
+              <TableBody>
+                {collectionLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-20">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+                      <p className="mt-2 text-xs text-muted-foreground">Retrieving organization records...</p>
+                    </TableCell>
+                  </TableRow>
+                ) : sortedChurches.map((church) => (
+                  <TableRow key={church.id}>
+                    <TableCell>
+                      <div className="font-bold">{church.name}</div>
+                      <code className="text-[10px] text-primary">{church.slug}</code>
+                    </TableCell>
+                    <TableCell><Badge variant="outline">{church.plan || 'Starter'}</Badge></TableCell>
+                    <TableCell>
+                      <Badge className={cn(
+                        "uppercase text-[9px] font-bold px-2 py-0.5",
+                        church.sms?.subscriptionStatus === 'active' ? "bg-accent text-white" : 
+                        church.sms?.subscriptionStatus === 'suspended' ? "bg-destructive text-white" : 
+                        "bg-amber-100 text-amber-700"
+                      )}>
+                        {church.sms?.subscriptionStatus || 'Pending'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="h-3 w-3 text-muted-foreground" />
+                        <span className="font-mono font-bold">{(church.sms?.credits || 0).toLocaleString()}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem onClick={() => setManagingSmsId(church.id)} className="font-bold text-primary">
+                            <Zap className="mr-2 h-4 w-4" /> Top-up Wallet
                           </DropdownMenuItem>
-                        ) : (
-                          <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'suspended')} className="text-destructive">
-                            <Ban className="mr-2 h-4 w-4" /> Suspend Service
+                          <DropdownMenuSeparator />
+                          {church.sms?.subscriptionStatus !== 'active' ? (
+                            <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'active')}>
+                              <CheckCircle className="mr-2 h-4 w-4 text-accent" /> Activate Organization
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'suspended')} className="text-destructive">
+                              <Ban className="mr-2 h-4 w-4" /> Suspend Service
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => router.push(`/dashboard?impersonate=${church.id}`)}>
+                            <Activity className="mr-2 h-4 w-4" /> View Analytics
                           </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={() => router.push(`/dashboard?impersonate=${church.id}`)}>
-                          <Activity className="mr-2 h-4 w-4" /> View Analytics
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card className="glass h-fit">
+          <CardHeader>
+            <CardTitle className="text-sm font-bold uppercase tracking-widest">Top Spending Tenants</CardTitle>
+            <CardDescription className="text-xs">Based on total SMS volume dispatched.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {platformStats?.topSpenders?.map((spener: any, i: number) => (
+              <div key={spener.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border group hover:border-primary/20 transition-all">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                    #{i + 1}
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold truncate max-w-[120px]">{spener.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{spener.sent.toLocaleString()} Sent</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold text-accent">{spener.balance.toLocaleString()} Cr</p>
+                  <div className="h-1.5 w-16 bg-muted rounded-full overflow-hidden mt-1">
+                    <div className="h-full bg-accent" style={{ width: `${Math.min(100, (spener.sent / (platformStats.totalSent || 1)) * 100)}%` }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+            {!platformStats && (
+              <div className="py-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <Dialog open={!!managingSmsId} onOpenChange={(o) => !o && setManagingSmsId(null)}>
         <DialogContent className="glass">
