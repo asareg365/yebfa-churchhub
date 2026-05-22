@@ -71,32 +71,34 @@ async function sendSMS(apiKey, churchId, payload) {
        return { status: 500, data: { message: err.message } };
     });
 
-    // mNotify success is typically HTTP 200 with code "1000" in body
     const isSent = response.status === 200 && (response.data.code === "1000" || response.data.status === "success");
 
     if (isSent) {
-      // 3. ATOMIC ACCOUNTING (Only on Success)
-      await db.runTransaction(async (t) => {
-        const freshSnap = await t.get(churchRef);
-        const currentCredits = freshSnap.data().sms?.credits || 0;
-        
-        t.update(churchRef, { 
-          "sms.credits": admin.firestore.FieldValue.increment(-1),
-          "sms.sent": admin.firestore.FieldValue.increment(1),
-          "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
-        });
+      // 3. ROBUST ACCOUNTING (Wrapped in try-catch to prevent delivery logic crash)
+      try {
+        await db.runTransaction(async (t) => {
+          const freshSnap = await t.get(churchRef);
+          const currentCredits = freshSnap.data().sms?.credits || 0;
+          
+          t.update(churchRef, { 
+            "sms.credits": admin.firestore.FieldValue.increment(-1),
+            "sms.sent": admin.firestore.FieldValue.increment(1),
+            "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
+          });
 
-        // Use transaction.set with a new doc ref instead of transaction.add
-        const newTxRef = txRef.doc();
-        t.set(newTxRef, {
-          type: "debit",
-          amount: 1,
-          balanceBefore: currentCredits,
-          balanceAfter: currentCredits - 1,
-          reason: type || "manual_send",
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
+          const newTxRef = txRef.doc();
+          t.set(newTxRef, {
+            type: "debit",
+            amount: 1,
+            balanceBefore: currentCredits,
+            balanceAfter: currentCredits - 1,
+            reason: type || "manual_send",
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+          });
         });
-      });
+      } catch (statsErr) {
+        console.error(`[${churchId}] Stats update failed, but SMS was sent:`, statsErr.message);
+      }
 
       // 4. LOG SUCCESSFUL COMMUNICATION
       await logsRef.add({
@@ -114,10 +116,12 @@ async function sendSMS(apiKey, churchId, payload) {
 
       return { success: true, data: response.data };
     } else {
-      // 5. TRACK PROVIDER FAILURE
-      await churchRef.update({
-        "sms.failed": admin.firestore.FieldValue.increment(1)
-      });
+      // 5. TRACK PROVIDER FAILURE (Increment Failed Counter)
+      try {
+        await churchRef.update({
+          "sms.failed": admin.firestore.FieldValue.increment(1)
+        });
+      } catch (e) {}
 
       await logsRef.add({
         memberName: memberName || "Unknown",
@@ -136,7 +140,7 @@ async function sendSMS(apiKey, churchId, payload) {
   } catch (error) {
     console.error(`[${churchId}] SMS Critical Error:`, error.message);
     
-    // Log unexpected code errors to the logs collection so user sees them
+    // Log unexpected errors
     try {
       await churchRef.update({ "sms.failed": admin.firestore.FieldValue.increment(1) });
       await logsRef.add({
