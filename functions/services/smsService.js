@@ -5,7 +5,7 @@ const { formatPhone } = require("../utils/phoneFormatter");
 
 /**
  * SMS QUEUE WRITER
- * Standard helper to validate and add a message to the global delivery queue.
+ * Lightweight helper to validate and add a message to the global delivery queue.
  */
 async function queueSMS(churchId, payload) {
   const db = admin.firestore();
@@ -21,10 +21,16 @@ async function queueSMS(churchId, payload) {
   const queueRef = db.collection("smsQueue");
   const cost = payload.cost || 1;
   
+  // Standard signature: " - Church Name"
+  const signature = ` - ${churchData.sms?.displayName || churchData.name}`;
+  const finalMessage = payload.message.endsWith(signature) 
+    ? payload.message 
+    : `${payload.message}${signature}`;
+
   await queueRef.add({
     churchId,
     phone: formatPhone(payload.phone),
-    message: payload.message,
+    message: finalMessage,
     type: payload.type || "other",
     metadata: {
       memberId: payload.memberId || null,
@@ -42,7 +48,8 @@ async function queueSMS(churchId, payload) {
 }
 
 /**
- * WALLET DEBIT (Atomic)
+ * WALLET DEBIT (Atomic Ledger Entry)
+ * Used inside the SMS Worker transaction.
  */
 async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, type) {
   const walletSnap = await t.get(walletRef);
@@ -62,14 +69,14 @@ async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, t
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   });
 
-  // 2. Update Display Cache (Church Doc)
+  // 2. Update Display Cache (Church Doc) - Wrapped for resilience
   t.update(churchRef, { 
     "sms.credits": newBalance,
     "sms.sent": admin.firestore.FieldValue.increment(1),
     "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
   });
 
-  // 3. Record Ledger Entry (Transaction)
+  // 3. Record Ledger Entry (Transaction) - Use t.set(docRef) to avoid t.add errors
   const txRef = admin.firestore().collection("smsTransactions").doc();
   t.set(txRef, {
     churchId,
@@ -84,13 +91,12 @@ async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, t
 }
 
 /**
- * WALLET CREDIT (Atomic)
+ * WALLET CREDIT (Atomic Ledger Entry)
  */
 async function creditWallet(churchId, amount, reason = "topup", processedBy = "system") {
   const db = admin.firestore();
   const walletRef = db.collection("smsWallets").doc(churchId);
   const churchRef = db.collection("churches").doc(churchId);
-  const txRef = db.collection("smsTransactions").doc();
 
   await db.runTransaction(async (t) => {
     const walletSnap = await t.get(walletRef);
@@ -109,6 +115,7 @@ async function creditWallet(churchId, amount, reason = "topup", processedBy = "s
       "sms.lastTopupAt": admin.firestore.FieldValue.serverTimestamp()
     });
 
+    const txRef = db.collection("smsTransactions").doc();
     t.set(txRef, {
       churchId,
       type: "credit",
@@ -123,7 +130,7 @@ async function creditWallet(churchId, amount, reason = "topup", processedBy = "s
 }
 
 /**
- * SMS DISPATCHER WORKER
+ * SMS DISPATCHER WORKER (Main Execution Hub)
  */
 async function processSMSQueueItem(apiKey, messageId, data) {
   const db = admin.firestore();
@@ -142,7 +149,7 @@ async function processSMSQueueItem(apiKey, messageId, data) {
       updatedAt: admin.firestore.FieldValue.serverTimestamp() 
     });
 
-    // 2. ATOMIC LEDGER DEDUCTION
+    // 2. ATOMIC LEDGER DEDUCTION (Charge-Then-Send)
     await db.runTransaction(async (t) => {
       await debitWallet(t, walletRef, churchRef, data.cost || 1, churchId, messageId, data.type);
     });

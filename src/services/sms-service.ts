@@ -50,6 +50,7 @@ function normalizePhone(phone: string): string {
 
 /**
  * Optimized push to Enterprise Queue via Cloud Function bridge.
+ * This function no longer sends directly; it enqueues for the worker.
  */
 export async function sendAndLogSMS(
   db: Firestore,

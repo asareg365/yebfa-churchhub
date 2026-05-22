@@ -19,7 +19,8 @@ const { retryFailedSMS: processRetries } = require("./schedulers/retryScheduler"
 const { processSMSQueueItem, queueSMS, creditWallet, getPlatformStats } = require("./services/smsService");
 
 /**
- * SMS QUEUE DISPATCHER (Main Engine)
+ * SMS QUEUE DISPATCHER (Main Enterprise Engine)
+ * Listens for new items in the global queue and dispatches them with mNotify.
  */
 exports.onSmsQueued = onDocumentCreated(
   {
@@ -108,6 +109,7 @@ exports.processSmsCampaigns = onSchedule(
 
 /**
  * SECURE CALLABLE FOR FRONTEND
+ * Bridges UI actions to the global persistent queue.
  */
 exports.sendSMS = onCall(async (request) => {
   const { phone, message, type, memberName, memberId, churchId } = request.data;
