@@ -10,7 +10,6 @@ const { formatPhone } = require("../utils/phoneFormatter");
 async function queueSMS(churchId, payload) {
   const db = admin.firestore();
   
-  // 1. Validate Organization
   const churchDoc = await db.collection("churches").doc(churchId).get();
   if (!churchDoc.exists) return { success: false, error: "Organization not found" };
   
@@ -19,7 +18,6 @@ async function queueSMS(churchId, payload) {
   
   if (!isApproved) return { success: false, error: "SMS service not approved for this account" };
 
-  // 2. Add to Queue
   const queueRef = db.collection("smsQueue");
   const cost = payload.cost || 1;
   
@@ -44,15 +42,59 @@ async function queueSMS(churchId, payload) {
 }
 
 /**
+ * SOURCE OF TRUTH WALLET DEBIT
+ * Strictly called within Worker Transaction.
+ */
+async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, type) {
+  const walletSnap = await t.get(walletRef);
+  const walletData = walletSnap.exists ? walletSnap.data() : { balance: 0 };
+  const currentBalance = walletData.balance || 0;
+
+  if (currentBalance < cost) {
+    throw new Error("Insufficient SMS credits");
+  }
+
+  const newBalance = currentBalance - cost;
+
+  // 1. Update Source of Truth (Wallet)
+  t.update(walletRef, {
+    balance: newBalance,
+    totalSpent: admin.firestore.FieldValue.increment(cost),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  // 2. Update Display Cache (Church Doc)
+  t.update(churchRef, { 
+    "sms.credits": newBalance,
+    "sms.sent": admin.firestore.FieldValue.increment(1),
+    "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  // 3. Record Ledger Entry (Transaction)
+  const txRef = admin.firestore().collection("smsTransactions").doc();
+  t.set(txRef, {
+    churchId,
+    type: "debit",
+    amount: cost,
+    balanceBefore: currentBalance,
+    balanceAfter: newBalance,
+    reason: `sms_send_${type}`,
+    messageId: messageId,
+    createdAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+/**
  * SMS DISPATCHER WORKER (Main Engine)
  * Triggered by Firestore onCreate(smsQueue/{id})
- * Handles atomic wallet logic and mNotify dispatch.
+ * Handles atomic wallet ledger and mNotify dispatch.
  */
 async function processSMSQueueItem(apiKey, messageId, data) {
   const db = admin.firestore();
   const queueRef = db.collection("smsQueue").doc(messageId);
   const churchId = data.churchId;
   const churchRef = db.collection("churches").doc(churchId);
+  const walletRef = db.collection("smsWallets").doc(churchId);
   const logsRef = churchRef.collection("smsLogs");
 
   if (data.status !== "queued") return null;
@@ -64,39 +106,9 @@ async function processSMSQueueItem(apiKey, messageId, data) {
       updatedAt: admin.firestore.FieldValue.serverTimestamp() 
     });
 
-    // 2. ATOMIC CREDIT DEDUCTION (Charge First)
+    // 2. ATOMIC LEDGER DEDUCTION (Charge First)
     await db.runTransaction(async (t) => {
-      const cSnap = await t.get(churchRef);
-      if (!cSnap.exists) throw new Error("Church not found");
-      
-      const churchData = cSnap.data();
-      const balance = churchData.sms?.credits || 0;
-      const cost = data.cost || 1;
-
-      if (balance < cost) {
-        throw new Error("Insufficient SMS credits");
-      }
-
-      const newBalance = balance - cost;
-      
-      // Update Organization Wallet
-      t.update(churchRef, { 
-        "sms.credits": newBalance,
-        "sms.sent": admin.firestore.FieldValue.increment(1),
-        "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
-      });
-
-      // Record Transaction Audit
-      const txRef = churchRef.collection("smsTransactions").doc();
-      t.set(txRef, {
-        type: "debit",
-        amount: cost,
-        balanceBefore: balance,
-        balanceAfter: newBalance,
-        reason: data.type || "queue_send",
-        messageId: messageId,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      await debitWallet(t, walletRef, churchRef, data.cost || 1, churchId, messageId, data.type);
     });
 
     // 3. DISPATCH TO PROVIDER (mNotify)
@@ -116,7 +128,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
         sentAt: admin.firestore.FieldValue.serverTimestamp() 
       });
       
-      // Archive Log
       await logsRef.add({
         memberName: data.metadata?.memberName || "Recipient",
         memberId: data.metadata?.memberId,
@@ -141,7 +152,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
     const maxRetries = data.maxRetries || 3;
 
     if (retryCount <= maxRetries && error.message !== "Insufficient SMS credits") {
-      // Re-queue for retry
       await queueRef.update({
         status: "queued",
         retryCount: retryCount,
@@ -149,14 +159,12 @@ async function processSMSQueueItem(apiKey, messageId, data) {
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
     } else {
-      // Mark as permanently failed
       await queueRef.update({ 
         status: "failed", 
         error: error.message,
         updatedAt: admin.firestore.FieldValue.serverTimestamp() 
       });
 
-      // Log failure for analytics
       try {
         await logsRef.add({
           memberName: data.metadata?.memberName || "Recipient",

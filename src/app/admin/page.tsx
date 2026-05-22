@@ -61,6 +61,7 @@ import {
   increment,
   addDoc,
   setDoc,
+  runTransaction
 } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -121,15 +122,16 @@ export default function SystemAdminPortal() {
         "sms.approvedBy": user?.email
       });
       
-      // Initialize Wallet properly
+      // Initialize Source of Truth Wallet
       await setDoc(walletRef, {
         churchId,
         balance: 100,
-        totalUsed: 0,
+        totalTopups: 100,
+        totalSpent: 0,
         updatedAt: serverTimestamp()
       }, { merge: true });
 
-      toast({ title: "SMS Service Activated", description: "Default 100 credits allocated." });
+      toast({ title: "SMS Service Activated", description: "Source-of-truth wallet initialized with 100 credits." });
     } catch (e: any) {
       toast({ title: "Activation Failed", description: e.message, variant: "destructive" });
     }
@@ -147,34 +149,49 @@ export default function SystemAdminPortal() {
   const handleTopUp = async () => {
     if (!managingSmsId || !topUpAmount) return;
     setIsProcessing(true);
+    
     const churchRef = doc(db, 'churches', managingSmsId);
     const walletRef = doc(db, 'smsWallets', managingSmsId);
-    const txRef = collection(db, 'churches', managingSmsId, 'smsTransactions');
+    const txRef = doc(collection(db, 'smsTransactions'));
     const amount = parseInt(topUpAmount);
 
     try {
-      // 1. Update organizational counter
-      await updateDoc(churchRef, { "sms.credits": increment(amount) });
-      
-      // 2. Update functional wallet
-      await updateDoc(walletRef, { 
-        balance: increment(amount),
-        updatedAt: serverTimestamp() 
+      await runTransaction(db, async (transaction) => {
+        const walletSnap = await transaction.get(walletRef);
+        const walletData = walletSnap.exists() ? walletSnap.data() : { balance: 0, totalTopups: 0 };
+        const currentBalance = walletData.balance || 0;
+        const newBalance = currentBalance + amount;
+
+        // 1. Update Source-of-truth Wallet
+        transaction.set(walletRef, {
+          balance: newBalance,
+          totalTopups: (walletData.totalTopups || 0) + amount,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        // 2. Update Display Cache
+        transaction.update(churchRef, {
+          "sms.credits": newBalance,
+          "sms.lastTopupAt": serverTimestamp()
+        });
+
+        // 3. Record Immutable Ledger Entry
+        transaction.set(txRef, {
+          churchId: managingSmsId,
+          type: "credit",
+          amount,
+          balanceBefore: currentBalance,
+          balanceAfter: newBalance,
+          reason: "admin_manual_topup",
+          processedBy: user?.email,
+          createdAt: serverTimestamp()
+        });
       });
 
-      // 3. Record Audit Trail
-      await addDoc(txRef, {
-        type: "credit",
-        amount,
-        reason: "admin_manual_topup",
-        processedBy: user?.email,
-        createdAt: serverTimestamp()
-      });
-
-      toast({ title: "Credits Added Successfully", description: `${amount} credits added to ${activeChurchSms?.name}` });
+      toast({ title: "Credits Allocated", description: `${amount} credits added to ${activeChurchSms?.name} with transaction log.` });
       setManagingSmsId(null);
     } catch (e: any) {
-      toast({ title: "Top-up Failed", variant: "destructive" });
+      toast({ title: "Top-up Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
@@ -226,7 +243,7 @@ export default function SystemAdminPortal() {
         <CardHeader className="flex flex-row items-center justify-between pb-7">
           <div>
             <CardTitle>Organization Directory</CardTitle>
-            <CardDescription>Manage tenant lifecycles and SMS credit allocation.</CardDescription>
+            <CardDescription>Manage tenant lifecycles and SMS wallet allocation.</CardDescription>
           </div>
           <div className="relative w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -282,12 +299,12 @@ export default function SystemAdminPortal() {
                       <DropdownMenuContent align="end">
                         {(!church.sms?.approved && church.sms?.subscriptionStatus !== 'active') ? (
                           <DropdownMenuItem onClick={() => handleApproveSms(church.id)} className="text-accent font-bold">
-                            <CheckCircle className="mr-2 h-4 w-4" /> Approve SMS
+                            <CheckCircle className="mr-2 h-4 w-4" /> Approve & Init Wallet
                           </DropdownMenuItem>
                         ) : (
                           <>
                             <DropdownMenuItem onClick={() => setManagingSmsId(church.id)}>
-                              <Zap className="mr-2 h-4 w-4" /> Allocate Credits
+                              <Zap className="mr-2 h-4 w-4 text-primary" /> SMS Top-up
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleToggleSms(church.id, church.sms?.enabled)}>
                               {church.sms?.enabled ? (
@@ -314,7 +331,7 @@ export default function SystemAdminPortal() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>SMS Credit Management</DialogTitle>
-            <DialogDescription>Allocating resources for <strong>{activeChurchSms?.name}</strong>.</DialogDescription>
+            <DialogDescription>Allocating source-of-truth resources for <strong>{activeChurchSms?.name}</strong>.</DialogDescription>
           </DialogHeader>
           <div className="py-6 space-y-4">
             <div className="p-4 rounded-xl bg-muted/20 border flex justify-between items-center">
