@@ -109,47 +109,52 @@ async function queueSMS(churchId, payload) {
 }
 
 /**
- * WALLET DEBIT
- * Uses Dot-Notation to preserve object integrity.
+ * WALLET DEBIT (Transaction-Safe)
  */
-async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, type) {
-  const walletSnap = await t.get(walletRef);
-  const walletData = walletSnap.exists ? walletSnap.data() : { balance: 0 };
-  const currentBalance = Number(walletData.balance || 0);
+async function debitWallet(churchId, cost, messageId, type) {
+  const db = admin.firestore();
+  const walletRef = db.collection("smsWallets").doc(churchId);
+  const churchRef = db.collection("churches").doc(churchId);
 
-  if (currentBalance < cost) throw new Error("Insufficient SMS credits");
+  return await db.runTransaction(async (t) => {
+    const walletSnap = await t.get(walletRef);
+    const walletData = walletSnap.exists ? walletSnap.data() : { balance: 0 };
+    const currentBalance = Number(walletData.balance || 0);
 
-  const newBalance = currentBalance - cost;
+    if (currentBalance < cost) throw new Error("Insufficient SMS credits");
 
-  t.update(walletRef, {
-    balance: newBalance,
-    totalSpent: admin.firestore.FieldValue.increment(cost),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp()
-  });
+    const newBalance = currentBalance - cost;
 
-  // CRITICAL: Explicit dot-notation to avoid wiping out the 'sms' object
-  t.update(churchRef, { 
-    "sms.credits": newBalance,
-    "sms.sent": admin.firestore.FieldValue.increment(1),
-    "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
-  });
+    t.update(walletRef, {
+      balance: newBalance,
+      totalSpent: admin.firestore.FieldValue.increment(cost),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
 
-  const txRef = admin.firestore().collection("smsTransactions").doc();
-  t.set(txRef, {
-    churchId,
-    type: "debit",
-    amount: cost,
-    balanceBefore: currentBalance,
-    balanceAfter: newBalance,
-    reason: `sms_send_${type}`,
-    messageId: messageId,
-    createdAt: admin.firestore.FieldValue.serverTimestamp()
+    t.update(churchRef, { 
+      "sms.credits": newBalance,
+      "sms.sent": admin.firestore.FieldValue.increment(1),
+      "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    const txRef = db.collection("smsTransactions").doc();
+    t.set(txRef, {
+      churchId,
+      type: "debit",
+      amount: cost,
+      balanceBefore: currentBalance,
+      balanceAfter: newBalance,
+      reason: `sms_send_${type}`,
+      messageId: messageId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { newBalance };
   });
 }
 
 /**
- * WALLET CREDIT (Standardized to GH₵)
- * Uses dot-notation for atomic field updates.
+ * WALLET CREDIT
  */
 async function creditWallet(churchId, amount, reason = "topup", processedBy = "system") {
   const db = admin.firestore();
@@ -161,7 +166,7 @@ async function creditWallet(churchId, amount, reason = "topup", processedBy = "s
     throw new Error("Invalid top-up amount. Must be a positive number.");
   }
 
-  await db.runTransaction(async (t) => {
+  const { newBalance } = await db.runTransaction(async (t) => {
     const [walletSnap, churchSnap] = await Promise.all([
       t.get(walletRef),
       t.get(churchRef)
@@ -171,17 +176,16 @@ async function creditWallet(churchId, amount, reason = "topup", processedBy = "s
 
     const walletData = walletSnap.exists ? walletSnap.data() : { balance: 0, totalTopups: 0 };
     const currentBalance = Number(walletData.balance || 0);
-    const newBalance = currentBalance + topupValue;
+    const resultBalance = currentBalance + topupValue;
 
     t.set(walletRef, {
-      balance: newBalance,
+      balance: resultBalance,
       totalTopups: admin.firestore.FieldValue.increment(topupValue),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 
-    // CRITICAL: Safe update via dot-notation
     t.update(churchRef, {
-      "sms.credits": newBalance,
+      "sms.credits": resultBalance,
       "sms.lastTopupAt": admin.firestore.FieldValue.serverTimestamp()
     });
 
@@ -192,14 +196,16 @@ async function creditWallet(churchId, amount, reason = "topup", processedBy = "s
       currency: "GHS",
       amount: topupValue,
       balanceBefore: currentBalance,
-      balanceAfter: newBalance,
+      balanceAfter: resultBalance,
       reason,
       processedBy,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
+
+    return { newBalance: resultBalance };
   });
 
-  return { success: true };
+  return { success: true, newBalance };
 }
 
 /**
@@ -248,7 +254,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
   const queueRef = db.collection("smsQueue").doc(messageId);
   const churchId = data.churchId;
   const churchRef = db.collection("churches").doc(churchId);
-  const walletRef = db.collection("smsWallets").doc(churchId);
   const logsRef = churchRef.collection("smsLogs");
   const reportsRef = db.collection("smsDeliveryReports");
 
@@ -268,9 +273,8 @@ async function processSMSQueueItem(apiKey, messageId, data) {
   if (!claimed) return null;
 
   try {
-    await db.runTransaction(async (t) => {
-      await debitWallet(t, walletRef, churchRef, data.cost || 1, churchId, messageId, data.type);
-    });
+    // Perform transactional debit
+    await debitWallet(churchId, data.cost || 1, messageId, data.type);
 
     const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
     const response = await axios.post(url, {
@@ -428,7 +432,7 @@ async function getPlatformStats() {
   try {
     const churchesSnap = await db.collection("churches").get();
     const walletsSnap = await db.collection("smsWallets").get();
-    const transactionsSnap = await db.collection("smsTransactions").where("type", "in", ["credit", "topup"]).get();
+    const transactionsSnap = await db.collection("smsTransactions").where("type", "in", ["topup", "credit"]).get();
 
     let totalSent = 0;
     let totalFailed = 0;
@@ -485,5 +489,6 @@ module.exports = {
   processSMSQueueItem, 
   creditWallet, 
   getPlatformStats,
-  handleMNotifyWebhook
+  handleMNotifyWebhook,
+  debitWallet
 };

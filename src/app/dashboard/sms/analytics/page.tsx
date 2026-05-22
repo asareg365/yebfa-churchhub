@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { 
   TrendingUp, 
   BarChart3, 
@@ -13,24 +12,31 @@ import {
   Calendar,
   Zap,
   Target,
-  Clock
+  Clock,
+  Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, query, where, limit, orderBy } from 'firebase/firestore';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area } from 'recharts';
-import { format, subDays, startOfMonth } from 'date-fns';
+import { ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
+import { format, subDays } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 
 export default function SMSAnalyticsPage() {
   const db = useFirestore();
   const { user } = useUser();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
     return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
   }, [db, user?.email]);
   
-  const { data: churches } = useCollection(churchQuery);
+  const { data: churches, loading: churchLoading } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
   const logsRef = useMemo(() => {
@@ -38,14 +44,14 @@ export default function SMSAnalyticsPage() {
     return collection(db, 'churches', currentChurch.id, 'smsLogs');
   }, [db, currentChurch?.id]);
 
-  const { data: allLogs } = useCollection(logsRef ? query(logsRef, orderBy('createdAt', 'desc'), limit(1000)) : null);
+  const { data: allLogs, loading: logsLoading } = useCollection(logsRef ? query(logsRef, orderBy('createdAt', 'desc'), limit(1000)) : null);
 
   const stats = useMemo(() => {
-    if (!allLogs) return { total: 0, sent: 0, failed: 0, delivered: 0, successRate: 0, deliveryRate: 0 };
+    if (!allLogs || allLogs.length === 0) return { total: 0, sent: 0, failed: 0, delivered: 0, successRate: 0, deliveryRate: 0 };
     const total = allLogs.length;
     const sent = allLogs.filter(l => l.status === 'sent').length;
     const failed = allLogs.filter(l => l.status === 'failed').length;
-    const delivered = allLogs.filter(l => l.providerStatus === 'delivered' || l.status === 'sent').length; // providerStatus if webhook active
+    const delivered = allLogs.filter(l => l.providerStatus === 'delivered' || l.status === 'sent').length;
     
     return {
       total,
@@ -84,6 +90,15 @@ export default function SMSAnalyticsPage() {
       };
     });
   }, [allLogs]);
+
+  if (!mounted || churchLoading || logsLoading) {
+    return (
+      <div className="min-h-[400px] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Aggregating outreach intelligence...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
@@ -148,24 +163,30 @@ export default function SMSAnalyticsPage() {
             <CardDescription className="text-xs">Daily message volume and success tracking.</CardDescription>
           </CardHeader>
           <CardContent className="h-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trendData}>
-                <defs>
-                  <linearGradient id="colorVol" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis fontSize={10} tickLine={false} axisLine={false} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }}
-                />
-                <Area type="monotone" dataKey="volume" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorVol)" strokeWidth={3} />
-                <Area type="monotone" dataKey="success" stroke="hsl(var(--accent))" fill="transparent" strokeWidth={2} strokeDasharray="5 5" />
-              </AreaChart>
-            </ResponsiveContainer>
+            {trendData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trendData}>
+                  <defs>
+                    <linearGradient id="colorVol" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                  <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis fontSize={10} tickLine={false} axisLine={false} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }}
+                  />
+                  <Area type="monotone" dataKey="volume" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorVol)" strokeWidth={3} />
+                  <Area type="monotone" dataKey="success" stroke="hsl(var(--accent))" fill="transparent" strokeWidth={2} strokeDasharray="5 5" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-muted-foreground text-sm italic">
+                Insufficient data to generate trend charts.
+              </div>
+            )}
           </CardContent>
           <div className="px-6 flex gap-4 text-[10px] font-bold uppercase text-muted-foreground">
              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-primary/20 border border-primary rounded-sm" /> Total Attempted</div>
