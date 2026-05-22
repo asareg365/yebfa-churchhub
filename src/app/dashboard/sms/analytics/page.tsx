@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
@@ -5,21 +6,20 @@ import {
   TrendingUp, 
   BarChart3, 
   PieChart as PieIcon, 
-  Users, 
   CheckCircle2, 
-  AlertTriangle,
   MessageSquare,
-  Calendar,
   Zap,
   Target,
   Clock,
-  Loader2
+  Loader2,
+  Calendar,
+  AlertTriangle
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, query, where, limit, orderBy } from 'firebase/firestore';
-import { ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
-import { format, subDays } from 'date-fns';
+import { ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar } from 'recharts';
+import { format, subDays, startOfMonth } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
 export default function SMSAnalyticsPage() {
@@ -47,32 +47,36 @@ export default function SMSAnalyticsPage() {
   const { data: allLogs, loading: logsLoading } = useCollection(logsRef ? query(logsRef, orderBy('createdAt', 'desc'), limit(1000)) : null);
 
   const stats = useMemo(() => {
-    if (!allLogs || allLogs.length === 0) return { total: 0, sent: 0, failed: 0, delivered: 0, successRate: 0, deliveryRate: 0 };
+    if (!allLogs || allLogs.length === 0) return { total: 0, sent: 0, failed: 0, delivered: 0, successRate: 0, deliveryRate: 0, monthlyUsage: 0 };
     const total = allLogs.length;
     const sent = allLogs.filter(l => l.status === 'sent').length;
     const failed = allLogs.filter(l => l.status === 'failed').length;
-    const delivered = allLogs.filter(l => l.providerStatus === 'delivered' || l.status === 'sent').length;
+    const delivered = allLogs.filter(l => l.providerStatus === 'delivered').length;
     
+    const currentMonth = startOfMonth(new Date());
+    const monthlyUsage = allLogs.filter(l => l.createdAt?.toDate && l.createdAt.toDate() >= currentMonth && l.status === 'sent').length;
+
     return {
       total,
       sent,
       failed,
       delivered,
+      monthlyUsage,
       successRate: total > 0 ? Math.round((sent / total) * 100) : 0,
       deliveryRate: sent > 0 ? Math.round((delivered / sent) * 100) : 0
     };
   }, [allLogs]);
 
-  const typeData = useMemo(() => {
+  const campaignBreakdown = useMemo(() => {
     if (!allLogs) return [];
-    const types = ['birthday', 'announcement', 'test', 'reminder', 'followup'];
+    const types = ['birthday', 'announcement', 'reminder', 'followup'];
     return types.map(type => ({
       name: type.charAt(0).toUpperCase() + type.slice(1),
       value: allLogs.filter(l => l.type === type).length
     })).filter(t => t.value > 0);
   }, [allLogs]);
 
-  const COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', '#8884d8', '#ffc658', '#42b883'];
+  const COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', '#8884d8', '#ffc658'];
 
   const trendData = useMemo(() => {
     if (!allLogs) return [];
@@ -107,39 +111,37 @@ export default function SMSAnalyticsPage() {
           <h2 className="text-3xl font-bold tracking-tight mb-1">Communication Intelligence</h2>
           <p className="text-muted-foreground">Comprehensive performance metrics for {currentChurch?.name}.</p>
         </div>
-        <div className="flex gap-2">
-           <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 h-8 px-4 rounded-xl font-bold">
-             <Zap className="w-3 h-3 mr-2" /> Live Analytics
-           </Badge>
-        </div>
+        <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 h-8 px-4 rounded-xl font-bold">
+          <Zap className="w-3 h-3 mr-2" /> Real-time Audit
+        </Badge>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card className="glass border-accent/20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-accent" /> Success Rate</CardTitle>
+            <CardTitle className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Target className="w-3 h-3 text-accent" /> Delivery Rate</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-accent">{stats.successRate}%</div>
-            <p className="text-[10px] text-muted-foreground mt-1">Platform-to-Provider delivery</p>
+            <div className="text-3xl font-bold text-accent">{stats.deliveryRate}%</div>
+            <p className="text-[10px] text-muted-foreground mt-1">Verified on handsets</p>
           </CardContent>
         </Card>
         <Card className="glass">
           <CardHeader className="pb-2">
-            <CardTitle className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Target className="w-3 h-3" /> Delivery Rate</CardTitle>
+            <CardTitle className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Calendar className="w-3 h-3" /> Monthly Usage</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.deliveryRate}%</div>
-            <p className="text-[10px] text-muted-foreground mt-1">Provider-to-Handset verification</p>
+            <div className="text-3xl font-bold">{stats.monthlyUsage.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">Credits used this month</p>
           </CardContent>
         </Card>
         <Card className="glass">
           <CardHeader className="pb-2">
-            <CardTitle className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><MessageSquare className="w-3 h-3" /> Total Volume</CardTitle>
+            <CardTitle className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><MessageSquare className="w-3 h-3" /> Total Sent</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.total.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">All-time communications</p>
+            <div className="text-3xl font-bold">{stats.sent.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">Successful platform dispatches</p>
           </CardContent>
         </Card>
         <Card className="glass border-primary/20">
@@ -148,7 +150,7 @@ export default function SMSAnalyticsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-primary">{(currentChurch?.sms?.credits || 0).toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">Current balance in organization wallet</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Available balance</p>
           </CardContent>
         </Card>
       </div>
@@ -158,9 +160,8 @@ export default function SMSAnalyticsPage() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-primary" />
-              Communication Trends (14 Days)
+              Volume Trends (14 Days)
             </CardTitle>
-            <CardDescription className="text-xs">Daily message volume and success tracking.</CardDescription>
           </CardHeader>
           <CardContent className="h-[320px]">
             {trendData.length > 0 ? (
@@ -175,22 +176,18 @@ export default function SMSAnalyticsPage() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                   <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} />
                   <YAxis fontSize={10} tickLine={false} axisLine={false} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }}
-                  />
+                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }} />
                   <Area type="monotone" dataKey="volume" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorVol)" strokeWidth={3} />
                   <Area type="monotone" dataKey="success" stroke="hsl(var(--accent))" fill="transparent" strokeWidth={2} strokeDasharray="5 5" />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-muted-foreground text-sm italic">
-                Insufficient data to generate trend charts.
-              </div>
+              <div className="h-full flex items-center justify-center text-muted-foreground italic text-sm">Insufficient data for trend analysis.</div>
             )}
           </CardContent>
           <div className="px-6 flex gap-4 text-[10px] font-bold uppercase text-muted-foreground">
-             <div className="flex items-center gap-2"><div className="w-3 h-3 bg-primary/20 border border-primary rounded-sm" /> Total Attempted</div>
-             <div className="flex items-center gap-2"><div className="w-3 h-3 border border-accent border-dashed rounded-sm" /> Successful Delivery</div>
+             <div className="flex items-center gap-2"><div className="w-3 h-3 bg-primary/20 border border-primary rounded-sm" /> Attempted</div>
+             <div className="flex items-center gap-2"><div className="w-3 h-3 border border-accent border-dashed rounded-sm" /> Delivered</div>
           </div>
         </Card>
 
@@ -198,37 +195,26 @@ export default function SMSAnalyticsPage() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <PieIcon className="w-5 h-5 text-accent" />
-              Campaign Breakdown
+              Campaign Categories
             </CardTitle>
-            <CardDescription className="text-xs">Volume distribution by message type.</CardDescription>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col items-center justify-center p-0">
-            {typeData.length > 0 ? (
+            {campaignBreakdown.length > 0 ? (
               <>
                 <div className="h-[250px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie
-                        data={typeData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={5}
-                        dataKey="value"
-                      >
-                        {typeData.map((entry, index) => (
+                      <Pie data={campaignBreakdown} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                        {campaignBreakdown.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }}
-                      />
+                      <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '12px', border: '1px solid hsl(var(--border))' }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
                 <div className="px-6 pb-6 grid grid-cols-2 gap-x-4 gap-y-2 w-full">
-                  {typeData.map((t, i) => (
+                  {campaignBreakdown.map((t, i) => (
                     <div key={i} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
@@ -240,56 +226,36 @@ export default function SMSAnalyticsPage() {
                 </div>
               </>
             ) : (
-              <div className="text-muted-foreground italic text-sm py-20 flex flex-col items-center gap-2">
-                <Target className="w-12 h-12 opacity-10" />
-                No outreach data yet.
+              <div className="text-muted-foreground italic text-sm py-20 flex flex-col items-center gap-2 opacity-20">
+                <Target className="w-12 h-12" />
+                No outreach data.
               </div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      <Card className="glass bg-primary/5 border-primary/20">
+      <Card className="glass bg-destructive/5 border-destructive/20">
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Zap className="w-5 h-5 text-primary" />
-            Carrier Performance Index
+          <CardTitle className="text-lg flex items-center gap-2 text-destructive">
+            <AlertTriangle className="w-5 h-5" />
+            Reliability & Health
           </CardTitle>
-          <CardDescription>Real-time delivery health based on network-level reports.</CardDescription>
+          <CardDescription>Network-level monitoring for carrier reachability.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid md:grid-cols-3 gap-8">
-             <div className="space-y-3">
-                <div className="flex justify-between items-end">
-                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Network Latency</p>
-                   <p className="text-xs font-bold text-accent">&lt; 2s</p>
-                </div>
-                <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                   <div className="h-full bg-accent" style={{ width: '92%' }} />
-                </div>
-                <p className="text-[9px] text-muted-foreground italic">Average time to handset delivery.</p>
-             </div>
-             <div className="space-y-3">
-                <div className="flex justify-between items-end">
-                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Handset Reachability</p>
-                   <p className="text-xs font-bold text-primary">98.4%</p>
-                </div>
-                <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                   <div className="h-full bg-primary" style={{ width: '98%' }} />
-                </div>
-                <p className="text-[9px] text-muted-foreground italic">Success rate across all Ghana networks.</p>
-             </div>
-             <div className="space-y-3">
-                <div className="flex justify-between items-end">
-                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Gateway Stability</p>
-                   <p className="text-xs font-bold text-accent">Stable</p>
-                </div>
-                <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                   <div className="h-full bg-accent" style={{ width: '100%' }} />
-                </div>
-                <p className="text-[9px] text-muted-foreground italic">mNotify API endpoint availability.</p>
-             </div>
-          </div>
+        <CardContent className="grid md:grid-cols-3 gap-8">
+           <div className="space-y-2">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Handset Reachability</p>
+              <div className="text-2xl font-bold text-destructive">{100 - stats.deliveryRate}% Latency</div>
+              <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden mt-2">
+                 <div className="h-full bg-destructive" style={{ width: `${100 - stats.deliveryRate}%` }} />
+              </div>
+           </div>
+           <div className="space-y-2">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Success vs Fail</p>
+              <div className="text-2xl font-bold text-accent">{stats.sent} / {stats.failed}</div>
+              <p className="text-[9px] text-muted-foreground italic">Dispatched vs Errored messages.</p>
+           </div>
         </CardContent>
       </Card>
     </div>
