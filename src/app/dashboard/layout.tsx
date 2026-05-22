@@ -36,6 +36,33 @@ export default function DashboardLayout({
   const { data: churches, loading: churchLoading } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
+  // Global Theme Enforcement
+  useEffect(() => {
+    if (!currentChurch?.settings?.theme) return;
+
+    const applyTheme = (theme: string) => {
+      const root = window.document.documentElement;
+      root.classList.remove('light', 'dark');
+
+      if (theme === 'system') {
+        const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        root.classList.add(systemTheme);
+      } else {
+        root.classList.add(theme);
+      }
+    };
+
+    applyTheme(currentChurch.settings.theme);
+
+    // If system, listen for changes
+    if (currentChurch.settings.theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const listener = () => applyTheme('system');
+      mediaQuery.addEventListener('change', listener);
+      return () => mediaQuery.removeEventListener('change', listener);
+    }
+  }, [currentChurch?.settings?.theme]);
+
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
