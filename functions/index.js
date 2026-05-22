@@ -21,7 +21,6 @@ const { processSMSQueueItem, queueSMS, creditWallet } = require("./services/smsS
 
 /**
  * MISSION CRITICAL WORKER
- * Region: us-central1 (Standardized)
  */
 exports.onSmsQueued = onDocumentCreated(
   {
@@ -38,7 +37,6 @@ exports.onSmsQueued = onDocumentCreated(
 
 /**
  * mNotify Delivery Webhook
- * Public endpoint with native CORS
  */
 exports.mnotifyDeliveryWebhook = onRequest(
   { region: "us-central1", cors: true },
@@ -104,6 +102,26 @@ exports.getSystemStats = onCall(
         topSpenders
       };
     } catch (error) { throw new HttpsError("internal", error.message); }
+  }
+);
+
+/**
+ * SELF-HEALING: Cleanup Stuck Locks
+ */
+exports.cleanupSmsLocks = onSchedule(
+  { schedule: "every 5 minutes", region: "us-central1" },
+  async () => {
+    const db = admin.firestore();
+    const now = Date.now();
+    const expiredLocks = await db.collection("smsLocks").where("expiresAt", "<", now).get();
+    
+    if (expiredLocks.empty) return null;
+    
+    const batch = db.batch();
+    expiredLocks.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    console.log(`Cleaned up ${expiredLocks.size} stuck SMS locks.`);
+    return null;
   }
 );
 

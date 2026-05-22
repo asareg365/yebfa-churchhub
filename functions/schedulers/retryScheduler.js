@@ -11,9 +11,8 @@ function getBackoffSeconds(retryCount) {
 
 async function retryFailedSMS(apiKey) {
   const db = admin.firestore();
-  const now = admin.firestore.Timestamp.now();
-
-  // Query failed messages that are eligible for retry
+  
+  // Query failed messages eligible for retry
   const failedQuery = await db.collection("smsQueue")
     .where("status", "==", "failed")
     .where("retryCount", "<", 5) // Max 5 attempts
@@ -28,7 +27,6 @@ async function retryFailedSMS(apiKey) {
   for (const doc of failedQuery.docs) {
     const data = doc.data();
     
-    // Determine if enough time has passed based on backoff
     const lastUpdate = data.updatedAt?.toMillis() || Date.now();
     const waitTime = getBackoffSeconds(data.retryCount || 0) * 1000;
 

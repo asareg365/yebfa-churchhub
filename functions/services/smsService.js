@@ -4,30 +4,19 @@ const admin = require("firebase-admin");
 const { formatPhone } = require("../utils/phoneFormatter");
 
 const MAX_MESSAGE_LENGTH = 700;
-const SPAM_KEYWORDS = ["bitcoin", "crypto", "investment", "prize", "won", "password", "otp", "lottery", "claim"];
+const SPAM_KEYWORDS = ["bitcoin", "crypto", "investment", "prize", "won", "password", "otp", "lottery", "claim", "verify"];
 
 /**
- * ABUSE DETECTION: Heuristic Content Analysis
+ * ABUSE DETECTION: Heuristic Content Analysis with Normalization
  */
 function isPotentiallyMalicious(message) {
-  const lowMsg = message.toLowerCase();
-  return SPAM_KEYWORDS.some(keyword => lowMsg.includes(keyword));
+  // Normalize: remove symbols and special chars that bypass simple includes
+  const normalized = message.toLowerCase().replace(/[^a-z0-9 ]/g, "");
+  return SPAM_KEYWORDS.some(keyword => normalized.includes(keyword));
 }
 
 /**
- * ABUSE DETECTION: Plan-based Concurrency Limits
- */
-function getConcurrencyLimit(plan = "Basic") {
-  const limits = {
-    "Basic": 50,
-    "Standard": 500,
-    "Premium": 2000
-  };
-  return limits[plan] || 50;
-}
-
-/**
- * STEP 4 — Distributed Locking (Enterprise Guard)
+ * STEP 4 — Distributed Locking with Versioning (Enterprise Guard)
  */
 async function acquireLock(db, churchId, messageId) {
   const lockRef = db.collection("smsLocks").doc(churchId);
@@ -37,14 +26,17 @@ async function acquireLock(db, churchId, messageId) {
     const snap = await t.get(lockRef);
     const existing = snap.exists ? snap.data() : null;
 
+    // Check if currently locked and not expired
     if (existing?.locked && existing.expiresAt > now) {
-      throw new Error("Organization is currently processing an SMS batch. Please wait.");
+      throw new Error("LOCKED: Organization is currently processing an SMS batch.");
     }
 
     t.set(lockRef, {
       locked: true,
+      churchId,
       messageId,
-      expiresAt: now + 60000 // 60s lock TTL
+      expiresAt: now + 60000, // 60s TTL
+      version: now
     });
   });
 }
@@ -54,7 +46,7 @@ async function releaseLock(db, churchId) {
 }
 
 /**
- * STEP 3 — Transactional Wallet Debit (Bulletproof Ledger Pattern)
+ * STEP 3 — Transactional Wallet Debit (Ledger-First Pattern)
  */
 async function debitWalletTx(t, db, churchId, cost, messageId, type) {
   const ledgerId = `${churchId}_${messageId}`;
@@ -67,7 +59,7 @@ async function debitWalletTx(t, db, churchId, cost, messageId, type) {
     t.get(walletRef)
   ]);
 
-  // IDEMPOTENCY GUARD: Prevent double charges
+  // IDEMPOTENCY GUARD: Prevent double charges at ledger level
   if (ledgerSnap.exists) {
     const existing = ledgerSnap.data();
     if (existing.status === "COMMITTED" || existing.status === "SENT") return; 
@@ -81,21 +73,21 @@ async function debitWalletTx(t, db, churchId, cost, messageId, type) {
 
   const newBalance = balance - cost;
 
-  // 1. Update Wallet (Atomic)
+  // 1. Update Wallet (Atomic Cache)
   t.set(walletRef, {
     balance: newBalance,
     totalSpent: admin.firestore.FieldValue.increment(cost),
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   }, { merge: true });
 
-  // 2. Sync Church Doc (Dot notation for safety)
+  // 2. Sync Church Doc (UI Cache)
   t.update(churchRef, {
     "sms.credits": newBalance,
     "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp(),
     [`sms.stats.${type}`]: admin.firestore.FieldValue.increment(1)
   });
 
-  // 3. Commit to Ledger
+  // 3. Commit to Ledger (Immutable Truth)
   t.set(ledgerRef, {
     churchId,
     messageId,
@@ -108,7 +100,7 @@ async function debitWalletTx(t, db, churchId, cost, messageId, type) {
 }
 
 /**
- * STEP 5 — Mission Critical SMS Pipeline
+ * STEP 5 — Mission Critical SMS Pipeline (Hardened)
  */
 async function processSMSQueueItem(apiKey, messageId, data) {
   const db = admin.firestore();
@@ -117,14 +109,27 @@ async function processSMSQueueItem(apiKey, messageId, data) {
   const ledgerId = `${churchId}_${messageId}`;
 
   try {
-    // Phase 1: Lock and Charge
+    // 1. Hard Idempotency Guard (Pre-Lock)
+    const earlyLedger = await db.collection("smsLedger").doc(ledgerId).get();
+    if (earlyLedger.exists && ["SENT", "COMMITTED"].includes(earlyLedger.data().status)) {
+      return { skipped: true, reason: "already_processed" };
+    }
+
+    // 2. Acquire Lock
     await acquireLock(db, churchId, messageId);
 
+    // 3. Handshake Verification (Post-Lock)
+    const lockVerify = await db.collection("smsLocks").doc(churchId).get();
+    if (lockVerify.data()?.messageId !== messageId) {
+      throw new Error("Lock Mismatch: Parallel worker detected.");
+    }
+
+    // 4. Charge Transaction
     await db.runTransaction(async (t) => {
       await debitWalletTx(t, db, churchId, cost, messageId, data.type);
     });
 
-    // Phase 2: Dispatch to Provider
+    // 5. Dispatch to Provider (Outside Transaction)
     const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
     const response = await axios.post(url, {
       recipient: [data.phone],
@@ -139,7 +144,10 @@ async function processSMSQueueItem(apiKey, messageId, data) {
       const providerId = response.data?.summary?.[0]?.message_id || "mnotify_" + Date.now();
       
       const batch = db.batch();
-      batch.update(db.collection("smsQueue").doc(messageId), { status: "sent", sentAt: admin.firestore.FieldValue.serverTimestamp() });
+      batch.update(db.collection("smsQueue").doc(messageId), { 
+        status: "sent", 
+        sentAt: admin.firestore.FieldValue.serverTimestamp() 
+      });
       batch.update(db.collection("smsLedger").doc(ledgerId), { 
         status: "SENT", 
         processedAt: admin.firestore.FieldValue.serverTimestamp(), 
@@ -155,20 +163,23 @@ async function processSMSQueueItem(apiKey, messageId, data) {
   } catch (error) {
     console.error(`[Pipeline Error] ${messageId}:`, error.message);
     
+    // 6. Safe Recovery / Refund
     const ledgerSnap = await db.collection("smsLedger").doc(ledgerId).get();
     if (ledgerSnap.exists && ledgerSnap.data().status === "COMMITTED") {
       await refundWallet(churchId, cost, "dispatch_failed", messageId);
     }
 
     await db.collection("smsQueue").doc(messageId).update({
-      status: "failed",
+      status: data.retryCount >= 5 ? "dead_letter" : "failed", // Prevent retry storms
       lastError: error.message,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       retryCount: admin.firestore.FieldValue.increment(1)
     });
 
     return { success: false, error: error.message };
 
   } finally {
+    // 7. Cleanup Lock
     await releaseLock(db, churchId);
   }
 }
@@ -177,12 +188,23 @@ async function refundWallet(churchId, amount, reason, messageId) {
   const db = admin.firestore();
   const walletRef = db.collection("smsWallets").doc(churchId);
   const churchRef = db.collection("churches").doc(churchId);
-  const ledgerId = `${churchId}_${messageId}_refund`;
+  const ledgerId = `${churchId}_${messageId}`;
+  const refundLedgerId = `${churchId}_${messageId}_refund`;
 
   await db.runTransaction(async (t) => {
-    const walletSnap = await t.get(walletRef);
-    const balance = walletSnap.exists ? walletSnap.data().balance : 0;
+    const [ledgerSnap, walletSnap] = await Promise.all([
+      t.get(db.collection("smsLedger").doc(ledgerId)),
+      t.get(walletRef)
+    ]);
+
+    // GUARD: Ensure we aren't double-refunding
+    if (ledgerSnap.exists && ledgerSnap.data().status === "REFUNDED") return;
+
+    const balance = walletSnap.exists ? Number(walletSnap.data().balance || 0) : 0;
     const newBalance = balance + amount;
+
+    // Mark as pending first in truth source
+    t.update(db.collection("smsLedger").doc(ledgerId), { status: "REFUND_PENDING" });
 
     t.set(walletRef, {
       balance: newBalance,
@@ -194,15 +216,19 @@ async function refundWallet(churchId, amount, reason, messageId) {
       "sms.refundCount": admin.firestore.FieldValue.increment(1)
     });
 
-    t.set(db.collection("smsLedger").doc(ledgerId), {
+    // Create record in transaction log
+    t.set(db.collection("smsLedger").doc(refundLedgerId), {
       churchId,
       messageId,
       type: "REFUND",
       amount,
       reason,
-      status: "REFUNDED",
+      status: "COMPLETED",
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
+
+    // Finalize original record
+    t.update(db.collection("smsLedger").doc(ledgerId), { status: "REFUNDED" });
   });
 }
 
@@ -214,7 +240,7 @@ async function queueSMS(churchId, payload) {
   const churchData = churchDoc.data();
   if (!churchData.sms?.approved) return { success: false, error: "SMS service not approved" };
 
-  // ABUSE PREVENTION
+  // ABUSE PREVENTION: Strict Normalization
   if (payload.message.length > MAX_MESSAGE_LENGTH) return { success: false, error: "Message too long (700 chars max)" };
   if (isPotentiallyMalicious(payload.message)) {
     await db.collection("smsAbuseLogs").add({
@@ -222,12 +248,13 @@ async function queueSMS(churchId, payload) {
       message: payload.message,
       phone: payload.phone,
       blockedAt: admin.firestore.FieldValue.serverTimestamp(),
-      reason: "Spam Policy Block"
+      reason: "Spam Policy Block (Normalized Scan)"
     });
     return { success: false, error: "Security policy block: Content flagged as potential spam." };
   }
 
   const dedupeKey = payload.dedupeKey || `${churchId}_${Date.now()}_${payload.phone}`;
+  const cost = payload.cost || 1; // Resolve cost at queue time
 
   await db.collection("smsQueue").add({
     churchId,
@@ -236,7 +263,8 @@ async function queueSMS(churchId, payload) {
     type: payload.type || "other",
     status: "queued",
     retryCount: 0,
-    cost: payload.cost || 1,
+    cost: cost,
+    costLocked: true, // Price protection
     dedupeKey,
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   });
