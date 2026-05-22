@@ -5,7 +5,6 @@ const { formatPhone } = require("../utils/phoneFormatter");
 
 /**
  * SMS QUEUE WRITER
- * Lightweight helper to validate and add a message to the global delivery queue.
  */
 async function queueSMS(churchId, payload) {
   const db = admin.firestore();
@@ -21,8 +20,7 @@ async function queueSMS(churchId, payload) {
   const queueRef = db.collection("smsQueue");
   const cost = payload.cost || 1;
   
-  // Standard signature: " - Church Name"
-  const signature = ` - ${churchData.sms?.displayName || churchData.name}`;
+  const signature = ` - ${churchData.sms?.displayName || churchData.name || "Church"}`;
   const finalMessage = payload.message.endsWith(signature) 
     ? payload.message 
     : `${payload.message}${signature}`;
@@ -48,8 +46,7 @@ async function queueSMS(churchId, payload) {
 }
 
 /**
- * WALLET DEBIT (Atomic Ledger Entry)
- * Used inside the SMS Worker transaction.
+ * WALLET DEBIT
  */
 async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, type) {
   const walletSnap = await t.get(walletRef);
@@ -62,21 +59,18 @@ async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, t
 
   const newBalance = currentBalance - cost;
 
-  // 1. Update Source of Truth (Wallet)
   t.update(walletRef, {
     balance: newBalance,
     totalSpent: admin.firestore.FieldValue.increment(cost),
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   });
 
-  // 2. Update Display Cache (Church Doc) - Wrapped for resilience
   t.update(churchRef, { 
     "sms.credits": newBalance,
     "sms.sent": admin.firestore.FieldValue.increment(1),
     "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
   });
 
-  // 3. Record Ledger Entry (Transaction) - Use t.set(docRef) to avoid t.add errors
   const txRef = admin.firestore().collection("smsTransactions").doc();
   t.set(txRef, {
     churchId,
@@ -91,7 +85,7 @@ async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, t
 }
 
 /**
- * WALLET CREDIT (Atomic Ledger Entry)
+ * WALLET CREDIT
  */
 async function creditWallet(churchId, amount, reason = "topup", processedBy = "system") {
   const db = admin.firestore();
@@ -130,7 +124,7 @@ async function creditWallet(churchId, amount, reason = "topup", processedBy = "s
 }
 
 /**
- * SMS DISPATCHER WORKER (Main Execution Hub)
+ * SMS DISPATCHER WORKER
  */
 async function processSMSQueueItem(apiKey, messageId, data) {
   const db = admin.firestore();
@@ -143,18 +137,15 @@ async function processSMSQueueItem(apiKey, messageId, data) {
   if (data.status !== "queued") return null;
 
   try {
-    // 1. LOCK MESSAGE
     await queueRef.update({ 
       status: "processing",
       updatedAt: admin.firestore.FieldValue.serverTimestamp() 
     });
 
-    // 2. ATOMIC LEDGER DEDUCTION (Charge-Then-Send)
     await db.runTransaction(async (t) => {
       await debitWallet(t, walletRef, churchRef, data.cost || 1, churchId, messageId, data.type);
     });
 
-    // 3. DISPATCH TO PROVIDER
     const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
     const response = await axios.post(url, {
       recipient: [data.phone],
@@ -234,30 +225,41 @@ async function processSMSQueueItem(apiKey, messageId, data) {
  */
 async function getPlatformStats() {
   const db = admin.firestore();
-  const churchesSnap = await db.collection("churches").get();
+  
+  try {
+    const churchesSnap = await db.collection("churches").get();
+    const walletsSnap = await db.collection("smsWallets").get();
 
-  let totalSent = 0;
-  let totalFailed = 0;
-  let totalCredits = 0;
+    let totalSent = 0;
+    let totalFailed = 0;
+    let totalCredits = 0;
 
-  const walletsSnap = await db.collection("smsWallets").get();
-  walletsSnap.forEach(doc => {
-    totalCredits += (doc.data().balance || 0);
-  });
+    walletsSnap.forEach(doc => {
+      const data = doc.data();
+      if (data && typeof data.balance === 'number') {
+        totalCredits += data.balance;
+      }
+    });
 
-  churchesSnap.forEach(doc => {
-    const data = doc.data();
-    totalSent += (data.sms?.sent || 0);
-    totalFailed += (data.sms?.failed || 0);
-  });
+    churchesSnap.forEach(doc => {
+      const data = doc.data();
+      if (data && data.sms) {
+        totalSent += (data.sms.sent || 0);
+        totalFailed += (data.sms.failed || 0);
+      }
+    });
 
-  return {
-    totalTenants: churchesSnap.size,
-    totalSent,
-    totalFailed,
-    globalCreditPool: totalCredits,
-    timestamp: new Date().toISOString() // Must be JSON-serializable for onCall
-  };
+    return {
+      totalTenants: churchesSnap.size || 0,
+      totalSent,
+      totalFailed,
+      globalCreditPool: totalCredits,
+      timestamp: new Date().toISOString()
+    };
+  } catch (err) {
+    console.error("Error in getPlatformStats:", err);
+    throw err;
+  }
 }
 
 module.exports = { 

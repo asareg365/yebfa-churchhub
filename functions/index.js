@@ -19,8 +19,7 @@ const { retryFailedSMS: processRetries } = require("./schedulers/retryScheduler"
 const { processSMSQueueItem, queueSMS, creditWallet, getPlatformStats } = require("./services/smsService");
 
 /**
- * SMS QUEUE DISPATCHER (Main Enterprise Engine)
- * Listens for new items in the global queue and dispatches them with mNotify.
+ * SMS QUEUE DISPATCHER
  */
 exports.onSmsQueued = onDocumentCreated(
   {
@@ -37,26 +36,32 @@ exports.onSmsQueued = onDocumentCreated(
  */
 exports.getSystemStats = onCall(async (request) => {
   const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
-  if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email.toLowerCase())) {
+  const userEmail = request.auth?.token?.email?.toLowerCase() || "";
+  
+  if (!request.auth || !SUPER_ADMINS.includes(userEmail)) {
     throw new HttpsError("permission-denied", "Unauthorized access to system stats");
   }
+
   try {
-    return await getPlatformStats();
+    const stats = await getPlatformStats();
+    return stats;
   } catch (error) {
-    throw new HttpsError("internal", error.message);
+    console.error("System Stats Error:", error);
+    throw new HttpsError("internal", error.message || "Failed to retrieve platform stats");
   }
 });
 
 exports.adminTopUpWallet = onCall(async (request) => {
   const { churchId, amount } = request.data;
   const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+  const userEmail = request.auth?.token?.email?.toLowerCase() || "";
   
-  if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email.toLowerCase())) {
+  if (!request.auth || !SUPER_ADMINS.includes(userEmail)) {
     throw new HttpsError("permission-denied", "Only system admins can top up wallets");
   }
 
   try {
-    await creditWallet(churchId, amount, `admin_manual_topup`, request.auth.token.email);
+    await creditWallet(churchId, amount, `admin_manual_topup`, userEmail);
     return { success: true };
   } catch (error) {
     throw new HttpsError("internal", error.message);
@@ -66,8 +71,9 @@ exports.adminTopUpWallet = onCall(async (request) => {
 exports.updateChurchStatus = onCall(async (request) => {
   const { churchId, status } = request.data;
   const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+  const userEmail = request.auth?.token?.email?.toLowerCase() || "";
   
-  if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email.toLowerCase())) {
+  if (!request.auth || !SUPER_ADMINS.includes(userEmail)) {
     throw new HttpsError("permission-denied", "Only system admins can manage status");
   }
 
@@ -120,7 +126,6 @@ exports.processSmsCampaigns = onSchedule(
 
 /**
  * SECURE CALLABLE FOR FRONTEND
- * Bridges UI actions to the global persistent queue.
  */
 exports.sendSMS = onCall(async (request) => {
   const { phone, message, type, memberName, memberId, churchId } = request.data;
