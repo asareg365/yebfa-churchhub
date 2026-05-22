@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -237,7 +236,7 @@ export default function SettingsPage() {
                   className="bg-muted/20 border-border" 
                 />
                 <p className="text-[10px] text-muted-foreground italic">
-                  This name is used as the signature ({{churchName}}) in your message templates.
+                  This name is used as the signature ({"{{churchName}}"}) in your message templates.
                 </p>
               </div>
               <div className="p-4 rounded-xl bg-muted/20 border flex justify-between items-center opacity-70">
