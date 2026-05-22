@@ -160,8 +160,14 @@ export default function DashboardPage() {
 
   const handleOpenSms = (member: any) => {
     const churchDisplayName = currentChurch?.sms?.displayName || currentChurch?.name || "Our Church";
+    const template = currentChurch?.smsTemplates?.birthday || "Happy Birthday {{name}}! May God bless your new age richly. — {{churchName}}";
+    
+    const personalized = template
+      .replace(/{{name}}/g, member.name)
+      .replace(/{{churchName}}/g, churchDisplayName);
+
     setSelectedMember(member);
-    setCustomMessage(`Happy Birthday ${member.name}! May God bless your new age with favor and joy. — ${churchDisplayName}`);
+    setCustomMessage(personalized);
   };
 
   const handleSendGreeting = async () => {

@@ -6,7 +6,9 @@ import {
   getDocs,
   query,
   where,
-  Firestore
+  Firestore,
+  doc,
+  getDoc
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -92,6 +94,14 @@ export async function sendAndLogSMS(
  * Matches exactly celebrants for the current UTC day.
  */
 export async function processBirthdaysToday(db: Firestore, churchId: string) {
+  // 1. Fetch Church Info for branding
+  const churchRef = doc(db, 'churches', churchId);
+  const churchSnap = await getDoc(churchRef);
+  const churchData = churchSnap.data();
+  
+  const churchDisplayName = churchData?.sms?.displayName || churchData?.name || "Our Church";
+  const template = churchData?.smsTemplates?.birthday || "Happy Birthday {{name}}! May God bless your new age richly. — {{churchName}}";
+
   const membersRef = collection(db, 'churches', churchId, 'members');
   
   // Strict UTC-based Today Key (MM-DD)
@@ -122,10 +132,15 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
       continue;
     }
 
+    // 2. Personalize Message using church settings
+    const personalizedMessage = template
+      .replace(/{{name}}/g, member.name)
+      .replace(/{{churchName}}/g, churchDisplayName);
+
     // Individual send request
     const outcome = await sendAndLogSMS(db, churchId, {
       phone: member.phone,
-      message: `Happy Birthday ${member.name}! May God bless your new age richly. — From your Church Family.`,
+      message: personalizedMessage,
       type: 'birthday',
       memberId: memberDoc.id,
       memberName: member.name
