@@ -106,6 +106,45 @@ async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, t
 }
 
 /**
+ * WALLET REFUND
+ * Triggered on permanent delivery failure
+ */
+async function refundWallet(churchId, amount, reason, messageId) {
+  const db = admin.firestore();
+  const walletRef = db.collection("smsWallets").doc(churchId);
+  const churchRef = db.collection("churches").doc(churchId);
+
+  await db.runTransaction(async (t) => {
+    const walletSnap = await t.get(walletRef);
+    const walletData = walletSnap.exists ? walletSnap.data() : { balance: 0 };
+    const currentBalance = walletData.balance || 0;
+    const newBalance = currentBalance + amount;
+
+    t.update(walletRef, {
+      balance: newBalance,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    t.update(churchRef, {
+      "sms.credits": newBalance,
+      "sms.refunded": admin.firestore.FieldValue.increment(1)
+    });
+
+    const txRef = db.collection("smsTransactions").doc();
+    t.set(txRef, {
+      churchId,
+      type: "refund",
+      amount,
+      balanceBefore: currentBalance,
+      balanceAfter: newBalance,
+      reason,
+      messageId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+  });
+}
+
+/**
  * WALLET CREDIT
  */
 async function creditWallet(churchId, amount, reason = "topup", processedBy = "system") {
@@ -235,11 +274,26 @@ async function processSMSQueueItem(apiKey, messageId, data) {
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
     } else {
+      // PERMANENT FAILURE
       await queueRef.update({ 
         status: "failed", 
         error: error.message,
         updatedAt: admin.firestore.FieldValue.serverTimestamp() 
       });
+
+      // REFUND CREDITS IF DEBITED BUT FAILED PERMANENTLY
+      if (error.message !== "Insufficient SMS credits") {
+        try {
+          await refundWallet(
+            churchId,
+            data.cost || 1,
+            "sms_delivery_failed",
+            messageId
+          );
+        } catch (refundError) {
+          console.error(`[Refund System] Critical Error for ${messageId}:`, refundError.message);
+        }
+      }
 
       try {
         await logsRef.add({
