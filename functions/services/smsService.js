@@ -4,8 +4,33 @@ const admin = require("firebase-admin");
 const { formatPhone } = require("../utils/phoneFormatter");
 
 /**
+ * ABUSE PREVENTION CONFIG
+ */
+const MAX_MESSAGE_LENGTH = 700; // ~4 SMS segments max
+const SPAM_KEYWORDS = [
+  "bitcoin", "crypto", "investment", "doubler", "prize", "won", 
+  "password", "reset link", "otp", "verify account", "urgent action",
+  "lottery", "cash prize", "bank account", "pin", "security alert"
+];
+
+const PLAN_CONCURRENCY_LIMITS = {
+  "Basic": 50,
+  "Standard": 500,
+  "Premium": 2000
+};
+
+/**
+ * Content Inspection
+ */
+function isPotentiallyMalicious(message) {
+  const lowMsg = message.toLowerCase();
+  return SPAM_KEYWORDS.some(keyword => lowMsg.includes(keyword));
+}
+
+/**
  * SMS QUEUE WRITER
  * Supports dedupeKey for enterprise-grade idempotency.
+ * Now includes ABUSE DETECTION.
  */
 async function queueSMS(churchId, payload) {
   const db = admin.firestore();
@@ -18,11 +43,47 @@ async function queueSMS(churchId, payload) {
   
   if (!isApproved) return { success: false, error: "SMS service not approved for this account" };
 
+  // 1. CONTENT VALIDATION (Abuse Detection)
+  if (payload.message.length > MAX_MESSAGE_LENGTH) {
+    return { success: false, error: `Message too long (Max ${MAX_MESSAGE_LENGTH} chars)` };
+  }
+
+  if (isPotentiallyMalicious(payload.message)) {
+    // Log abuse attempt for admin review
+    await db.collection("smsAbuseLogs").add({
+      churchId,
+      churchName: churchData.name,
+      phone: payload.phone,
+      message: payload.message,
+      reason: "Spam/Phishing Keywords Detected",
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    return { success: false, error: "Message blocked by security policy: suspicious content detected." };
+  }
+
   const queueRef = db.collection("smsQueue");
+
+  // 2. RATE LIMITING (Plan-based Concurrency)
+  const currentPlan = churchData.plan || "Basic";
+  const limit = PLAN_CONCURRENCY_LIMITS[currentPlan] || 50;
+
+  const currentQueued = await queueRef
+    .where("churchId", "==", churchId)
+    .where("status", "==", "queued")
+    .count()
+    .get();
+
+  if (currentQueued.data().count >= limit) {
+    return { 
+      success: false, 
+      error: `Concurrency limit reached for ${currentPlan} plan. Please wait for current messages to send or upgrade.` 
+    };
+  }
+
   const cost = payload.cost || 1;
   const dedupeKey = payload.dedupeKey || null;
 
-  // STEP 1: DEDUPLICATION CHECK
+  // 3. DEDUPLICATION CHECK
   if (dedupeKey) {
     const existing = await queueRef
       .where("dedupeKey", "==", dedupeKey)
@@ -44,7 +105,7 @@ async function queueSMS(churchId, payload) {
     ? payload.message 
     : `${payload.message}${signature}`;
 
-  // STEP 2: ADD TO QUEUE
+  // 4. ADD TO QUEUE
   await queueRef.add({
     churchId,
     phone: formatPhone(payload.phone),
@@ -194,7 +255,7 @@ async function processSMSQueueItem(apiKey, messageId, data) {
   const logsRef = churchRef.collection("smsLogs");
   const reportsRef = db.collection("smsDeliveryReports");
 
-  // STEP 1: LOCK MESSAGE
+  // STEP 1: LOCK MESSAGE (Atomic Claim)
   const claimed = await db.runTransaction(async (t) => {
     const snap = await t.get(queueRef);
     if (!snap.exists) return false;
@@ -287,6 +348,7 @@ async function processSMSQueueItem(apiKey, messageId, data) {
         updatedAt: admin.firestore.FieldValue.serverTimestamp() 
       });
 
+      // Only refund if we successfully debited but then the provider failed
       if (error.message !== "Insufficient SMS credits") {
         try {
           await refundWallet(churchId, data.cost || 1, "sms_delivery_failed", messageId);
@@ -319,7 +381,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
 async function handleMNotifyWebhook(req, res) {
   const db = admin.firestore();
   const payload = req.body; 
-  // Expecting: { message_id, status, recipient, network, ... }
   
   if (!payload.message_id) {
     console.warn("[Webhook] Received request without message_id:", payload);
@@ -332,7 +393,6 @@ async function handleMNotifyWebhook(req, res) {
     const providerId = payload.message_id;
     const status = payload.status?.toLowerCase() || "unknown";
 
-    // 1. Find the technical report bridge
     const reportsSnap = await db.collection("smsDeliveryReports")
       .where("providerMessageId", "==", providerId)
       .limit(1)
@@ -347,7 +407,6 @@ async function handleMNotifyWebhook(req, res) {
     const reportData = reportDoc.data();
     const { churchId, messageId } = reportData;
 
-    // 2. Update technical report
     await reportDoc.ref.update({
       status: status,
       network: payload.network || reportData.network || "unknown",
@@ -355,7 +414,6 @@ async function handleMNotifyWebhook(req, res) {
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    // 3. Update global queue status
     if (messageId) {
       await db.collection("smsQueue").doc(messageId).update({
         providerStatus: status,
@@ -363,7 +421,6 @@ async function handleMNotifyWebhook(req, res) {
       });
     }
 
-    // 4. Update organization log
     const logsSnap = await db.collection("churches").doc(churchId).collection("smsLogs")
       .where("providerMessageId", "==", providerId)
       .limit(1)
@@ -373,7 +430,6 @@ async function handleMNotifyWebhook(req, res) {
       const logRef = logsSnap.docs[0].ref;
       await logRef.update({
         providerStatus: status,
-        // Map carrier status to internal log status
         status: status === "delivered" ? "sent" : (status === "failed" || status === "undelivered" ? "failed" : "sent"),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
@@ -395,7 +451,7 @@ async function getPlatformStats() {
   try {
     const churchesSnap = await db.collection("churches").get();
     const walletsSnap = await db.collection("smsWallets").get();
-    const transactionsSnap = await db.collection("smsTransactions").where("type", "==", "credit").get();
+    const transactionsSnap = await db.collection("smsTransactions").where("type", "in", ["credit", "topup"]).get();
 
     let totalSent = 0;
     let totalFailed = 0;
@@ -417,13 +473,11 @@ async function getPlatformStats() {
       }
     });
 
-    // Calculate revenue from credits (assuming credits are roughly 1 GHS for simplicity, or sum of transaction amounts)
     transactionsSnap.forEach(doc => {
       const data = doc.data();
       totalRevenue += (data.amount || 0);
     });
 
-    // Get Top Spenders (Sort churches by sms.sent descending)
     const topSpenders = churchesSnap.docs
       .map(doc => ({
         id: doc.id,

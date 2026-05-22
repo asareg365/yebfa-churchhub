@@ -86,12 +86,24 @@
       "type": "object",
       "properties": {
         "churchId": { "type": "string" },
-        "messageId": { "type": "string", "description": "Internal Queue ID" },
-        "providerMessageId": { "type": "string", "description": "mNotify Message ID" },
+        "messageId": { "type": "string" },
+        "providerMessageId": { "type": "string" },
         "phone": { "type": "string" },
         "status": { "type": "string" },
         "network": { "type": "string" },
         "deliveredAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "SMSAbuseLog": {
+      "title": "SMS Abuse Log",
+      "type": "object",
+      "properties": {
+        "churchId": { "type": "string" },
+        "churchName": { "type": "string" },
+        "phone": { "type": "string" },
+        "message": { "type": "string" },
+        "reason": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
     }
@@ -115,6 +127,10 @@
     "/smsDeliveryReports/{reportId}": {
       "schema": "SMSDeliveryReport",
       "description": "Detailed provider-level delivery tracking."
+    },
+    "/smsAbuseLogs/{logId}": {
+      "schema": "SMSAbuseLog",
+      "description": "Logs of blocked attempts due to security/spam filters."
     },
     "/churches/{churchId}/members/{memberId}": {
       "schema": "Member"
