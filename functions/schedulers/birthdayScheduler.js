@@ -46,7 +46,7 @@ async function processChurchBirthdays(churchDoc) {
     const member = memberDoc.data();
     if (!member.phone) continue;
 
-    // Idempotency Check
+    // Idempotency Check (History record for visibility)
     const historyId = `bday_${memberDoc.id}_${todayDateStr}`;
     const historyRef = churchDoc.ref.collection("birthdayHistory").doc(historyId);
     const alreadyQueued = await historyRef.get();
@@ -58,20 +58,25 @@ async function processChurchBirthdays(churchDoc) {
       churchName: churchData.sms?.displayName || churchData.name || "Our Church"
     });
 
-    // PUSH TO GLOBAL QUEUE
-    await queueSMS(churchId, {
+    // PUSH TO GLOBAL QUEUE WITH DEDUPE KEY
+    // This key guarantees zero duplicates even if the queue worker crashes and restarts.
+    const result = await queueSMS(churchId, {
       phone: member.phone,
       message,
       type: "birthday",
       memberName: member.name,
-      memberId: memberDoc.id
+      memberId: memberDoc.id,
+      dedupeKey: `birthday_${churchId}_${memberDoc.id}_${todayDateStr}`
     });
 
-    // Record history
-    await historyRef.set({
-      queuedAt: admin.firestore.FieldValue.serverTimestamp(),
-      status: "queued"
-    });
+    // Record history if enqueued successfully or skipped as duplicate
+    if (result.success) {
+      await historyRef.set({
+        queuedAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: result.skipped ? "skipped_duplicate" : "queued",
+        dedupeKey: `birthday_${churchId}_${memberDoc.id}_${todayDateStr}`
+      });
+    }
   }
 }
 

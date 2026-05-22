@@ -5,6 +5,7 @@ const { formatPhone } = require("../utils/phoneFormatter");
 
 /**
  * SMS QUEUE WRITER
+ * Now supports dedupeKey for enterprise-grade idempotency.
  */
 async function queueSMS(churchId, payload) {
   const db = admin.firestore();
@@ -19,12 +20,31 @@ async function queueSMS(churchId, payload) {
 
   const queueRef = db.collection("smsQueue");
   const cost = payload.cost || 1;
+  const dedupeKey = payload.dedupeKey || null;
+
+  // STEP 1: DEDUPLICATION CHECK
+  if (dedupeKey) {
+    const existing = await queueRef
+      .where("dedupeKey", "==", dedupeKey)
+      .where("status", "in", ["queued", "processing", "sent"])
+      .limit(1)
+      .get();
+
+    if (!existing.empty) {
+      return { 
+        success: true, 
+        skipped: true, 
+        reason: "Duplicate message prevented by idempotency key" 
+      };
+    }
+  }
   
   const signature = ` - ${churchData.sms?.displayName || churchData.name || "Church"}`;
   const finalMessage = payload.message.endsWith(signature) 
     ? payload.message 
     : `${payload.message}${signature}`;
 
+  // STEP 2: ADD TO QUEUE
   await queueRef.add({
     churchId,
     phone: formatPhone(payload.phone),
@@ -38,6 +58,7 @@ async function queueSMS(churchId, payload) {
     retryCount: payload.retryCount || 0,
     maxRetries: 3,
     cost: cost,
+    dedupeKey: dedupeKey,
     scheduledAt: payload.scheduledAt || admin.firestore.FieldValue.serverTimestamp(),
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   });
