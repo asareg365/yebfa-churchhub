@@ -60,6 +60,7 @@ import {
   serverTimestamp,
   increment,
   addDoc,
+  setDoc,
 } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -79,7 +80,6 @@ export default function SystemAdminPortal() {
   const [managingSmsId, setManagingSmsId] = useState<string | null>(null);
   const [topUpAmount, setTopUpAmount] = useState('500');
 
-  // Memoized query that only executes if the user is a verified super admin
   const churchesQuery = useMemo(() => {
     const email = user?.email?.toLowerCase().trim();
     if (!user || !email || !SUPER_ADMINS.includes(email)) return null;
@@ -110,6 +110,7 @@ export default function SystemAdminPortal() {
 
   const handleApproveSms = async (churchId: string) => {
     const churchRef = doc(db, 'churches', churchId);
+    const walletRef = doc(db, 'smsWallets', churchId);
     try {
       await updateDoc(churchRef, {
         "sms.subscriptionStatus": "active",
@@ -119,6 +120,15 @@ export default function SystemAdminPortal() {
         "sms.approvedAt": serverTimestamp(),
         "sms.approvedBy": user?.email
       });
+      
+      // Initialize Wallet properly
+      await setDoc(walletRef, {
+        churchId,
+        balance: 100,
+        totalUsed: 0,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
       toast({ title: "SMS Service Activated", description: "Default 100 credits allocated." });
     } catch (e: any) {
       toast({ title: "Activation Failed", description: e.message, variant: "destructive" });
@@ -138,11 +148,21 @@ export default function SystemAdminPortal() {
     if (!managingSmsId || !topUpAmount) return;
     setIsProcessing(true);
     const churchRef = doc(db, 'churches', managingSmsId);
+    const walletRef = doc(db, 'smsWallets', managingSmsId);
     const txRef = collection(db, 'churches', managingSmsId, 'smsTransactions');
     const amount = parseInt(topUpAmount);
 
     try {
+      // 1. Update organizational counter
       await updateDoc(churchRef, { "sms.credits": increment(amount) });
+      
+      // 2. Update functional wallet
+      await updateDoc(walletRef, { 
+        balance: increment(amount),
+        updatedAt: serverTimestamp() 
+      });
+
+      // 3. Record Audit Trail
       await addDoc(txRef, {
         type: "credit",
         amount,
@@ -150,6 +170,7 @@ export default function SystemAdminPortal() {
         processedBy: user?.email,
         createdAt: serverTimestamp()
       });
+
       toast({ title: "Credits Added Successfully", description: `${amount} credits added to ${activeChurchSms?.name}` });
       setManagingSmsId(null);
     } catch (e: any) {
@@ -159,7 +180,6 @@ export default function SystemAdminPortal() {
     }
   };
 
-  // Block rendering and data fetching if unauthorized
   if (userLoading || (user && !SUPER_ADMINS.includes(user.email?.toLowerCase() || ''))) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -285,19 +305,11 @@ export default function SystemAdminPortal() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!collectionLoading && sortedChurches.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">
-                    No organizations found matching your search.
-                  </TableCell>
-                </TableRow>
-              )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
-      {/* Credit Allocation Dialog */}
       <Dialog open={!!managingSmsId} onOpenChange={(o) => !o && setManagingSmsId(null)}>
         <DialogContent>
           <DialogHeader>
@@ -317,11 +329,6 @@ export default function SystemAdminPortal() {
                   {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 </Button>
               </div>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {['100', '500', '1000', '2000', '5000'].map(val => (
-                <Button key={val} variant="outline" size="sm" onClick={() => setTopUpAmount(val)}>+{val}</Button>
-              ))}
             </div>
           </div>
           <DialogFooter>
