@@ -5,7 +5,7 @@ const { formatPhone } = require("../utils/phoneFormatter");
 
 /**
  * SMS QUEUE WRITER
- * Now supports dedupeKey for enterprise-grade idempotency.
+ * Supports dedupeKey for enterprise-grade idempotency.
  */
 async function queueSMS(churchId, payload) {
   const db = admin.firestore();
@@ -107,7 +107,6 @@ async function debitWallet(t, walletRef, churchRef, cost, churchId, messageId, t
 
 /**
  * WALLET REFUND
- * Triggered on permanent delivery failure
  */
 async function refundWallet(churchId, amount, reason, messageId) {
   const db = admin.firestore();
@@ -193,32 +192,23 @@ async function processSMSQueueItem(apiKey, messageId, data) {
   const churchRef = db.collection("churches").doc(churchId);
   const walletRef = db.collection("smsWallets").doc(churchId);
   const logsRef = churchRef.collection("smsLogs");
+  const reportsRef = db.collection("smsDeliveryReports");
 
-  // STEP 1: LOCK MESSAGE (Transactional status claim)
+  // STEP 1: LOCK MESSAGE
   const claimed = await db.runTransaction(async (t) => {
     const snap = await t.get(queueRef);
-
     if (!snap.exists) return false;
-
     const current = snap.data();
-
-    // Already claimed or finished
-    if (current.status !== "queued") {
-      return false;
-    }
+    if (current.status !== "queued") return false;
 
     t.update(queueRef, {
       status: "processing",
       processingStartedAt: admin.firestore.FieldValue.serverTimestamp()
     });
-
     return true;
   });
 
-  if (!claimed) {
-    console.log(`Message ${messageId} already claimed or status changed`);
-    return null;
-  }
+  if (!claimed) return null;
 
   try {
     // STEP 2: DEBIT WALLET
@@ -238,11 +228,16 @@ async function processSMSQueueItem(apiKey, messageId, data) {
     const isSent = response.status === 200 && (response.data?.code === "1000" || response.data?.status === "success");
 
     if (isSent) {
+      const summary = response.data?.summary?.[0] || {};
+      const providerId = summary.message_id || "mnotify_" + Date.now();
+
       await queueRef.update({ 
         status: "sent", 
-        sentAt: admin.firestore.FieldValue.serverTimestamp() 
+        sentAt: admin.firestore.FieldValue.serverTimestamp(),
+        providerMessageId: providerId
       });
       
+      // LOG TO AUDIT
       await logsRef.add({
         memberName: data.metadata?.memberName || "Recipient",
         memberId: data.metadata?.memberId,
@@ -252,6 +247,17 @@ async function processSMSQueueItem(apiKey, messageId, data) {
         type: data.type,
         cost: data.cost,
         provider: "mnotify",
+        providerMessageId: providerId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // CREATE DELIVERY REPORT BRIDGE
+      await reportsRef.add({
+        churchId,
+        messageId,
+        providerMessageId: providerId,
+        phone: data.phone,
+        status: summary.status || "queued",
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
@@ -281,17 +287,11 @@ async function processSMSQueueItem(apiKey, messageId, data) {
         updatedAt: admin.firestore.FieldValue.serverTimestamp() 
       });
 
-      // REFUND CREDITS IF DEBITED BUT FAILED PERMANENTLY
       if (error.message !== "Insufficient SMS credits") {
         try {
-          await refundWallet(
-            churchId,
-            data.cost || 1,
-            "sms_delivery_failed",
-            messageId
-          );
+          await refundWallet(churchId, data.cost || 1, "sms_delivery_failed", messageId);
         } catch (refundError) {
-          console.error(`[Refund System] Critical Error for ${messageId}:`, refundError.message);
+          console.error(`[Refund System] Critical Error:`, refundError.message);
         }
       }
 
@@ -305,13 +305,9 @@ async function processSMSQueueItem(apiKey, messageId, data) {
           type: data.type,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
-
-        await churchRef.update({
-          "sms.failed": admin.firestore.FieldValue.increment(1)
-        });
+        await churchRef.update({ "sms.failed": admin.firestore.FieldValue.increment(1) });
       } catch (e) {}
     }
-
     return { success: false, error: error.message };
   }
 }
@@ -321,7 +317,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
  */
 async function getPlatformStats() {
   const db = admin.firestore();
-  
   try {
     const churchesSnap = await db.collection("churches").get();
     const walletsSnap = await db.collection("smsWallets").get();
@@ -332,9 +327,7 @@ async function getPlatformStats() {
 
     walletsSnap.forEach(doc => {
       const data = doc.data();
-      if (data && typeof data.balance === 'number') {
-        totalCredits += data.balance;
-      }
+      if (data && typeof data.balance === 'number') totalCredits += data.balance;
     });
 
     churchesSnap.forEach(doc => {

@@ -10,7 +10,7 @@
         "status": { "type": "string" },
         "joined": { "type": "string" },
         "dateOfBirth": { "type": "string", "format": "date" },
-        "birthdayKey": { "type": "string", "description": "MM-DD index" }
+        "birthdayKey": { "type": "string", "description": "MMDD index" }
       }
     },
     "Visitor": {
@@ -36,6 +36,7 @@
         "type": { "type": "string" },
         "cost": { "type": "number" },
         "retryCount": { "type": "number" },
+        "dedupeKey": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "scheduledAt": { "type": "string", "format": "date-time" }
       }
@@ -71,11 +72,26 @@
       "type": "object",
       "properties": {
         "churchId": { "type": "string" },
-        "type": { "type": "string", "enum": ["debit", "credit", "topup", "adjustment"] },
+        "type": { "type": "string", "enum": ["debit", "credit", "topup", "adjustment", "refund"] },
         "amount": { "type": "number" },
         "balanceBefore": { "type": "number" },
         "balanceAfter": { "type": "number" },
         "reason": { "type": "string" },
+        "messageId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "SMSDeliveryReport": {
+      "title": "SMS Delivery Report",
+      "type": "object",
+      "properties": {
+        "churchId": { "type": "string" },
+        "messageId": { "type": "string", "description": "Internal Queue ID" },
+        "providerMessageId": { "type": "string", "description": "mNotify Message ID" },
+        "phone": { "type": "string" },
+        "status": { "type": "string" },
+        "network": { "type": "string" },
+        "deliveredAt": { "type": "string", "format": "date-time" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
     }
@@ -95,6 +111,10 @@
     "/smsTransactions/{txId}": {
       "schema": "SMSTransaction",
       "description": "Global immutable ledger for all financial movements."
+    },
+    "/smsDeliveryReports/{reportId}": {
+      "schema": "SMSDeliveryReport",
+      "description": "Detailed provider-level delivery tracking."
     },
     "/churches/{churchId}/members/{memberId}": {
       "schema": "Member"
