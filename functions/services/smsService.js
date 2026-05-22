@@ -12,7 +12,7 @@ async function sendSMS(apiKey, churchId, payload) {
   const logsRef = churchRef.collection("smsLogs");
   const txRef = churchRef.collection("smsTransactions");
 
-  const { phone, message, type, memberName, memberId, senderId } = payload;
+  const { phone, message, type, memberName, memberId } = payload;
   const formattedPhone = formatPhone(phone);
 
   try {
@@ -21,9 +21,12 @@ async function sendSMS(apiKey, churchId, payload) {
     if (!churchDoc.exists) throw new Error("Organization not found");
     
     const churchData = churchDoc.data();
-    const smsConfig = churchData.sms || { enabled: false, credits: 0, subscriptionStatus: 'pending' };
+    const smsConfig = churchData.sms || { enabled: false, credits: 0, approved: false };
 
-    if (smsConfig.subscriptionStatus !== 'active' || !smsConfig.enabled) {
+    // Support both approved boolean and active string status for robustness
+    const isApproved = smsConfig.approved === true || smsConfig.subscriptionStatus === 'active';
+
+    if (!isApproved || !smsConfig.enabled) {
       return { success: false, error: "SMS service is not active or approved for this account." };
     }
 
@@ -34,7 +37,7 @@ async function sendSMS(apiKey, churchId, payload) {
 
     // 2. Prepare API Call (mNotify)
     const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
-    const finalSenderId = "YEBFA"; // Hardcoded approved sender
+    const finalSenderId = "YEBFA"; // SaaS Shared Approved Sender ID
 
     const response = await axios.post(url, {
       recipient: [formattedPhone],

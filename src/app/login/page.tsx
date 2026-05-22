@@ -133,6 +133,7 @@ function LoginContent() {
         ...SUPER_ADMINS.map(email => email.toLowerCase().trim())
       ]));
 
+      // SaaS Multi-tenant standard church data
       const churchData = {
         name: churchName,
         slug: finalSlug,
@@ -142,20 +143,24 @@ function LoginContent() {
         status: "Pending",
         plan: "Basic",
         denomination: "Pentecostal",
-        subscription: {
-          plan: "Basic",
-          smsCredits: 100,
-          smsUsed: 0,
-          status: "active",
-          paymentProvider: "Momo",
-          renewalDate: format(new Date(new Date().setMonth(new Date().getMonth() + 1)), 'yyyy-MM-dd')
+        sms: {
+          enabled: false,
+          senderId: "YEBFA", // Pre-approved global sender
+          displayName: churchName, // Branding variable
+          credits: 0,
+          approved: false,
+          subscriptionStatus: 'pending'
         },
         mustChangePassword: false,
         registeredAt: serverTimestamp(),
         settings: {
           birthdaySmsEnabled: true,
           lowCreditAlertEnabled: true,
-          dailyReportsEnabled: false
+          dailyReportsEnabled: false,
+          timezone: "Africa/Accra"
+        },
+        smsTemplates: {
+          birthday: "Happy Birthday {{name}}! 🎉 May God bless your new age richly. — {{churchName}}"
         }
       };
 

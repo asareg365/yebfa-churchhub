@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -74,6 +75,7 @@ export default function SettingsPage() {
     lowCreditAlertEnabled: true,
     dailyReportsEnabled: false,
     senderId: "YEBFA",
+    displayName: "",
     theme: "dark" as "light" | "dark" | "system"
   });
 
@@ -92,7 +94,8 @@ export default function SettingsPage() {
         birthdayTemplate: currentChurch.smsTemplates?.birthday || "Happy Birthday {{name}}! May God bless your new age with favor and joy. — {{churchName}}",
         lowCreditAlertEnabled: currentChurch.settings?.lowCreditAlertEnabled ?? true,
         dailyReportsEnabled: currentChurch.settings?.dailyReportsEnabled ?? false,
-        senderId: currentChurch.settings?.senderId || "YEBFA",
+        senderId: currentChurch.sms?.senderId || "YEBFA",
+        displayName: currentChurch.sms?.displayName || currentChurch.name || "",
         theme: (currentChurch.settings?.theme as any) || "dark"
       });
     }
@@ -111,8 +114,11 @@ export default function SettingsPage() {
         timezone: settings.timezone,
         lowCreditAlertEnabled: settings.lowCreditAlertEnabled,
         dailyReportsEnabled: settings.dailyReportsEnabled,
-        senderId: settings.senderId,
         theme: settings.theme
+      },
+      sms: {
+        ...currentChurch.sms,
+        displayName: settings.displayName || settings.name
       },
       smsTemplates: {
         birthday: settings.birthdayTemplate
@@ -215,6 +221,34 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+
+          <Card className="glass border-border shadow-xl">
+            <CardHeader>
+              <CardTitle>SaaS Custom Branding</CardTitle>
+              <CardDescription>Configure how your ministry appears in SMS communications.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Communication Display Name</Label>
+                <Input 
+                  value={settings.displayName} 
+                  onChange={(e) => setSettings({...settings, displayName: e.target.value})} 
+                  placeholder="e.g. Grace Community"
+                  className="bg-muted/20 border-border" 
+                />
+                <p className="text-[10px] text-muted-foreground italic">
+                  This name is used as the signature ({{churchName}}) in your message templates.
+                </p>
+              </div>
+              <div className="p-4 rounded-xl bg-muted/20 border flex justify-between items-center opacity-70">
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase text-muted-foreground">Technical Sender ID</Label>
+                  <p className="font-mono font-bold">{settings.senderId}</p>
+                </div>
+                <Badge variant="outline">Verified SaaS ID</Badge>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="automation" className="animate-in fade-in-50 duration-500 space-y-6">
@@ -251,7 +285,7 @@ export default function SettingsPage() {
                   <div className="px-2 py-1 bg-white border border-border rounded-lg text-[10px] font-mono text-primary font-bold">{"{{churchName}}"}</div>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed italic">
-                  Tip: Use the tags above to automatically insert the member's name and your church's official name into the message.
+                  Tip: Use the tags above to automatically insert the member's name and your church's display name into the message.
                 </p>
               </div>
             </CardContent>

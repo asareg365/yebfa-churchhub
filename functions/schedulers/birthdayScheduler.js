@@ -1,3 +1,4 @@
+
 const admin = require("firebase-admin");
 const { DateTime } = require("luxon");
 const { sendSMS } = require("../services/smsService");
@@ -60,7 +61,7 @@ async function processChurchBirthdays(apiKey, churchDoc) {
   }
 
   const results = { sent: 0, failed: 0 };
-  const template = churchData.smsTemplates?.birthday || "Happy Birthday {{name}}! May God bless your new age. — {{churchName}}";
+  const template = churchData.smsTemplates?.birthday || "Happy Birthday {{name}}! May God bless your new age richly. — {{churchName}}";
 
   for (const memberDoc of membersSnap.docs) {
     const member = memberDoc.data();
@@ -78,10 +79,10 @@ async function processChurchBirthdays(apiKey, churchDoc) {
       continue;
     }
 
-    // 4. Personalize Message
+    // 4. Personalize Message using SaaS branding pattern
     const message = parseTemplate(template, {
       name: member.name,
-      churchName: churchData.name || "Our Church"
+      churchName: churchData.sms?.displayName || churchData.name || "Our Church"
     });
 
     // 5. Send and Record
@@ -91,8 +92,7 @@ async function processChurchBirthdays(apiKey, churchDoc) {
         message,
         type: "birthday",
         memberName: member.name,
-        memberId: memberId,
-        senderId: "YEBFA"
+        memberId: memberId
       });
 
       if (outcome.success) {

@@ -113,6 +113,7 @@ export default function SystemAdminPortal() {
     try {
       await updateDoc(churchRef, {
         "sms.subscriptionStatus": "active",
+        "sms.approved": true,
         "sms.enabled": true,
         "sms.credits": 100,
         "sms.approvedAt": serverTimestamp(),
@@ -193,7 +194,7 @@ export default function SystemAdminPortal() {
         </Card>
         <Card className="glass">
           <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground">Pending Approvals</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold text-amber-600">{sortedChurches.filter(c => c.sms?.subscriptionStatus === 'pending').length}</div></CardContent>
+          <CardContent><div className="text-2xl font-bold text-amber-600">{sortedChurches.filter(c => !c.sms?.approved && c.sms?.subscriptionStatus !== 'active').length}</div></CardContent>
         </Card>
         <Card className="glass">
           <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground">System Health</CardTitle></CardHeader>
@@ -239,7 +240,7 @@ export default function SystemAdminPortal() {
                   </TableCell>
                   <TableCell><Badge variant="outline">{church.plan || 'Starter'}</Badge></TableCell>
                   <TableCell>
-                    {church.sms?.subscriptionStatus === 'active' ? (
+                    {church.sms?.approved || church.sms?.subscriptionStatus === 'active' ? (
                       <Badge className={cn(church.sms?.enabled ? "bg-accent text-white" : "bg-destructive text-white")}>
                         {church.sms?.enabled ? 'Active' : 'Suspended'}
                       </Badge>
@@ -259,7 +260,7 @@ export default function SystemAdminPortal() {
                         <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        {church.sms?.subscriptionStatus !== 'active' ? (
+                        {(!church.sms?.approved && church.sms?.subscriptionStatus !== 'active') ? (
                           <DropdownMenuItem onClick={() => handleApproveSms(church.id)} className="text-accent font-bold">
                             <CheckCircle className="mr-2 h-4 w-4" /> Approve SMS
                           </DropdownMenuItem>
