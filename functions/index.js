@@ -1,6 +1,7 @@
 
 const { onRequest, onCall } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 
@@ -15,10 +16,24 @@ const { processVisitorFollowups } = require("./schedulers/visitorScheduler");
 const { processEventReminders } = require("./schedulers/eventScheduler");
 const { processScheduledCampaigns } = require("./schedulers/campaignScheduler");
 const { retryFailedSMS: processRetries } = require("./schedulers/retryScheduler");
+const { processSMSQueueItem } = require("./services/smsService");
+
+/**
+ * SMS QUEUE DISPATCHER (Main Engine)
+ * Triggered whenever a new message is added to the queue.
+ */
+exports.onSmsQueued = onDocumentCreated(
+  {
+    document: "smsQueue/{messageId}",
+    secrets: [MNOTIFY_API_KEY]
+  },
+  async (event) => {
+    return processSMSQueueItem(MNOTIFY_API_KEY.value(), event.params.messageId, event.data.data());
+  }
+);
 
 /**
  * GLOBAL AUTOMATION DISPATCHERS
- * Runs daily at 06:00 UTC.
  */
 exports.runDailyAutomations = onSchedule(
   {
@@ -39,7 +54,6 @@ exports.runDailyAutomations = onSchedule(
 
 /**
  * CAMPAIGN PROCESSOR
- * Runs every 10 minutes to process scheduled announcements.
  */
 exports.processSmsCampaigns = onSchedule(
   {
@@ -63,44 +77,37 @@ exports.resetMonthlyCredits = onSchedule(
   async (event) => {
     const db = admin.firestore();
     const churchesSnap = await db.collection("churches").get();
-    const batch = db.batch();
-
-    const planCredits = {
-      "Basic": 100,
-      "Standard": 1000,
-      "Premium": 5000
-    };
-
-    churchesSnap.docs.forEach(doc => {
+    
+    for (const doc of churchesSnap.docs) {
       const data = doc.data();
       const plan = data.plan || "Basic";
+      const planCredits = { "Basic": 100, "Standard": 1000, "Premium": 5000 };
       const credits = planCredits[plan] || 100;
-      batch.update(doc.ref, { 
-        "sms.credits": credits,
-        "sms.updatedAt": admin.firestore.FieldValue.serverTimestamp()
-      });
-    });
-
-    return batch.commit();
+      
+      const walletRef = db.collection("smsWallets").doc(doc.id);
+      await walletRef.set({
+        balance: credits,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+    return null;
   }
 );
 
 /**
  * SECURE CALLABLE FOR FRONTEND
+ * Replaced direct sending with Queue Writing for reliability.
  */
-exports.sendSMS = onCall(
-  { secrets: [MNOTIFY_API_KEY] },
-  async (request) => {
-    const { sendSMS: coreSend } = require("./services/smsService");
-    const { phone, message, type, memberName, memberId, churchId } = request.data;
-    
-    if (!churchId) throw new Error("Missing churchId context");
+exports.sendSMS = onCall(async (request) => {
+  const { queueSMS } = require("./services/smsService");
+  const { phone, message, type, memberName, memberId, churchId } = request.data;
+  
+  if (!churchId) throw new Error("Missing churchId context");
 
-    return coreSend(MNOTIFY_API_KEY.value(), churchId, {
-      phone, message, type, memberName, memberId
-    });
-  }
-);
+  return queueSMS(churchId, {
+    phone, message, type, memberName, memberId
+  });
+});
 
 /**
  * RETRY ENGINE

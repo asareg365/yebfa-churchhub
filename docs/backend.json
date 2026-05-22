@@ -25,17 +25,41 @@
         "createdAt": { "type": "string", "format": "date-time" }
       }
     },
+    "SMSQueue": {
+      "title": "SMS Queue",
+      "type": "object",
+      "properties": {
+        "churchId": { "type": "string" },
+        "phone": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["queued", "processing", "sent", "failed"] },
+        "type": { "type": "string" },
+        "cost": { "type": "number" },
+        "retryCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "scheduledAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "SMSWallet": {
+      "title": "SMS Wallet",
+      "type": "object",
+      "properties": {
+        "churchId": { "type": "string" },
+        "balance": { "type": "number" },
+        "totalUsed": { "type": "number" },
+        "lastTopupAt": { "type": "string", "format": "date-time" }
+      }
+    },
     "SMSLog": {
       "title": "SMS Log",
       "type": "object",
       "properties": {
+        "churchId": { "type": "string" },
         "memberName": { "type": "string" },
         "phone": { "type": "string" },
         "message": { "type": "string" },
-        "status": { "type": "string", "enum": ["sent", "failed", "pending", "retrying"] },
-        "type": { "type": "string", "enum": ["birthday", "announcement", "test", "reminder", "followup", "other"] },
-        "retryCount": { "type": "number" },
-        "cost": { "type": "number" },
+        "status": { "type": "string" },
+        "type": { "type": "string" },
         "error": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
@@ -45,7 +69,7 @@
       "type": "object",
       "properties": {
         "churchId": { "type": "string" },
-        "type": { "type": "string", "enum": ["debit", "credit"] },
+        "type": { "type": "string", "enum": ["debit", "credit", "topup"] },
         "amount": { "type": "number" },
         "balanceBefore": { "type": "number" },
         "balanceAfter": { "type": "number" },
@@ -56,29 +80,24 @@
   },
   "firestore": {
     "/churches/{churchId}": {
-      "description": "Tenant organization. Contains organizational settings, plan info, and SMS credits."
+      "description": "Tenant organization settings and configuration."
+    },
+    "/smsWallets/{churchId}": {
+      "schema": "SMSWallet",
+      "description": "Isolated financial balances for each tenant."
+    },
+    "/smsQueue/{messageId}": {
+      "schema": "SMSQueue",
+      "description": "Global queue for all outgoing messages."
     },
     "/churches/{churchId}/members/{memberId}": {
-      "schema": "Member",
-      "description": "Tenant isolated member directory."
-    },
-    "/churches/{churchId}/visitors/{visitorId}": {
-      "schema": "Visitor",
-      "description": "Guest and visitor tracking for outreach."
-    },
-    "/churches/{churchId}/events/{eventId}": {
-      "description": "Church events with SMS reminder settings."
-    },
-    "/churches/{churchId}/scheduledSms/{campaignId}": {
-      "description": "Queue for scheduled announcements and campaigns."
+      "schema": "Member"
     },
     "/churches/{churchId}/smsLogs/{logId}": {
-      "schema": "SMSLog",
-      "description": "Tenant isolated communication logs."
+      "schema": "SMSLog"
     },
     "/churches/{churchId}/smsTransactions/{txId}": {
-      "schema": "SMSTransaction",
-      "description": "Ledger of credit additions and deductions."
+      "schema": "SMSTransaction"
     }
   }
 }

@@ -4,161 +4,169 @@ const admin = require("firebase-admin");
 const { formatPhone } = require("../utils/phoneFormatter");
 
 /**
- * Centralized Enterprise SMS Service with Robust Accounting
- * Handles: Credit checks, mNotify delivery, balance deduction, and analytics.
+ * SMS QUEUE WRITER
+ * Validates and adds a message to the global delivery queue.
  */
-async function sendSMS(apiKey, churchId, payload) {
+async function queueSMS(churchId, payload) {
   const db = admin.firestore();
-  const churchRef = db.collection("churches").doc(churchId);
-  const logsRef = churchRef.collection("smsLogs");
-  const txRef = churchRef.collection("smsTransactions");
+  
+  // 1. Initial Validation
+  const churchDoc = await db.collection("churches").doc(churchId).get();
+  if (!churchDoc.exists) return { success: false, error: "Organization not found" };
+  
+  const churchData = churchDoc.data();
+  const isApproved = churchData.sms?.approved === true || churchData.sms?.subscriptionStatus === 'active';
+  
+  if (!isApproved) return { success: false, error: "SMS service not approved for this account" };
 
-  const { phone, message, type, memberName, memberId } = payload;
-  const formattedPhone = formatPhone(phone);
+  // 2. Add to Queue
+  const queueRef = db.collection("smsQueue");
+  await queueRef.add({
+    churchId,
+    phone: formatPhone(payload.phone),
+    message: payload.message,
+    type: payload.type || "other",
+    memberId: payload.memberId || null,
+    memberName: payload.memberName || null,
+    status: "queued",
+    retryCount: 0,
+    cost: 1,
+    createdAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  return { success: true, message: "Message added to queue" };
+}
+
+/**
+ * SMS DISPATCHER WORKER (Main Engine)
+ * Handles wallet checks, credit deduction, and actual mNotify dispatch.
+ */
+async function processSMSQueueItem(apiKey, messageId, data) {
+  const db = admin.firestore();
+  const queueRef = db.collection("smsQueue").doc(messageId);
+  const churchId = data.churchId;
+  const walletRef = db.collection("smsWallets").doc(churchId);
+  const logsRef = db.collection("churches").doc(churchId).collection("smsLogs");
+  const txRef = db.collection("churches").doc(churchId).collection("smsTransactions");
 
   try {
-    // 1. SECURITY & CREDIT GATEKEEPER
-    const churchDoc = await churchRef.get();
-    if (!churchDoc.exists) throw new Error("Organization not found");
-    
-    const churchData = churchDoc.data();
-    const smsConfig = churchData.sms || { enabled: false, credits: 0, approved: false, sent: 0, failed: 0 };
+    // 1. Atomic Wallet & Status Check (LOCKING)
+    const result = await db.runTransaction(async (t) => {
+      const qSnap = await t.get(queueRef);
+      if (!qSnap.exists || qSnap.data().status !== "queued") {
+        throw new Error("Message already processed or invalid");
+      }
 
-    // Support both approved boolean and active string status
-    const isApproved = smsConfig.approved === true || smsConfig.subscriptionStatus === 'active';
+      const walletSnap = await t.get(walletRef);
+      let balance = 0;
+      
+      // Fallback to legacy credits if wallet doesn't exist yet
+      if (!walletSnap.exists) {
+        const churchSnap = await t.get(db.collection("churches").doc(churchId));
+        balance = churchSnap.data()?.sms?.credits || 0;
+        t.set(walletRef, { balance: balance, churchId });
+      } else {
+        balance = walletSnap.data().balance || 0;
+      }
 
-    if (!isApproved || !smsConfig.enabled) {
-      const errorMsg = "SMS service is not active or approved for this account.";
-      await logsRef.add({
-        memberName: memberName || "System Gatekeeper",
-        memberId: memberId || null,
-        phone: formattedPhone || phone || "N/A",
-        message: (message || "").substring(0, 100),
-        status: "failed",
-        error: errorMsg,
-        type: type || "other",
+      if (balance <= 0) {
+        throw new Error("Insufficient SMS credits in wallet");
+      }
+
+      // Deduct Credit & Mark Processing
+      const newBalance = balance - 1;
+      t.update(walletRef, { 
+        balance: newBalance,
+        totalUsed: admin.firestore.FieldValue.increment(1)
+      });
+
+      t.update(queueRef, { status: "processing", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+
+      // Record Transaction Ledger
+      const txDoc = txRef.doc();
+      t.set(txDoc, {
+        type: "debit",
+        amount: 1,
+        balanceBefore: balance,
+        balanceAfter: newBalance,
+        reason: data.type || "queue_send",
+        messageId: messageId,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
-      return { success: false, error: errorMsg };
-    }
 
-    if ((smsConfig.credits || 0) <= 0) {
-      const errorMsg = "Insufficient SMS credits";
-      await logsRef.add({
-        memberName: memberName || "System Gatekeeper",
-        memberId: memberId || null,
-        phone: formattedPhone || phone || "N/A",
-        message: (message || "").substring(0, 100),
-        status: "failed",
-        error: errorMsg,
-        type: type || "other",
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-      return { success: false, error: errorMsg };
-    }
+      return { balanceAfter: newBalance };
+    });
 
     // 2. DISPATCH TO mNOTIFY
     const url = `https://api.mnotify.com/api/sms/quick?key=${apiKey}`;
-    const finalSenderId = "YEBFA"; // Hardcoded approved technical ID
-
     const response = await axios.post(url, {
-      recipient: [formattedPhone],
-      sender: finalSenderId,
-      message: message,
+      recipient: [data.phone],
+      sender: "YEBFA",
+      message: data.message,
       is_schedule: false
-    }, { timeout: 15000 }).catch(err => {
-       console.error("mNotify Network Error:", err.message);
-       return { status: 500, data: { message: err.message } };
-    });
+    }, { timeout: 15000 });
 
     const isSent = response.status === 200 && (response.data.code === "1000" || response.data.status === "success");
 
     if (isSent) {
-      // 3. ROBUST ACCOUNTING (Wrapped in try-catch to prevent delivery logic crash)
-      try {
-        await db.runTransaction(async (t) => {
-          const freshSnap = await t.get(churchRef);
-          const currentCredits = freshSnap.data().sms?.credits || 0;
-          
-          t.update(churchRef, { 
-            "sms.credits": admin.firestore.FieldValue.increment(-1),
-            "sms.sent": admin.firestore.FieldValue.increment(1),
-            "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
-          });
-
-          const newTxRef = txRef.doc();
-          t.set(newTxRef, {
-            type: "debit",
-            amount: 1,
-            balanceBefore: currentCredits,
-            balanceAfter: currentCredits - 1,
-            reason: type || "manual_send",
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-        });
-      } catch (statsErr) {
-        console.error(`[${churchId}] Stats update failed, but SMS was sent:`, statsErr.message);
-      }
-
-      // 4. LOG SUCCESSFUL COMMUNICATION
+      await queueRef.update({ status: "sent", sentAt: admin.firestore.FieldValue.serverTimestamp() });
+      
+      // Log Analytics
       await logsRef.add({
-        memberName: memberName || "Unknown",
-        memberId: memberId || null,
-        phone: formattedPhone,
-        message,
+        memberName: data.memberName || "Recipient",
+        memberId: data.memberId,
+        phone: data.phone,
+        message: data.message,
         status: "sent",
+        type: data.type,
         provider: "mnotify",
-        type: type || "other",
-        retryCount: payload.retryCount || 0,
-        cost: 1,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
-      return { success: true, data: response.data };
-    } else {
-      // 5. TRACK PROVIDER FAILURE (Increment Failed Counter)
+      // Update Org counters (wrapped for safety)
       try {
-        await churchRef.update({
-          "sms.failed": admin.firestore.FieldValue.increment(1)
+        await db.collection("churches").doc(churchId).update({
+          "sms.credits": result.balanceAfter,
+          "sms.sent": admin.firestore.FieldValue.increment(1),
+          "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp()
         });
       } catch (e) {}
 
-      await logsRef.add({
-        memberName: memberName || "Unknown",
-        memberId: memberId || null,
-        phone: formattedPhone || phone,
-        message: (message || "").substring(0, 160),
-        status: "failed",
-        error: response.data?.message || "Provider rejection",
-        type: type || "other",
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-
-      return { success: false, error: response.data?.message || "Delivery failed by provider" };
+      return { success: true };
+    } else {
+      throw new Error(response.data?.message || "Provider rejection");
     }
 
   } catch (error) {
-    console.error(`[${churchId}] SMS Critical Error:`, error.message);
+    console.error(`[Queue Dispatcher] Error processing ${messageId}:`, error.message);
     
-    // Log unexpected errors
+    // Update Queue Status to Failed
+    await queueRef.update({ 
+      status: "failed", 
+      error: error.message,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+    });
+
+    // Log failure for tenant
+    await logsRef.add({
+      memberName: data.memberName || "Recipient",
+      phone: data.phone,
+      message: data.message,
+      status: "failed",
+      error: error.message,
+      type: data.type,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Increment Org Failure count
     try {
-      await churchRef.update({ "sms.failed": admin.firestore.FieldValue.increment(1) });
-      await logsRef.add({
-        memberName: memberName || "System Error",
-        memberId: memberId || null,
-        phone: phone || "N/A",
-        message: message ? (message.substring(0, 50) + "...") : "N/A",
-        status: "failed",
-        error: error.message,
-        type: type || "other",
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      await db.collection("churches").doc(churchId).update({
+        "sms.failed": admin.firestore.FieldValue.increment(1)
       });
-    } catch (logErr) {
-       console.error("Nested logging failure:", logErr.message);
-    }
-    
+    } catch (e) {}
+
     return { success: false, error: error.message };
   }
 }
 
-module.exports = { sendSMS };
+module.exports = { queueSMS, processSMSQueueItem };
