@@ -82,16 +82,25 @@ exports.getSystemStats = onCall(
       const failedSnap = await db.collection("smsLedger").where("status", "==", "FAILED").limit(1000).get();
 
       let totalRevenue = 0;
-      const walletsData = walletsSnap.docs.map(doc => {
+      const walletsMap = {};
+      
+      walletsSnap.docs.forEach(doc => {
         const data = doc.data();
         totalRevenue += Number(data.totalTopups || 0);
-        return { id: doc.id, balance: data.balance || 0, spent: data.totalSpent || 0 };
+        walletsMap[doc.id] = { balance: data.balance || 0, spent: data.totalSpent || 0 };
       });
 
-      const topSpenders = walletsData.sort((a, b) => b.spent - a.spent).slice(0, 5).map(sw => {
-        const church = churchesSnap.docs.find(c => c.id === sw.id);
-        return { name: church ? church.data().name : "Unknown", sent: sw.spent, balance: sw.balance };
-      });
+      const topSpenders = churchesSnap.docs.map(doc => {
+        const wallet = walletsMap[doc.id] || { balance: 0, spent: 0 };
+        return { 
+          id: doc.id,
+          name: doc.data().name || "Unknown Ministry", 
+          sent: wallet.spent, 
+          balance: wallet.balance 
+        };
+      })
+      .sort((a, b) => b.sent - a.sent)
+      .slice(0, 5);
 
       return {
         totalTenants: churchesSnap.size,
@@ -101,7 +110,10 @@ exports.getSystemStats = onCall(
         totalRevenue: totalRevenue,
         topSpenders
       };
-    } catch (error) { throw new HttpsError("internal", error.message); }
+    } catch (error) { 
+      console.error("System Stats Engine Error:", error);
+      throw new HttpsError("internal", error.message); 
+    }
   }
 );
 
@@ -136,6 +148,25 @@ exports.updateChurchStatus = onCall(
         "sms.subscriptionStatus": status,
         "sms.approved": status === 'active',
         status: status === 'active' ? 'Approved' : 'Suspended'
+      });
+      return { success: true };
+    } catch (error) { throw new HttpsError("internal", error.message); }
+  }
+);
+
+exports.updateOrganization = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const userEmail = request.auth?.token?.email?.toLowerCase() || "";
+    if (!request.auth || !SUPER_ADMINS.includes(userEmail)) throw new HttpsError("permission-denied", "Unauthorized");
+    const { churchId, name, slug, adminEmails, plan } = request.data;
+    try {
+      await admin.firestore().collection("churches").doc(churchId).update({
+        name,
+        slug,
+        adminEmails,
+        plan,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       return { success: true };
     } catch (error) { throw new HttpsError("internal", error.message); }
