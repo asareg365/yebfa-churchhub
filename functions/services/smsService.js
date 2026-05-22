@@ -16,6 +16,22 @@ function isPotentiallyMalicious(message) {
 }
 
 /**
+ * Audit Logger for SMS events
+ */
+async function logSmsEvent(type, churchId, payload = {}) {
+  try {
+    await admin.firestore().collection("smsAuditLogs").add({
+      type,
+      churchId,
+      payload,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (err) {
+    console.error("Audit Logging Error:", err.message);
+  }
+}
+
+/**
  * Distributed Locking with Versioning
  */
 async function acquireLock(db, churchId, messageId) {
@@ -228,20 +244,42 @@ async function refundWallet(churchId, amount, reason, messageId) {
 async function queueSMS(churchId, payload) {
   const db = admin.firestore();
   const churchDoc = await db.collection("churches").doc(churchId).get();
-  if (!churchDoc.exists) return { success: false, error: "Organization not found" };
+  
+  if (!churchDoc.exists) {
+    await logSmsEvent("SMS_BLOCKED_CHURCH_NOT_FOUND", churchId, { payload });
+    return { success: false, error: "Organization not found" };
+  }
   
   const churchData = churchDoc.data();
   const smsConfig = churchData.sms || {};
   const isApproved = smsConfig.approved === true || smsConfig.status === "Approved";
 
-  if (!isApproved) return { success: false, error: "SMS service not approved" };
-  if (!smsConfig.enabled) return { success: false, error: "SMS service disabled" };
-  if (smsConfig.subscriptionStatus !== "active") return { success: false, error: "SMS subscription inactive" };
+  if (!isApproved) {
+    await logSmsEvent("SMS_BLOCKED_NOT_APPROVED", churchId, { smsConfig });
+    return { success: false, error: "SMS service not approved" };
+  }
+  if (!smsConfig.enabled) {
+    await logSmsEvent("SMS_BLOCKED_DISABLED", churchId, { smsConfig });
+    return { success: false, error: "SMS service disabled" };
+  }
+  if (smsConfig.subscriptionStatus !== "active") {
+    await logSmsEvent("SMS_BLOCKED_INACTIVE", churchId, { smsConfig });
+    return { success: false, error: "SMS subscription inactive" };
+  }
 
-  if (payload.message.length > MAX_MESSAGE_LENGTH) return { success: false, error: "Message too long (700 chars max)" };
+  if (payload.message.length > MAX_MESSAGE_LENGTH) {
+    await logSmsEvent("SMS_BLOCKED_LENGTH", churchId, { length: payload.message.length });
+    return { success: false, error: "Message too long (700 chars max)" };
+  }
+
   if (isPotentiallyMalicious(payload.message)) {
+    await logSmsEvent("SMS_BLOCKED_SPAM", churchId, { message: payload.message, phone: payload.phone });
     await db.collection("smsAbuseLogs").add({
-      churchId, message: payload.message, phone: payload.phone, blockedAt: admin.firestore.FieldValue.serverTimestamp(), reason: "Spam Block"
+      churchId, 
+      message: payload.message, 
+      phone: payload.phone, 
+      blockedAt: admin.firestore.FieldValue.serverTimestamp(), 
+      reason: "Spam Block"
     });
     return { success: false, error: "Security policy block: Content flagged as potential spam." };
   }
