@@ -1,6 +1,6 @@
 
 const admin = require("firebase-admin");
-const { sendSMS } = require("../services/smsService");
+const { queueSMS } = require("../services/smsService");
 
 /**
  * Processes scheduled announcements and campaigns.
@@ -21,7 +21,7 @@ async function processScheduledCampaigns(apiKey) {
     for (const campDoc of campaignsSnap.docs) {
       const campaign = campDoc.data();
       
-      // Mark as processing to avoid duplicate hits
+      // Mark as processing
       await campDoc.ref.update({ status: "processing" });
 
       // Fetch target audience
@@ -35,32 +35,22 @@ async function processScheduledCampaigns(apiKey) {
           .get();
       }
 
-      let successCount = 0;
-      let failCount = 0;
-
       for (const memDoc of membersSnap.docs) {
         const member = memDoc.data();
         if (!member.phone) continue;
 
-        try {
-          const outcome = await sendSMS(apiKey, churchId, {
-            phone: member.phone,
-            message: campaign.message,
-            type: "announcement",
-            memberName: member.name,
-            memberId: memDoc.id
-          });
-          if (outcome.success) successCount++;
-          else failCount++;
-        } catch (e) {
-          failCount++;
-        }
+        // PUSH TO QUEUE
+        await queueSMS(churchId, {
+          phone: member.phone,
+          message: campaign.message,
+          type: "announcement",
+          memberName: member.name,
+          memberId: memDoc.id
+        });
       }
 
       await campDoc.ref.update({ 
         status: "completed",
-        sentCount: successCount,
-        failedCount: failCount,
         processedAt: admin.firestore.FieldValue.serverTimestamp()
       });
     }

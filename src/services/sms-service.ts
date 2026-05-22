@@ -22,11 +22,10 @@ export interface SMSLog {
   memberName?: string;
   phone: string;
   message: string;
-  status: 'sent' | 'failed' | 'pending' | 'retrying';
-  type: 'birthday' | 'announcement' | 'test' | 'reminder' | 'other';
+  status: 'sent' | 'failed' | 'pending' | 'retrying' | 'processing';
+  type: 'birthday' | 'announcement' | 'test' | 'reminder' | 'followup' | 'other';
   provider: string;
   retryCount: number;
-  providerResponse?: any;
   error?: string;
   cost: number;
   createdAt: any;
@@ -40,7 +39,6 @@ function normalizePhone(phone: string): string {
   if (!phone) return "";
   let cleaned = phone.replace(/\D/g, "").trim();
   
-  // Standardize common Ghana formats
   if (cleaned.startsWith("0")) {
     cleaned = "233" + cleaned.substring(1);
   } else if (cleaned.length === 9) {
@@ -51,7 +49,7 @@ function normalizePhone(phone: string): string {
 }
 
 /**
- * Optimized send and log flow via secure Cloud Function bridge.
+ * Optimized push to Enterprise Queue via Cloud Function bridge.
  */
 export async function sendAndLogSMS(
   db: Firestore,
@@ -79,7 +77,7 @@ export async function sendAndLogSMS(
     });
 
     if (!response.data.success) {
-      return { success: false, error: response.data.error || 'Backend delivery failure' };
+      return { success: false, error: response.data.error || 'Backend queuing failure' };
     }
 
     return { success: true };
@@ -90,11 +88,9 @@ export async function sendAndLogSMS(
 }
 
 /**
- * Optimized Birthday Processor using indexed birthdayKey query.
- * Matches exactly celebrants for the current UTC day.
+ * Optimized Birthday Processor using indexed birthdayKey (MMDD) query.
  */
 export async function processBirthdaysToday(db: Firestore, churchId: string) {
-  // 1. Fetch Church Info for branding
   const churchRef = doc(db, 'churches', churchId);
   const churchSnap = await getDoc(churchRef);
   const churchData = churchSnap.data();
@@ -104,25 +100,18 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
 
   const membersRef = collection(db, 'churches', churchId, 'members');
   
-  // Strict UTC-based Today Key (MM-DD)
+  // Strict UTC-based Today Key (MMDD)
   const today = new Date();
   const month = String(today.getUTCMonth() + 1).padStart(2, '0');
   const day = String(today.getUTCDate()).padStart(2, '0');
-  const todayKey = `${month}-${day}`;
-
-  console.log(`[SMS Bridge] Searching for birthdayKey: ${todayKey}`);
+  const todayKey = `${month}${day}`;
 
   const q = query(membersRef, where("birthdayKey", "==", todayKey));
   const membersSnap = await getDocs(q);
   
   const results = { sent: 0, failed: 0, skipped: 0 };
 
-  if (membersSnap.empty) {
-    console.log("[SMS Bridge] No celebrants found for today.");
-    return results;
-  }
-
-  console.log(`[SMS Bridge] Found ${membersSnap.size} member(s) celebrating today.`);
+  if (membersSnap.empty) return results;
 
   for (const memberDoc of membersSnap.docs) {
     const member = memberDoc.data();
@@ -132,12 +121,10 @@ export async function processBirthdaysToday(db: Firestore, churchId: string) {
       continue;
     }
 
-    // 2. Personalize Message using church settings
     const personalizedMessage = template
       .replace(/{{name}}/g, member.name)
       .replace(/{{churchName}}/g, churchDisplayName);
 
-    // Individual send request
     const outcome = await sendAndLogSMS(db, churchId, {
       phone: member.phone,
       message: personalizedMessage,

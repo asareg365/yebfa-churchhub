@@ -5,8 +5,8 @@ const { queueSMS } = require("../services/smsService");
 const { parseTemplate } = require("../utils/templateEngine");
 
 /**
- * Global Birthday Dispatcher
- * Optimized for Enterprise: Fast query by birthdayKey + Queue processing.
+ * Global Birthday Dispatcher (Enterprise Scale)
+ * Uses indexed birthdayKey (MMDD) for fast retrieval.
  */
 async function dispatchAllBirthdays(apiKey) {
   const db = admin.firestore();
@@ -46,7 +46,7 @@ async function processChurchBirthdays(churchDoc) {
     const member = memberDoc.data();
     if (!member.phone) continue;
 
-    // Idempotency Check (Don't double queue if scheduler runs twice)
+    // Idempotency Check
     const historyId = `bday_${memberDoc.id}_${todayDateStr}`;
     const historyRef = churchDoc.ref.collection("birthdayHistory").doc(historyId);
     const alreadyQueued = await historyRef.get();
@@ -67,7 +67,7 @@ async function processChurchBirthdays(churchDoc) {
       memberId: memberDoc.id
     });
 
-    // Record local history for idempotency
+    // Record history
     await historyRef.set({
       queuedAt: admin.firestore.FieldValue.serverTimestamp(),
       status: "queued"

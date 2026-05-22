@@ -1,6 +1,7 @@
+
 const admin = require("firebase-admin");
 const { DateTime } = require("luxon");
-const { sendSMS } = require("../services/smsService");
+const { queueSMS } = require("../services/smsService");
 const { parseTemplate } = require("../utils/templateEngine");
 
 /**
@@ -15,7 +16,6 @@ async function processVisitorFollowups(apiKey) {
     const churchData = churchDoc.data();
     const timezone = churchData.settings?.timezone || "Africa/Accra";
     
-    // Luxon yesterday check
     const yesterday = DateTime.now().setZone(timezone).minus({ days: 1 }).toFormat("yyyy-MM-dd");
 
     const visitorsSnap = await churchDoc.ref.collection("visitors")
@@ -33,19 +33,16 @@ async function processVisitorFollowups(apiKey) {
         churchName: churchDisplayName
       });
 
-      try {
-        const result = await sendSMS(apiKey, churchId, {
-          phone: visitor.phone,
-          message,
-          type: "followup",
-          memberName: visitor.name
-        });
+      // PUSH TO QUEUE
+      const result = await queueSMS(churchId, {
+        phone: visitor.phone,
+        message,
+        type: "followup",
+        memberName: visitor.name
+      });
 
-        if (result.success) {
-          await visDoc.ref.update({ followupSent: true });
-        }
-      } catch (e) {
-        console.error(`Followup failed for visitor ${visDoc.id}:`, e.message);
+      if (result.success) {
+        await visDoc.ref.update({ followupSent: true });
       }
     }
   }
