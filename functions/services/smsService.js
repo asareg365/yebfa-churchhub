@@ -8,6 +8,34 @@ const MAX_MESSAGE_LENGTH = 700;
 const SPAM_KEYWORDS = ["bitcoin", "crypto", "investment", "prize", "won", "password", "otp", "lottery", "claim", "verify"];
 
 /**
+ * PRODUCTION-GRADE ERROR CLASSIFICATION
+ */
+function isRetryableError(errorMessage = "") {
+  const msg = errorMessage.toLowerCase();
+  const permanentFailures = [
+    "insufficient sms credits",
+    "service not approved",
+    "invalid phone",
+    "invalid recipient",
+    "blocked",
+    "spam",
+    "blacklist",
+    "message too long"
+  ];
+  return !permanentFailures.some(e => msg.includes(e));
+}
+
+/**
+ * EXPONENTIAL BACKOFF CALCULATION
+ * Attempts: 0 (1m), 1 (2m), 2 (4m), 3 (8m)...
+ */
+function getBackoffDelay(retryCount) {
+  const base = 60000; // 1 minute
+  const max = 3600000; // 1 hour
+  return Math.min(base * Math.pow(2, retryCount), max);
+}
+
+/**
  * ABUSE DETECTION: Heuristic Content Analysis with Normalization
  */
 function isPotentiallyMalicious(message) {
@@ -208,11 +236,26 @@ async function processSMSQueueItem(apiKey, messageId, data) {
       await refundWallet(churchId, cost, "dispatch_failed", messageId);
     }
 
+    const retryable = isRetryableError(error.message);
+    const retryCount = data.retryCount || 0;
+
+    // AUTO-PAUSE CHURCH SMS IF INSUFFICIENT
+    if (error.message.includes("Insufficient SMS credits")) {
+      await db.collection("churches").doc(churchId).update({
+        "sms.lowBalance": true,
+        "sms.lastLowBalanceAt": admin.firestore.FieldValue.serverTimestamp()
+      }).catch(() => {});
+    }
+
     await db.collection("smsQueue").doc(messageId).update({
-      status: (data.retryCount || 0) >= 5 ? "dead_letter" : "failed",
+      status: retryable ? "queued_retry" : "failed_permanent",
+      retryable,
       lastError: error.message,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      retryCount: admin.firestore.FieldValue.increment(1)
+      retryCount: admin.firestore.FieldValue.increment(retryable ? 1 : 0),
+      nextRetryAt: retryable 
+        ? admin.firestore.Timestamp.fromMillis(Date.now() + getBackoffDelay(retryCount))
+        : null
     });
 
     return { success: false, error: error.message };
@@ -251,7 +294,8 @@ async function refundWallet(churchId, amount, reason, messageId) {
 
     t.update(churchRef, {
       "sms.credits": newBalance,
-      "sms.stats.refunded": admin.firestore.FieldValue.increment(1)
+      "sms.stats.refunded": admin.firestore.FieldValue.increment(1),
+      "sms.lowBalance": false // Reset low balance flag if refund fixes it
     });
   });
 }
@@ -332,7 +376,8 @@ async function creditWallet(churchId, amount, reason, processedBy) {
     }, { merge: true });
 
     t.update(churchRef, {
-      "sms.credits": newBalance
+      "sms.credits": newBalance,
+      "sms.lowBalance": newBalance > 10 // Auto-clear flag if balance is now healthy
     });
 
     return { success: true, newBalance };

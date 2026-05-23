@@ -1,7 +1,7 @@
 
 const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 
@@ -15,10 +15,11 @@ const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 const { dispatchAllBirthdays } = require("./schedulers/birthdayScheduler");
 const { processVisitorFollowups } = require("./schedulers/visitorScheduler");
 const { processEventReminders } = require("./schedulers/eventScheduler");
+const { retryFailedSMS } = require("./schedulers/retryScheduler");
 const { processSMSQueueItem, queueSMS, creditWallet } = require("./services/smsService");
 
 /**
- * MISSION CRITICAL WORKER
+ * MISSION CRITICAL WORKER (Initial)
  */
 exports.onSmsQueued = onDocumentCreated(
   {
@@ -39,6 +40,32 @@ exports.onSmsQueued = onDocumentCreated(
     }
     
     return processSMSQueueItem(key, event.params.messageId, data);
+  }
+);
+
+/**
+ * MISSION CRITICAL WORKER (Retry)
+ */
+exports.onSmsRetryTriggered = onDocumentUpdated(
+  {
+    region: "us-central1",
+    document: "smsQueue/{messageId}",
+    secrets: [MNOTIFY_API_KEY]
+  },
+  async (event) => {
+    const data = event.data.after.data();
+    const previousData = event.data.before.data();
+    
+    // Only process if status changed TO queued
+    if (data.status === "queued" && previousData.status !== "queued") {
+      let key;
+      try {
+        key = MNOTIFY_API_KEY.value();
+      } catch (e) { return null; }
+      
+      return processSMSQueueItem(key, event.params.messageId, data);
+    }
+    return null;
   }
 );
 
@@ -234,6 +261,16 @@ exports.runDailyAutomations = onSchedule(
     await dispatchAllBirthdays(key);
     await processVisitorFollowups(key);
     await processEventReminders(key);
+    return null;
+  }
+);
+
+exports.runRetryCycle = onSchedule(
+  { schedule: "every 5 minutes", region: "us-central1", secrets: [MNOTIFY_API_KEY] },
+  async () => {
+    let key;
+    try { key = MNOTIFY_API_KEY.value(); } catch (e) { return null; }
+    await retryFailedSMS(key);
     return null;
   }
 );
