@@ -152,13 +152,13 @@ exports.getSystemStats = onCall(
         
         const churchEntry = {
           id: churchId,
-          name: data.name,
-          slug: data.slug,
-          plan: data.plan,
+          name: data.name || "Unnamed Ministry",
+          slug: data.slug || churchId,
+          plan: data.plan || "Starter",
           adminEmails: data.adminEmails || [],
-          registeredAt: data.registeredAt,
+          registeredAt: data.registeredAt || null,
           sms: {
-            credits: data.sms?.credits || 0,
+            credits: data.sms?.credits ?? wallet.balance ?? 0,
             subscriptionStatus: data.sms?.subscriptionStatus || 'pending',
             stats: data.sms?.stats || { sent: 0 }
           }
@@ -173,18 +173,27 @@ exports.getSystemStats = onCall(
         });
       });
 
+      // Defensive Sort: Handle Firestore Timestamps, Strings, and nulls
+      const getSeconds = (val) => {
+        if (!val) return 0;
+        if (val.seconds !== undefined) return val.seconds;
+        if (typeof val.toDate === 'function') return val.toDate().getTime() / 1000;
+        const d = new Date(val);
+        return isNaN(d.getTime()) ? 0 : d.getTime() / 1000;
+      };
+
       return {
         totalTenants: churchesSnap.size,
         activeTenants: churchList.filter(c => c.sms?.subscriptionStatus === 'active').length,
         totalSent: ledgerSnap.size,
         totalFailed: failedSnap.size,
         totalRevenue: totalRevenue,
-        topSpenders: topSpenders.sort((a, b) => b.sent - a.sent).slice(0, 5),
-        churches: churchList.sort((a, b) => (b.registeredAt?.seconds || 0) - (a.registeredAt?.seconds || 0))
+        topSpenders: topSpenders.sort((a, b) => (Number(b.sent) || 0) - (Number(a.sent) || 0)).slice(0, 5),
+        churches: churchList.sort((a, b) => getSeconds(b.registeredAt) - getSeconds(a.registeredAt))
       };
     } catch (error) { 
-      console.error("System Stats Error:", error.message);
-      throw new HttpsError("internal", error.message); 
+      console.error("System Stats Error:", error);
+      throw new HttpsError("internal", error.message || "Unknown Platform Error"); 
     }
   }
 );
