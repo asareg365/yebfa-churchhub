@@ -6,7 +6,6 @@ import {
   TrendingUp, 
   BarChart3, 
   PieChart as PieIcon, 
-  CheckCircle2, 
   MessageSquare,
   Zap,
   Target,
@@ -18,7 +17,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, query, where, limit, orderBy } from 'firebase/firestore';
-import { ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar } from 'recharts';
+import { ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { format, subDays, startOfMonth } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
@@ -49,12 +48,15 @@ export default function SMSAnalyticsPage() {
   const stats = useMemo(() => {
     if (!allLogs || allLogs.length === 0) return { total: 0, sent: 0, failed: 0, delivered: 0, successRate: 0, deliveryRate: 0, monthlyUsage: 0 };
     const total = allLogs.length;
-    const sent = allLogs.filter(l => l.status === 'sent').length;
+    const sent = allLogs.filter(l => l.status === 'sent' || l.status === 'delivered').length;
     const failed = allLogs.filter(l => l.status === 'failed').length;
-    const delivered = allLogs.filter(l => l.providerStatus === 'delivered').length;
+    const delivered = allLogs.filter(l => l.status === 'delivered').length;
     
     const currentMonth = startOfMonth(new Date());
-    const monthlyUsage = allLogs.filter(l => l.createdAt?.toDate && l.createdAt.toDate() >= currentMonth && l.status === 'sent').length;
+    const monthlyUsage = allLogs.filter(l => {
+      const date = l.createdAt?.toDate ? l.createdAt.toDate() : null;
+      return date && date >= currentMonth && (l.status === 'sent' || l.status === 'delivered');
+    }).length;
 
     return {
       total,
@@ -69,14 +71,14 @@ export default function SMSAnalyticsPage() {
 
   const campaignBreakdown = useMemo(() => {
     if (!allLogs) return [];
-    const types = ['birthday', 'announcement', 'reminder', 'followup'];
+    const types = ['birthday', 'announcement', 'reminder', 'followup', 'test'];
     return types.map(type => ({
       name: type.charAt(0).toUpperCase() + type.slice(1),
       value: allLogs.filter(l => l.type === type).length
     })).filter(t => t.value > 0);
   }, [allLogs]);
 
-  const COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', '#8884d8', '#ffc658'];
+  const COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', '#8884d8', '#ffc658', '#00C49F'];
 
   const trendData = useMemo(() => {
     if (!allLogs) return [];
@@ -86,11 +88,14 @@ export default function SMSAnalyticsPage() {
     }).reverse();
 
     return last14Days.map(day => {
-      const dayLogs = allLogs.filter(l => l.createdAt?.toDate && format(l.createdAt.toDate(), 'MMM dd') === day);
+      const dayLogs = allLogs.filter(l => {
+        const date = l.createdAt?.toDate ? l.createdAt.toDate() : null;
+        return date && format(date, 'MMM dd') === day;
+      });
       return {
         name: day,
         volume: dayLogs.length,
-        success: dayLogs.filter(l => l.status === 'sent').length
+        success: dayLogs.filter(l => l.status === 'sent' || l.status === 'delivered').length
       };
     });
   }, [allLogs]);
@@ -164,7 +169,7 @@ export default function SMSAnalyticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="h-[320px]">
-            {trendData.length > 0 ? (
+            {mounted && trendData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={trendData}>
                   <defs>
@@ -199,7 +204,7 @@ export default function SMSAnalyticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col items-center justify-center p-0">
-            {campaignBreakdown.length > 0 ? (
+            {mounted && campaignBreakdown.length > 0 ? (
               <>
                 <div className="h-[250px] w-full">
                   <ResponsiveContainer width="100%" height="100%">

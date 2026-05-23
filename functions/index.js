@@ -29,7 +29,16 @@ exports.onSmsQueued = onDocumentCreated(
   async (event) => {
     const data = event.data.data();
     if (data.status !== "queued") return null;
-    return processSMSQueueItem(MNOTIFY_API_KEY.value(), event.params.messageId, data);
+    
+    let key;
+    try {
+      key = MNOTIFY_API_KEY.value();
+    } catch (e) {
+      console.error("MNOTIFY_API_KEY Secret not configured.");
+      return null;
+    }
+    
+    return processSMSQueueItem(key, event.params.messageId, data);
   }
 );
 
@@ -91,20 +100,39 @@ exports.getSystemStats = onCall(
     try {
       const churchesSnap = await db.collection("churches").get();
       const walletsSnap = await db.collection("smsWallets").get();
-      const ledgerSnap = await db.collection("smsLedger").where("status", "==", "SUBMITTED").limit(1000).get();
+      
+      // Resilient count for global sent
+      const ledgerSnap = await db.collection("smsLedger")
+        .where("status", "==", "SUBMITTED")
+        .limit(1000)
+        .get();
 
       let totalRevenue = 0;
+      const topSpenders = [];
+
       walletsSnap.docs.forEach(doc => {
-        totalRevenue += Number(doc.data().totalTopups || 0);
+        const walletData = doc.data();
+        totalRevenue += Number(walletData.totalTopups || 0);
+        
+        const church = churchesSnap.docs.find(c => c.id === doc.id);
+        const churchData = church?.data();
+        
+        topSpenders.push({
+          name: churchData?.name || doc.id,
+          sent: churchData?.sms?.stats?.sent || 0,
+          balance: walletData.balance || 0
+        });
       });
 
       return {
         totalTenants: churchesSnap.size,
         activeTenants: churchesSnap.docs.filter(c => c.data().sms?.subscriptionStatus === 'active').length,
         totalSent: ledgerSnap.size,
-        totalRevenue: totalRevenue
+        totalRevenue: totalRevenue,
+        topSpenders: topSpenders.sort((a, b) => b.sent - a.sent).slice(0, 5)
       };
     } catch (error) { 
+      console.error("System Stats Error:", error.message);
       throw new HttpsError("internal", error.message); 
     }
   }
@@ -125,6 +153,28 @@ exports.updateChurchStatus = onCall(
         "sms.status": isApproved ? 'Approved' : 'Suspended',
         "sms.enabled": isApproved,
         status: isApproved ? 'Approved' : 'Suspended'
+      });
+      return { success: true };
+    } catch (error) { throw new HttpsError("internal", error.message); }
+  }
+);
+
+exports.updateOrganization = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const userEmail = request.auth?.token?.email?.toLowerCase() || "";
+    if (!request.auth || !SUPER_ADMINS.includes(userEmail)) throw new HttpsError("permission-denied", "Unauthorized");
+    
+    const { churchId, name, slug, adminEmails, plan } = request.data;
+    if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId");
+
+    try {
+      await admin.firestore().collection("churches").doc(churchId).update({
+        name,
+        slug,
+        adminEmails: adminEmails || [],
+        plan: plan || 'Basic',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       return { success: true };
     } catch (error) { throw new HttpsError("internal", error.message); }
@@ -155,7 +205,8 @@ exports.sendSMS = onCall(
 exports.runDailyAutomations = onSchedule(
   { schedule: "0 6 * * *", timeZone: "Africa/Accra", region: "us-central1", secrets: [MNOTIFY_API_KEY] },
   async () => {
-    const key = MNOTIFY_API_KEY.value();
+    let key;
+    try { key = MNOTIFY_API_KEY.value(); } catch (e) { return null; }
     await dispatchAllBirthdays(key);
     await processVisitorFollowups(key);
     await processEventReminders(key);
