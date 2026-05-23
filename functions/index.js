@@ -1,4 +1,3 @@
-
 const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
@@ -15,7 +14,7 @@ const { processSMSQueueItem, queueSMS, creditWallet, resetWallet } = require("./
 
 /**
  * ADMIN: System Stats Aggregation (v2 Callable)
- * Uses high-integrity safe aggregation logic.
+ * Uses safe aggregation and explicit serialization logic.
  */
 exports.getSystemStats = onCall(
   {
@@ -36,7 +35,7 @@ exports.getSystemStats = onCall(
       const db = admin.firestore();
       const churchesSnap = await db.collection("churches").get();
 
-      // Defensive Data Mapping: Prevents serialization crashes from raw Firestore objects (like Timestamps)
+      // Serialization mapping: Firestore Timestamps are converted to strings to prevent serialization errors
       const churches = churchesSnap.docs.map(doc => {
         const d = doc.data();
         return {
