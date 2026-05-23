@@ -54,7 +54,8 @@ exports.getSystemStats = onCall(
           id: doc.id,
           name: d.name || "Unnamed Ministry",
           slug: d.slug || "no-slug",
-          plan: d.plan || "Starter",
+          plan: d.plan || d.subscription?.plan || "Starter",
+          status: d.status || "Pending",
           registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : (d.registeredAt ? String(d.registeredAt) : null),
           sms: {
             credits: ledgerBalance,
@@ -178,6 +179,7 @@ exports.updateChurchStatus = onCall(
         "sms.status": isApproved ? 'Approved' : 'Suspended',
         "sms.enabled": isApproved,
         status: isApproved ? 'Approved' : 'Suspended',
+        "subscription.status": status,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       return { success: true };
@@ -189,6 +191,7 @@ exports.updateChurchStatus = onCall(
 
 /**
  * ADMIN: Update Organization Details
+ * Hardened: Synchronizes root plan and subscription object.
  */
 exports.updateOrganization = onCall(
   { region: "us-central1", cors: true }, 
@@ -204,6 +207,7 @@ exports.updateOrganization = onCall(
         name: name || "Unnamed Ministry",
         slug: slug || "no-slug",
         plan: plan || "Starter",
+        "subscription.plan": plan || "Starter",
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       return { success: true };

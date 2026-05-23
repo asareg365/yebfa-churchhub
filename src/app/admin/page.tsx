@@ -146,7 +146,6 @@ export default function SystemAdminPortal() {
   };
 
   const handleInitializeWallets = async () => {
-    if (!confirm("Are you sure you want to initialize wallets for all organizations? This will create missing documents based on current credits.")) return;
     setIsProcessing(true);
     const initFn = httpsCallable(functions, 'initializeWallets');
     try {
@@ -165,10 +164,15 @@ export default function SystemAdminPortal() {
     setIsProcessing(true);
     const updateFn = httpsCallable(functions, 'updateOrganization');
     try {
-      await updateFn({ churchId: editingOrg.id, name: editingOrg.name, slug: editingOrg.slug, plan: editingOrg.plan });
-      toast({ title: "Organization Updated" });
+      await updateFn({ 
+        churchId: editingOrg.id, 
+        name: editingOrg.name, 
+        slug: editingOrg.slug, 
+        plan: editingOrg.plan 
+      });
+      toast({ title: "Organization Updated", description: `Plan synchronized to ${editingOrg.plan}.` });
       setEditingOrg(null);
-      await loadStats();
+      await loadStats(); // Re-fetch to see immediate change
     } catch (e: any) {
       toast({ title: "Update Failed", description: e.message, variant: "destructive" });
     } finally {
@@ -177,7 +181,6 @@ export default function SystemAdminPortal() {
   };
 
   const handleResetBalance = async (churchId: string) => {
-    if (!confirm("Are you sure you want to WIPE this organization's balance to 0? This fixes sync issues.")) return;
     setIsProcessing(true);
     const resetFn = httpsCallable(functions, 'adminResetWallet');
     try {
@@ -265,7 +268,7 @@ export default function SystemAdminPortal() {
                 ) : filteredChurches.map((church: any) => (
                   <TableRow key={church.id}>
                     <TableCell><div className="font-bold text-foreground">{church.name}</div><code className="text-[10px] text-primary">{church.slug}</code></TableCell>
-                    <TableCell><Badge variant="outline" className="text-foreground">{church.plan || 'Starter'}</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className="text-foreground font-bold">{church.plan || 'Starter'}</Badge></TableCell>
                     <TableCell><Badge className={cn("uppercase text-[9px] font-bold px-2 py-0.5", church.sms?.subscriptionStatus === 'active' ? "bg-accent text-white" : church.sms?.subscriptionStatus === 'suspended' ? "bg-destructive text-white" : "bg-amber-100 text-amber-700")}>{church.sms?.subscriptionStatus || 'Pending'}</Badge></TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">
