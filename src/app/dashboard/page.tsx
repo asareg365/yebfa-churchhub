@@ -1,5 +1,4 @@
-
-'use client';
+"use client";
 
 import { useState, useMemo } from 'react';
 import {
@@ -49,6 +48,13 @@ import { Badge } from '@/components/ui/badge';
 import { useSearch } from '@/context/search-context';
 import { sendAndLogSMS } from '@/services/sms-service';
 import { useToast } from '@/hooks/use-toast';
+
+const getInitials = (name: string) => {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+};
 
 export default function DashboardPage() {
   const db = useFirestore();
@@ -390,9 +396,11 @@ export default function DashboardPage() {
                       className="group flex flex-col p-4 rounded-2xl bg-muted/20 border border-border hover:border-primary/30 transition-all"
                     >
                       <div className="flex items-center gap-4 mb-4">
-                        <Avatar className="h-12 w-12 border border-primary/20">
+                        <Avatar className="h-12 w-12 border border-primary/20 shadow-sm">
                           <AvatarImage src={member.photo} />
-                          <AvatarFallback>{member.name?.charAt(0)}</AvatarFallback>
+                          <AvatarFallback className="bg-muted text-muted-foreground font-bold">
+                            {getInitials(member.name)}
+                          </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
                           <p className="font-bold text-foreground truncate">

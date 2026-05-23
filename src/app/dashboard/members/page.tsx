@@ -14,7 +14,8 @@ import {
   AlertTriangle,
   Download,
   ChevronDown,
-  Layers
+  Layers,
+  Camera
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,6 +73,13 @@ const STANDARD_SOCIETIES = [
   "Women's Fellowship"
 ];
 
+const getInitials = (name: string) => {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+};
+
 export default function MembersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusTab, setStatusTab] = useState("all");
@@ -105,6 +113,7 @@ export default function MembersPage() {
     gender: "Male" as const,
     dateOfBirth: "",
     phone: "",
+    photo: "",
     societies: [] as string[]
   });
 
@@ -126,13 +135,12 @@ export default function MembersPage() {
       ...newMember,
       birthdayKey: calculateBirthdayKey(newMember.dateOfBirth),
       joined: new Date().toISOString().split('T')[0],
-      createdAt: serverTimestamp(),
-      photo: `https://picsum.photos/seed/${Math.random()}/100/100`
+      createdAt: serverTimestamp()
     };
     try {
       await addDoc(membersRef, memberData);
       setIsAddDialogOpen(false);
-      setNewMember({ name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "", phone: "", societies: [] });
+      setNewMember({ name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "", phone: "", photo: "", societies: [] });
       toast({ title: "Member added successfully" });
     } catch (e) {
       toast({ title: "Save failed", variant: "destructive" });
@@ -150,6 +158,7 @@ export default function MembersPage() {
         department: editingMember.department,
         status: editingMember.status,
         dateOfBirth: editingMember.dateOfBirth,
+        photo: editingMember.photo || "",
         birthdayKey: calculateBirthdayKey(editingMember.dateOfBirth),
         societies: editingMember.societies || [],
         updatedAt: serverTimestamp()
@@ -218,8 +227,18 @@ export default function MembersPage() {
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild><Button className="flex-1 md:flex-none bg-primary" disabled={!currentChurch}><Plus className="mr-2 h-4 w-4" /> Add Member</Button></DialogTrigger>
             <DialogContent className="glass max-w-2xl">
-              <DialogHeader><DialogTitle>Add New Member</DialogTitle><DialogDescription>Societies and group memberships are now active.</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>Add New Member</DialogTitle><DialogDescription>Enter member details. If no photo URL is provided, initials will be used.</DialogDescription></DialogHeader>
               <div className="space-y-6 py-4">
+                <div className="flex items-center gap-4">
+                  <Avatar className="h-16 w-16 border-2 border-primary/20">
+                    <AvatarImage src={newMember.photo} />
+                    <AvatarFallback className="bg-primary/10 text-primary font-bold text-xl">{getInitials(newMember.name)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 space-y-2">
+                    <Label className="flex items-center gap-2"><Camera className="w-3 h-3" /> Photo URL (Optional)</Label>
+                    <Input value={newMember.photo} onChange={(e) => setNewMember({...newMember, photo: e.target.value})} placeholder="https://..." className="bg-muted/20" />
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label>Full Name</Label><Input value={newMember.name} onChange={(e) => setNewMember({...newMember, name: e.target.value})} placeholder="John Doe" /></div>
                   <div className="space-y-2"><Label>Gender</Label><Select value={newMember.gender} onValueChange={(v: any) => setNewMember({...newMember, gender: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Male">Male</SelectItem><SelectItem value="Female">Female</SelectItem></SelectContent></Select></div>
@@ -275,7 +294,14 @@ export default function MembersPage() {
               <TableBody>
                 {filteredMembers.map((member) => (
                   <TableRow key={member.id} className="hover:bg-white/5 border-white/5 transition-colors">
-                    <TableCell><Avatar className="h-10 w-10 border border-white/10"><AvatarImage src={member.photo} /><AvatarFallback>{member.name?.charAt(0)}</AvatarFallback></Avatar></TableCell>
+                    <TableCell>
+                      <Avatar className="h-10 w-10 border border-white/10 shadow-sm">
+                        <AvatarImage src={member.photo} />
+                        <AvatarFallback className="bg-muted text-muted-foreground font-bold text-xs">
+                          {getInitials(member.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </TableCell>
                     <TableCell>
                       <div className="font-semibold">{member.name}</div>
                       <div className="text-[10px] text-muted-foreground flex items-center gap-2">
@@ -334,6 +360,16 @@ export default function MembersPage() {
           </DialogHeader>
           {editingMember && (
             <div className="space-y-6 py-4">
+              <div className="flex items-center gap-4">
+                <Avatar className="h-16 w-16 border-2 border-primary/20">
+                  <AvatarImage src={editingMember.photo} />
+                  <AvatarFallback className="bg-primary/10 text-primary font-bold text-xl">{getInitials(editingMember.name)}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 space-y-2">
+                  <Label className="flex items-center gap-2"><Camera className="w-3 h-3" /> Photo URL (Optional)</Label>
+                  <Input value={editingMember.photo || ""} onChange={(e) => setEditingMember({...editingMember, photo: e.target.value})} placeholder="https://..." className="bg-muted/20" />
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2"><Label>Full Name</Label><Input value={editingMember.name} onChange={(e) => setEditingMember({...editingMember, name: e.target.value})} /></div>
                 <div className="space-y-2"><Label>Gender</Label><Select value={editingMember.gender} onValueChange={(v: any) => setEditingMember({...editingMember, gender: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Male">Male</SelectItem><SelectItem value="Female">Female</SelectItem></SelectContent></Select></div>
