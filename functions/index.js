@@ -14,7 +14,7 @@ const { processSMSQueueItem, queueSMS, creditWallet, resetWallet } = require("./
 
 /**
  * ADMIN: System Stats Aggregation (v2 Callable)
- * Uses safe aggregation and explicit serialization logic.
+ * PRODUCTION GRADE: Reads balance from smsWallets ledger.
  */
 exports.getSystemStats = onCall(
   {
@@ -33,11 +33,24 @@ exports.getSystemStats = onCall(
 
     try {
       const db = admin.firestore();
-      const churchesSnap = await db.collection("churches").get();
+      const [churchesSnap, walletsSnap] = await Promise.all([
+        db.collection("churches").get(),
+        db.collection("smsWallets").get()
+      ]);
 
-      // Serialization mapping: Firestore Timestamps are converted to strings to prevent serialization errors
+      const walletsMap = {};
+      walletsSnap.forEach(doc => {
+        walletsMap[doc.id] = doc.data();
+      });
+
+      // Serialization mapping: Converts Firestore Timestamps to strings and joins Wallet Ledger
       const churches = churchesSnap.docs.map(doc => {
         const d = doc.data();
+        const wallet = walletsMap[doc.id] || {};
+        
+        // Ledger Truth vs UI Mirror
+        const ledgerBalance = wallet.balance !== undefined ? Number(wallet.balance) : Number(d.sms?.credits || 0);
+
         return {
           id: doc.id,
           name: d.name || "Unnamed Ministry",
@@ -45,10 +58,10 @@ exports.getSystemStats = onCall(
           plan: d.plan || "Starter",
           registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : (d.registeredAt ? String(d.registeredAt) : null),
           sms: {
-            credits: Number(d.sms?.credits || 0),
+            credits: ledgerBalance, // SOURCE OF TRUTH
             sent: Number(d.sms?.stats?.sent || 0),
             failed: Number(d.sms?.stats?.failed || 0),
-            totalTopups: Number(d.sms?.totalTopups || 0),
+            totalTopups: Number(wallet.totalTopups || d.sms?.totalTopups || 0),
             subscriptionStatus: d.sms?.subscriptionStatus || "inactive"
           }
         };
