@@ -124,31 +124,30 @@ exports.getSystemStats = onCall(
 
     const db = admin.firestore();
     try {
-      const churchesSnap = await db.collection("churches").get();
-      const walletsSnap = await db.collection("smsWallets").get();
-      
-      const ledgerSnap = await db.collection("smsLedger")
-        .where("status", "==", "SUBMITTED")
-        .limit(500)
-        .get();
-
-      const failedSnap = await db.collection("smsLedger")
-        .where("status", "==", "FAILED")
-        .limit(100)
-        .get();
+      // Parallel fetch for performance
+      const [churchesSnap, walletsSnap, ledgerSnap, failedSnap] = await Promise.all([
+        db.collection("churches").get(),
+        db.collection("smsWallets").get(),
+        db.collection("smsLedger").where("status", "==", "SUBMITTED").limit(500).get(),
+        db.collection("smsLedger").where("status", "==", "FAILED").limit(100).get()
+      ]);
 
       let totalRevenue = 0;
       const topSpenders = [];
       const churchList = [];
 
+      // Map wallets for O(1) lookup
+      const walletMap = new Map();
       walletsSnap.docs.forEach(doc => {
-        totalRevenue += Number(doc.data().totalTopups || 0);
+        const d = doc.data();
+        walletMap.set(doc.id, d);
+        totalRevenue += Number(d.totalTopups || 0);
       });
 
       churchesSnap.docs.forEach(doc => {
         const data = doc.data();
         const churchId = doc.id;
-        const wallet = walletsSnap.docs.find(w => w.id === churchId)?.data() || { balance: 0 };
+        const wallet = walletMap.get(churchId) || { balance: 0 };
         
         const churchEntry = {
           id: churchId,
@@ -173,11 +172,13 @@ exports.getSystemStats = onCall(
         });
       });
 
-      // Defensive Sort: Handle Firestore Timestamps, Strings, and nulls
+      // Ultra-safe timestamp comparison
       const getSeconds = (val) => {
         if (!val) return 0;
         if (val.seconds !== undefined) return val.seconds;
-        if (typeof val.toDate === 'function') return val.toDate().getTime() / 1000;
+        if (typeof val.toDate === 'function') {
+          try { return val.toDate().getTime() / 1000; } catch (e) { return 0; }
+        }
         const d = new Date(val);
         return isNaN(d.getTime()) ? 0 : d.getTime() / 1000;
       };
@@ -192,8 +193,8 @@ exports.getSystemStats = onCall(
         churches: churchList.sort((a, b) => getSeconds(b.registeredAt) - getSeconds(a.registeredAt))
       };
     } catch (error) { 
-      console.error("System Stats Error:", error);
-      throw new HttpsError("internal", error.message || "Unknown Platform Error"); 
+      console.error("System Stats Engine Error:", error);
+      throw new HttpsError("internal", error.message || "Cloud Statistics Engine Failure"); 
     }
   }
 );
@@ -212,7 +213,8 @@ exports.updateChurchStatus = onCall(
         "sms.approved": isApproved,
         "sms.status": isApproved ? 'Approved' : 'Suspended',
         "sms.enabled": isApproved,
-        status: isApproved ? 'Approved' : 'Suspended'
+        status: isApproved ? 'Approved' : 'Suspended',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       return { success: true };
     } catch (error) { throw new HttpsError("internal", error.message); }

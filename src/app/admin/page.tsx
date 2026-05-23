@@ -89,11 +89,19 @@ export default function SystemAdminPortal() {
     const fetchStats = httpsCallable(functions, 'getSystemStats');
     try {
       const res: any = await fetchStats();
-      setPlatformStats(res.data);
-    } catch (err) {
-      console.error("System Stats Error:", err);
+      if (res.data) {
+        setPlatformStats(res.data);
+      } else {
+        throw new Error("Empty response from stats engine.");
+      }
+    } catch (err: any) {
+      console.error("System Stats Sync Error:", err);
       setStatsError(true);
-      toast({ title: "Stats Sync Failed", description: "Could not fetch platform data.", variant: "destructive" });
+      toast({ 
+        title: "Stats Sync Failed", 
+        description: err.message || "Could not fetch platform data.", 
+        variant: "destructive" 
+      });
     } finally {
       setIsRefreshing(false);
     }
@@ -112,7 +120,7 @@ export default function SystemAdminPortal() {
   }, [user]);
 
   const filteredChurches = useMemo(() => {
-    if (!platformStats?.churches) return [];
+    if (!platformStats?.churches || !Array.isArray(platformStats.churches)) return [];
     return platformStats.churches.filter((c: any) =>
       c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.slug?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -129,7 +137,7 @@ export default function SystemAdminPortal() {
     try {
       await updateFn({ churchId, status });
       toast({ title: `Organization ${status.toUpperCase()}`, description: "Status updated in secure ledger." });
-      loadStats(); // Refresh to show new status
+      await loadStats(); 
     } catch (e: any) {
       toast({ title: "Operation Failed", description: e.message, variant: "destructive" });
     } finally {
@@ -145,7 +153,7 @@ export default function SystemAdminPortal() {
       await topUpFn({ churchId: managingSmsId, amount: parseInt(topUpAmount) });
       toast({ title: "Credits Allocated", description: `${topUpAmount} SMS credits added successfully.` });
       setManagingSmsId(null);
-      loadStats(); 
+      await loadStats(); 
     } catch (e: any) {
       toast({ title: "Top-up Failed", description: e.message || "Internal error.", variant: "destructive" });
     } finally {
@@ -171,7 +179,7 @@ export default function SystemAdminPortal() {
       });
       toast({ title: "Organization Updated", description: "Details have been synchronized across nodes." });
       setEditingOrg(null);
-      loadStats();
+      await loadStats();
     } catch (e: any) {
       toast({ title: "Update Failed", description: e.message, variant: "destructive" });
     } finally {
@@ -206,6 +214,15 @@ export default function SystemAdminPortal() {
           </Button>
         </div>
       </div>
+
+      {statsError && (
+        <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 animate-in fade-in zoom-in-95">
+          <AlertTriangle className="h-4 w-4" />
+          <Label className="font-bold ml-2">Sync Error:</Label>
+          <span className="ml-2 text-sm">The platform stats engine returned an error. Some organization data may be stale.</span>
+          <Button variant="link" size="sm" onClick={loadStats} className="text-destructive font-bold underline ml-4">Retry Sync</Button>
+        </Alert>
+      )}
 
       <div className="grid gap-6 md:grid-cols-4">
         <Card className="glass border-primary/20">
