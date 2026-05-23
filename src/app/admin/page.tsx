@@ -204,42 +204,48 @@ export default function SystemAdminPortal() {
 
   const handleTopUp = async () => {
     if (!managingSmsId || !topUpAmount) return;
-
+  
     try {
       setIsProcessing(true);
-
-      // HARD AUTH CHECK
+  
+      // FORCE AUTH TOKEN REFRESH
       const currentUser = auth.currentUser;
+  
       if (!currentUser) {
-        throw new Error("Admin session expired. Please login again.");
+        throw new Error("You are no longer authenticated. Please login again.");
       }
-
-      // FORCE TOKEN REFRESH
+  
       await currentUser.getIdToken(true);
-
+  
+      // IMPORTANT:
+      // initialize callable AFTER token refresh
       const topUpFn = httpsCallable(functions, "adminTopUpWallet");
-      const res: any = await topUpFn({
+  
+      const result: any = await topUpFn({
         churchId: managingSmsId,
         amount: Number(topUpAmount),
       });
-
-      console.log("TOPUP RESPONSE:", res.data);
-
+  
+      console.log("TOPUP RESULT:", result);
+  
       toast({
-        title: "Credits Added",
-        description: `${topUpAmount} credits added successfully`,
+        title: "Credits Allocated",
+        description: `${topUpAmount} SMS credits added successfully.`,
       });
-
+  
       setManagingSmsId(null);
+  
       await loadStats();
-
+  
     } catch (e: any) {
       console.error("TOPUP ERROR:", e);
+  
       toast({
         title: "Top-up Failed",
-        description: e.message || "Internal error",
+        description: e.message || "Internal error.",
         variant: "destructive",
       });
+  
     } finally {
       setIsProcessing(false);
     }
