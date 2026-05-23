@@ -28,13 +28,13 @@ exports.getSystemStats = onCall(
 
       const email = request.auth.token.email?.toLowerCase();
       if (!SUPER_ADMINS.includes(email)) {
-        throw new HttpsError("permission-denied", "Unauthorized");
+        throw new HttpsError("permission-denied", "Unauthorized access");
       }
 
       const db = admin.firestore();
       const churchesSnap = await db.collection("churches").get();
 
-      // Sanitized Data Mapping: Prevents serialization errors from raw Firestore objects
+      // Defensive Data Mapping: Prevents serialization crashes from raw Firestore objects
       const churches = churchesSnap.docs.map(doc => {
         const d = doc.data();
         return {
@@ -42,7 +42,6 @@ exports.getSystemStats = onCall(
           name: d.name || "Unnamed Ministry",
           slug: d.slug || "no-slug",
           plan: d.plan || "Starter",
-          // Convert internal Timestamps to ISO strings for serialization safety
           registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : (d.registeredAt ? String(d.registeredAt) : null),
           updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate().toISOString() : (d.updatedAt ? String(d.updatedAt) : null),
           sms: {
@@ -105,6 +104,8 @@ exports.updateChurchStatus = onCall(
       throw new HttpsError("permission-denied", "Unauthorized");
     }
     const { churchId, status } = request.data;
+    if (!churchId || !status) throw new HttpsError("invalid-argument", "Missing parameters");
+
     const isApproved = status === 'active';
     
     try {
@@ -133,12 +134,13 @@ exports.updateOrganization = onCall(
       throw new HttpsError("permission-denied", "Unauthorized");
     }
     const { churchId, name, slug, plan } = request.data;
+    if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID");
     
     try {
       await admin.firestore().collection("churches").doc(churchId).update({
-        name,
-        slug,
-        plan,
+        name: name || "Unnamed Ministry",
+        slug: slug || "no-slug",
+        plan: plan || "Starter",
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       return { success: true };
@@ -158,8 +160,11 @@ exports.adminResetWallet = onCall(
       throw new HttpsError("permission-denied", "Unauthorized");
     }
     const { churchId } = request.data;
+    if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID");
+
     try {
-      return await resetWallet(churchId, request.auth.token.email);
+      const result = await resetWallet(churchId, request.auth.token.email);
+      return result;
     } catch (error) {
       throw new HttpsError("internal", error.message);
     }
@@ -176,8 +181,11 @@ exports.adminTopUpWallet = onCall(
       throw new HttpsError("permission-denied", "Unauthorized");
     }
     const { churchId, amount } = request.data;
+    if (!churchId || !amount) throw new HttpsError("invalid-argument", "Missing top-up details");
+
     try { 
-      return await creditWallet(churchId, amount, "admin_manual", request.auth.token.email); 
+      const result = await creditWallet(churchId, Number(amount), "admin_manual", request.auth.token.email); 
+      return result;
     } catch (error) { 
       throw new HttpsError("internal", error.message); 
     }
