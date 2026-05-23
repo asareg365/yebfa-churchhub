@@ -15,7 +15,8 @@ import {
   Download,
   ChevronDown,
   Layers,
-  Camera
+  Camera,
+  Upload
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -126,6 +127,22 @@ export default function MembersPage() {
     return `${month}${day}`;
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        if (isEdit) {
+          setEditingMember({ ...editingMember, photo: base64String });
+        } else {
+          setNewMember({ ...newMember, photo: base64String });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleAddMember = async () => {
     if (!newMember.name || !newMember.dateOfBirth || !membersRef) {
       toast({ title: "Incomplete data", description: "Name and Date of Birth are required.", variant: "destructive" });
@@ -227,7 +244,7 @@ export default function MembersPage() {
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild><Button className="flex-1 md:flex-none bg-primary" disabled={!currentChurch}><Plus className="mr-2 h-4 w-4" /> Add Member</Button></DialogTrigger>
             <DialogContent className="glass max-w-2xl">
-              <DialogHeader><DialogTitle>Add New Member</DialogTitle><DialogDescription>Enter member details. If no photo URL is provided, initials will be used.</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>Add New Member</DialogTitle><DialogDescription>Enter member details. Upload a photo from your device or use initials.</DialogDescription></DialogHeader>
               <div className="space-y-6 py-4">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-16 w-16 border-2 border-primary/20">
@@ -235,8 +252,13 @@ export default function MembersPage() {
                     <AvatarFallback className="bg-primary/10 text-primary font-bold text-xl">{getInitials(newMember.name)}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 space-y-2">
-                    <Label className="flex items-center gap-2"><Camera className="w-3 h-3" /> Photo URL (Optional)</Label>
-                    <Input value={newMember.photo} onChange={(e) => setNewMember({...newMember, photo: e.target.value})} placeholder="https://..." className="bg-muted/20" />
+                    <Label className="flex items-center gap-2"><Upload className="w-3 h-3" /> Profile Image</Label>
+                    <Input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={(e) => handleFileChange(e, false)} 
+                      className="bg-muted/20 cursor-pointer" 
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -356,7 +378,7 @@ export default function MembersPage() {
         <DialogContent className="glass max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Member Profile</DialogTitle>
-            <DialogDescription>Update record for {editingMember?.name}</DialogDescription>
+            <DialogDescription>Update record for {editingMember?.name}. Choose a new photo from your device.</DialogDescription>
           </DialogHeader>
           {editingMember && (
             <div className="space-y-6 py-4">
@@ -366,8 +388,13 @@ export default function MembersPage() {
                   <AvatarFallback className="bg-primary/10 text-primary font-bold text-xl">{getInitials(editingMember.name)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 space-y-2">
-                  <Label className="flex items-center gap-2"><Camera className="w-3 h-3" /> Photo URL (Optional)</Label>
-                  <Input value={editingMember.photo || ""} onChange={(e) => setEditingMember({...editingMember, photo: e.target.value})} placeholder="https://..." className="bg-muted/20" />
+                  <Label className="flex items-center gap-2"><Upload className="w-3 h-3" /> Change Profile Image</Label>
+                  <Input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={(e) => handleFileChange(e, true)} 
+                    className="bg-muted/20 cursor-pointer" 
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">

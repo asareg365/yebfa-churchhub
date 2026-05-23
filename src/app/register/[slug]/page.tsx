@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -10,7 +9,9 @@ import {
   Heart,
   ChevronDown,
   Check,
-  Plus
+  Plus,
+  Upload,
+  Camera
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useFirestore } from "@/firebase";
 import { collection, query, where, getDocs, limit, addDoc, serverTimestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
@@ -50,6 +52,13 @@ const DEPARTMENTS = [
   "Evangelism"
 ];
 
+const getInitials = (name: string) => {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+};
+
 export default function PublicRegistrationPage() {
   const params = useParams();
   const slug = params.slug as string;
@@ -68,22 +77,16 @@ export default function PublicRegistrationPage() {
     gender: "Male",
     dateOfBirth: "",
     department: "Music",
-    societies: [] as string[]
+    societies: [] as string[],
+    photo: ""
   });
 
-  /**
-   * Generates a searchable MMDD string for efficient birthday querying.
-   * Matches the format used in Enterprise Architecture logic.
-   */
   const calculateBirthdayKey = (dobString: string) => {
     if (!dobString) return "";
     const dob = new Date(dobString);
     if (isNaN(dob.getTime())) return "";
-    
-    // MMDD format (e.g. 0521 for May 21st)
     const month = String(dob.getUTCMonth() + 1).padStart(2, '0');
     const day = String(dob.getUTCDate()).padStart(2, '0');
-    
     return `${month}${day}`;
   };
 
@@ -103,6 +106,17 @@ export default function PublicRegistrationPage() {
     }
     if (slug) fetchChurch();
   }, [slug, db]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, photo: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const toggleSociety = (society: string) => {
     setFormData(prev => ({
@@ -135,15 +149,12 @@ export default function PublicRegistrationPage() {
     setIsSubmitting(true);
     try {
       const membersRef = collection(db, "churches", church.id, "members");
-      
-      // Store optimized MMDD birthdayKey
       await addDoc(membersRef, {
         ...formData,
         birthdayKey: calculateBirthdayKey(formData.dateOfBirth),
         status: "Active",
         joined: new Date().toISOString().split('T')[0],
-        createdAt: serverTimestamp(),
-        photo: `https://picsum.photos/seed/${Math.random()}/100/100`
+        createdAt: serverTimestamp()
       });
       setIsSuccess(true);
     } catch (error) {
@@ -206,7 +217,23 @@ export default function PublicRegistrationPage() {
               <CardDescription>Enter your details correctly. Birth date format must be YYYY-MM-DD.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-4">
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <Avatar className="h-20 w-20 border-2 border-primary/20 shadow-lg">
+                    <AvatarImage src={formData.photo} />
+                    <AvatarFallback className="bg-primary/10 text-primary font-bold text-2xl">{getInitials(formData.name)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 space-y-2">
+                    <Label className="flex items-center gap-2 font-bold"><Upload className="w-3 h-3" /> Profile Photo (Pick from Device)</Label>
+                    <Input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleFileChange} 
+                      className="bg-white/10 border-white/10 cursor-pointer" 
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label>Full Name</Label>
                   <Input 
