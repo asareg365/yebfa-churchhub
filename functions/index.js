@@ -43,12 +43,11 @@ exports.getSystemStats = onCall(
         walletsMap[doc.id] = doc.data();
       });
 
-      // Serialization mapping: Converts Firestore Timestamps to strings and joins Wallet Ledger
       const churches = churchesSnap.docs.map(doc => {
         const d = doc.data();
         const wallet = walletsMap[doc.id] || {};
         
-        // Ledger Truth vs UI Mirror
+        // Ledger Truth (smsWallets) is the primary source
         const ledgerBalance = wallet.balance !== undefined ? Number(wallet.balance) : Number(d.sms?.credits || 0);
 
         return {
@@ -62,7 +61,8 @@ exports.getSystemStats = onCall(
             sent: Number(d.sms?.stats?.sent || 0),
             failed: Number(d.sms?.stats?.failed || 0),
             totalTopups: Number(wallet.totalTopups || d.sms?.totalTopups || 0),
-            subscriptionStatus: d.sms?.subscriptionStatus || "inactive"
+            subscriptionStatus: d.sms?.subscriptionStatus || "inactive",
+            hasWallet: wallet.balance !== undefined
           }
         };
       });
@@ -104,6 +104,48 @@ exports.getSystemStats = onCall(
       console.error("STATS ENGINE FAILURE:", err);
       throw new HttpsError("internal", err.message || "Stats engine failed");
     }
+  }
+);
+
+/**
+ * ADMIN: Initialize Missing Wallets (Emergency Migration)
+ */
+exports.initializeWallets = onCall(
+  { region: "us-central1", cors: true },
+  async (request) => {
+    if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
+      throw new HttpsError("permission-denied", "Unauthorized");
+    }
+
+    const db = admin.firestore();
+    const churchesSnap = await db.collection("churches").get();
+    let created = 0;
+
+    for (const doc of churchesSnap.docs) {
+      const church = doc.data();
+      const churchId = doc.id;
+      const walletRef = db.collection("smsWallets").doc(churchId);
+      const walletSnap = await walletRef.get();
+
+      if (!walletSnap.exists) {
+        const credits = Number(church.sms?.credits || 0);
+        await walletRef.set({
+          balance: credits,
+          totalSpent: Number(church.sms?.stats?.sent || 0),
+          totalTopups: credits,
+          currency: "SMS_CREDIT",
+          status: "active",
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        created++;
+      }
+    }
+
+    return {
+      success: true,
+      walletsCreated: created
+    };
   }
 );
 

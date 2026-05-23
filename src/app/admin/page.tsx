@@ -19,6 +19,8 @@ import {
   Pencil,
   RefreshCcw,
   CreditCard,
+  Database,
+  ArrowRight
 } from 'lucide-react';
 import {
   Card,
@@ -143,6 +145,21 @@ export default function SystemAdminPortal() {
     }
   };
 
+  const handleInitializeWallets = async () => {
+    if (!confirm("Are you sure you want to initialize wallets for all organizations? This will create missing documents based on current credits.")) return;
+    setIsProcessing(true);
+    const initFn = httpsCallable(functions, 'initializeWallets');
+    try {
+      const res: any = await initFn();
+      toast({ title: "Migration Complete", description: `${res.data.walletsCreated} wallets were initialized.` });
+      await loadStats();
+    } catch (e: any) {
+      toast({ title: "Migration Failed", description: e.message, variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleSaveOrg = async () => {
     if (!editingOrg) return;
     setIsProcessing(true);
@@ -205,6 +222,14 @@ export default function SystemAdminPortal() {
           <p className="text-muted-foreground text-lg">Global multi-tenant infrastructure management.</p>
         </div>
         <div className="flex gap-4">
+          <Button 
+            variant="outline" 
+            onClick={handleInitializeWallets} 
+            disabled={isProcessing}
+            className="rounded-xl border-accent/20 text-accent font-bold hover:bg-accent/5"
+          >
+            <Database className="mr-2 h-4 w-4" /> Integrity Sync
+          </Button>
           <Button variant="outline" size="icon" onClick={loadStats} className={cn("rounded-xl transition-all", isRefreshing && "animate-spin")} disabled={isRefreshing}><RefreshCcw className="h-4 w-4" /></Button>
           <Button variant="outline" onClick={() => signOut(auth)} className="rounded-xl"><LogOut className="mr-2 h-4 w-4" /> Logout</Button>
         </div>
@@ -228,7 +253,7 @@ export default function SystemAdminPortal() {
       <div className="grid gap-6 md:grid-cols-3">
         <Card className="glass md:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-7">
-            <div><CardTitle>Organization Directory</CardTitle><CardDescription>Manage tenant lifecycles and source-of-truth wallets.</CardDescription></div>
+            <div><CardTitle>Organization Directory</CardTitle><CardDescription>Source of truth: <span className="text-primary font-bold">smsWallets ledger</span>.</CardDescription></div>
             <div className="relative w-72"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search ministries..." className="pl-10 h-11" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
           </CardHeader>
           <CardContent>
@@ -242,7 +267,17 @@ export default function SystemAdminPortal() {
                     <TableCell><div className="font-bold text-foreground">{church.name}</div><code className="text-[10px] text-primary">{church.slug}</code></TableCell>
                     <TableCell><Badge variant="outline" className="text-foreground">{church.plan || 'Starter'}</Badge></TableCell>
                     <TableCell><Badge className={cn("uppercase text-[9px] font-bold px-2 py-0.5", church.sms?.subscriptionStatus === 'active' ? "bg-accent text-white" : church.sms?.subscriptionStatus === 'suspended' ? "bg-destructive text-white" : "bg-amber-100 text-amber-700")}>{church.sms?.subscriptionStatus || 'Pending'}</Badge></TableCell>
-                    <TableCell><div className="flex items-center gap-2"><CreditCard className="h-3 w-3 text-muted-foreground" /><span className="font-mono font-bold text-foreground">{(church.sms?.credits || 0).toLocaleString()}</span></div></TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="h-3 w-3 text-muted-foreground" />
+                          <span className="font-mono font-bold text-foreground">{(church.sms?.credits || 0).toLocaleString()}</span>
+                        </div>
+                        {!church.sms?.hasWallet && (
+                          <Badge variant="destructive" className="w-fit text-[7px] px-1 py-0 leading-none">LEDGER MISSING</Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-muted-foreground"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
