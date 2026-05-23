@@ -172,7 +172,7 @@ exports.getSystemStats = onCall(
         });
       });
 
-      // Ultra-safe timestamp comparison
+      // Defensive sorting logic
       const getSeconds = (val) => {
         if (!val) return 0;
         if (val.seconds !== undefined) return val.seconds;

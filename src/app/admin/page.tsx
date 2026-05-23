@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -58,6 +57,7 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useUser, useAuth, useFunctions } from '@/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { signOut } from 'firebase/auth';
@@ -218,9 +218,11 @@ export default function SystemAdminPortal() {
       {statsError && (
         <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 animate-in fade-in zoom-in-95">
           <AlertTriangle className="h-4 w-4" />
-          <Label className="font-bold ml-2">Sync Error:</Label>
-          <span className="ml-2 text-sm">The platform stats engine returned an error. Some organization data may be stale.</span>
-          <Button variant="link" size="sm" onClick={loadStats} className="text-destructive font-bold underline ml-4">Retry Sync</Button>
+          <AlertTitle className="font-bold ml-2">Sync Error:</AlertTitle>
+          <AlertDescription className="ml-2 text-sm">
+            The platform stats engine returned an error. Some organization data may be stale.
+            <Button variant="link" size="sm" onClick={loadStats} className="text-destructive font-bold underline ml-4 p-0 h-auto">Retry Sync</Button>
+          </AlertDescription>
         </Alert>
       )}
 
