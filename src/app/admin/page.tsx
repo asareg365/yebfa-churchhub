@@ -172,7 +172,7 @@ export default function SystemAdminPortal() {
       });
       toast({ title: "Organization Updated", description: `Plan synchronized to ${editingOrg.plan}.` });
       setEditingOrg(null);
-      await loadStats(); // Re-fetch to see immediate change
+      await loadStats(); 
     } catch (e: any) {
       toast({ title: "Update Failed", description: e.message, variant: "destructive" });
     } finally {
@@ -196,15 +196,40 @@ export default function SystemAdminPortal() {
 
   const handleTopUp = async () => {
     if (!managingSmsId || !topUpAmount) return;
-    setIsProcessing(true);
-    const topUpFn = httpsCallable(functions, 'adminTopUpWallet');
+
     try {
-      await topUpFn({ churchId: managingSmsId, amount: parseInt(topUpAmount) });
-      toast({ title: "Credits Allocated", description: `${topUpAmount} SMS credits added successfully.` });
+      setIsProcessing(true);
+
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error("Admin session expired. Please login again.");
+      }
+
+      await currentUser.getIdToken(true);
+
+      const topUpFn = httpsCallable(functions, "adminTopUpWallet");
+      const res: any = await topUpFn({
+        churchId: managingSmsId,
+        amount: Number(topUpAmount),
+      });
+
+      console.log("TOPUP RESPONSE:", res.data);
+
+      toast({
+        title: "Credits Added",
+        description: `${topUpAmount} credits added successfully`,
+      });
+
       setManagingSmsId(null);
-      await loadStats(); 
+      await loadStats();
+
     } catch (e: any) {
-      toast({ title: "Top-up Failed", description: e.message, variant: "destructive" });
+      console.error("TOPUP ERROR:", e);
+      toast({
+        title: "Top-up Failed",
+        description: e.message || "Internal error",
+        variant: "destructive",
+      });
     } finally {
       setIsProcessing(false);
     }
