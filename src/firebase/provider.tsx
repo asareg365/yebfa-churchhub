@@ -5,17 +5,13 @@ import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import { auth, firestore, functions } from './index';
 
 /**
- * Firebase Context hooks now return the central singletons.
- * This maintains backwards compatibility while enforcing shared state.
+ * Firebase Provider enforces the central singletons.
+ * Components should import { auth, functions, firestore } directly from '@/firebase'.
  */
 export function FirebaseProvider({
   children,
 }: {
   children: ReactNode;
-  firebaseApp?: any; 
-  firestore?: any;
-  auth?: any;
-  functions?: any;
 }) {
   return (
     <>

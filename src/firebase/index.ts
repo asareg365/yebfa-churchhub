@@ -6,13 +6,14 @@ import { getAuth } from 'firebase/auth';
 import { getFunctions } from 'firebase/functions';
 import { firebaseConfig } from './config';
 
-// Validate config
-const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined';
-
 /**
  * SHARED FIREBASE SINGLETONS
- * Direct exports for consistent access across the app.
+ * This is the central source of truth for all Firebase services.
+ * Regional binding for Functions is enforced here (us-central1).
  */
+
+const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined';
+
 export const firebaseApp = isConfigValid 
   ? (getApps().length > 0 ? getApp() : initializeApp(firebaseConfig))
   : null as any;
@@ -21,11 +22,12 @@ export const firestore = firebaseApp ? getFirestore(firebaseApp) : null as any;
 export const auth = firebaseApp ? getAuth(firebaseApp) : null as any;
 
 /**
- * CRITICAL REGIONAL ALIGNMENT
- * Explicitly bound to us-central1 for all administrative handshakes.
+ * PRODUCTION REGION: us-central1
+ * All administrative callable handshakes are routed here.
  */
 export const functions = firebaseApp ? getFunctions(firebaseApp, "us-central1") : null as any;
 
+// Export supporting hooks and providers
 export * from './provider';
 export * from './client-provider';
 export * from './auth/use-user';
