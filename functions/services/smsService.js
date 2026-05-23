@@ -115,12 +115,16 @@ async function debitWalletTx(t, db, churchId, cost, messageId, type) {
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   }, { merge: true });
 
-  t.update(churchRef, {
-    "sms.credits": newBalance,
-    "sms.lastSentAt": admin.firestore.FieldValue.serverTimestamp(),
-    "sms.stats.sent": admin.firestore.FieldValue.increment(1),
-    [`sms.stats.${smsType}`]: admin.firestore.FieldValue.increment(1)
-  });
+  t.set(churchRef, {
+    sms: {
+      credits: newBalance,
+      lastSentAt: admin.firestore.FieldValue.serverTimestamp(),
+      stats: {
+        sent: admin.firestore.FieldValue.increment(1),
+        [smsType]: admin.firestore.FieldValue.increment(1)
+      }
+    }
+  }, { merge: true });
 
   t.set(ledgerRef, {
     churchId,
@@ -279,10 +283,14 @@ async function refundWallet(churchId, amount, reason, messageId) {
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 
-    t.update(churchRef, {
-      "sms.credits": newBalance,
-      "sms.stats.refunded": admin.firestore.FieldValue.increment(1)
-    });
+    t.set(churchRef, {
+      sms: {
+        credits: newBalance,
+        stats: {
+          refunded: admin.firestore.FieldValue.increment(1)
+        }
+      }
+    }, { merge: true });
   });
 }
 
@@ -300,12 +308,16 @@ async function resetWallet(churchId, processedBy) {
       lastResetBy: processedBy
     }, { merge: true });
 
-    t.update(churchRef, {
-      "sms.credits": 0,
-      "sms.stats.sent": 0,
-      "sms.stats.failed": 0,
-      "sms.lastResetAt": admin.firestore.FieldValue.serverTimestamp()
-    });
+    t.set(churchRef, {
+      sms: {
+        credits: 0,
+        stats: {
+          sent: 0,
+          failed: 0
+        },
+        lastResetAt: admin.firestore.FieldValue.serverTimestamp()
+      }
+    }, { merge: true });
   });
 
   return { success: true };
@@ -359,13 +371,18 @@ async function creditWallet(churchId, amount, reason, processedBy) {
     t.set(walletRef, {
       balance: newBalance,
       totalTopups: admin.firestore.FieldValue.increment(Number(amount)),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastTopupBy: processedBy,
+      lastTopupReason: reason
     }, { merge: true });
 
-    t.update(churchRef, {
-      "sms.credits": newBalance,
-      "sms.lowBalance": newBalance <= 10
-    });
+    t.set(churchRef, {
+      sms: {
+        credits: newBalance,
+        lowBalance: newBalance <= 10,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }
+    }, { merge: true });
 
     return { success: true, newBalance };
   });

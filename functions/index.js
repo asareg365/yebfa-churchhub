@@ -22,12 +22,8 @@ exports.getSystemStats = onCall(
     cors: true
   },
   async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Authentication required");
-    }
-
-    const email = request.auth.token.email?.toLowerCase().trim();
-    if (!SUPER_ADMINS.includes(email)) {
+    const email = request.auth?.token?.email?.toLowerCase().trim();
+    if (!email || !SUPER_ADMINS.includes(email)) {
       throw new HttpsError("permission-denied", "Unauthorized access");
     }
 
@@ -114,12 +110,8 @@ exports.getSystemStats = onCall(
 exports.initializeWallets = onCall(
   { region: "us-central1", cors: true },
   async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Authentication required");
-    }
-
-    const email = request.auth.token.email?.toLowerCase().trim();
-    if (!SUPER_ADMINS.includes(email)) {
+    const email = request.auth?.token?.email?.toLowerCase().trim();
+    if (!email || !SUPER_ADMINS.includes(email)) {
       throw new HttpsError("permission-denied", "Unauthorized access");
     }
 
@@ -165,25 +157,32 @@ exports.initializeWallets = onCall(
 exports.updateChurchStatus = onCall(
   { region: "us-central1", cors: true }, 
   async (request) => {
-    if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
-      throw new HttpsError("permission-denied", "Unauthorized");
+    const email = request.auth?.token?.email?.toLowerCase().trim();
+    if (!email || !SUPER_ADMINS.includes(email)) {
+      throw new HttpsError("permission-denied", "Unauthorized access");
     }
+
     const { churchId, status } = request.data;
     if (!churchId || !status) throw new HttpsError("invalid-argument", "Missing parameters");
 
     try {
       const isApproved = status === 'active';
-      await admin.firestore().collection("churches").doc(churchId).update({
-        "sms.subscriptionStatus": status,
-        "sms.approved": isApproved,
-        "sms.status": isApproved ? 'Approved' : 'Suspended',
-        "sms.enabled": isApproved,
+      await admin.firestore().collection("churches").doc(churchId).set({
+        sms: {
+          subscriptionStatus: status,
+          approved: isApproved,
+          status: isApproved ? 'Approved' : 'Suspended',
+          enabled: isApproved
+        },
         status: isApproved ? 'Approved' : 'Suspended',
-        "subscription.status": status,
+        subscription: {
+          status: status
+        },
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      }, { merge: true });
       return { success: true };
     } catch (error) { 
+      console.error("STATUS_UPDATE_ERROR:", error);
       throw new HttpsError("internal", error.message); 
     }
   }
@@ -196,22 +195,27 @@ exports.updateChurchStatus = onCall(
 exports.updateOrganization = onCall(
   { region: "us-central1", cors: true }, 
   async (request) => {
-    if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
-      throw new HttpsError("permission-denied", "Unauthorized");
+    const email = request.auth?.token?.email?.toLowerCase().trim();
+    if (!email || !SUPER_ADMINS.includes(email)) {
+      throw new HttpsError("permission-denied", "Unauthorized access");
     }
+
     const { churchId, name, slug, plan } = request.data;
     if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID");
     
     try {
-      await admin.firestore().collection("churches").doc(churchId).update({
+      await admin.firestore().collection("churches").doc(churchId).set({
         name: name || "Unnamed Ministry",
         slug: slug || "no-slug",
         plan: plan || "Starter",
-        "subscription.plan": plan || "Starter",
+        subscription: {
+          plan: plan || "Starter"
+        },
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      }, { merge: true });
       return { success: true };
     } catch (error) { 
+      console.error("ORG_UPDATE_ERROR:", error);
       throw new HttpsError("internal", error.message); 
     }
   }
@@ -223,16 +227,19 @@ exports.updateOrganization = onCall(
 exports.adminResetWallet = onCall(
   { region: "us-central1", cors: true }, 
   async (request) => {
-    if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
-      throw new HttpsError("permission-denied", "Unauthorized");
+    const email = request.auth?.token?.email?.toLowerCase().trim();
+    if (!email || !SUPER_ADMINS.includes(email)) {
+      throw new HttpsError("permission-denied", "Unauthorized access");
     }
+
     const { churchId } = request.data;
     if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID");
 
     try {
-      const result = await resetWallet(churchId, request.auth.token.email);
+      const result = await resetWallet(churchId, email);
       return result;
     } catch (error) {
+      console.error("RESET_WALLET_ERROR:", error);
       throw new HttpsError("internal", error.message);
     }
   }
@@ -244,16 +251,19 @@ exports.adminResetWallet = onCall(
 exports.adminTopUpWallet = onCall(
   { region: "us-central1", cors: true }, 
   async (request) => {
-    if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
-      throw new HttpsError("permission-denied", "Unauthorized");
+    const email = request.auth?.token?.email?.toLowerCase().trim();
+    if (!email || !SUPER_ADMINS.includes(email)) {
+      throw new HttpsError("permission-denied", "Unauthorized access");
     }
+
     const { churchId, amount } = request.data;
-    if (!churchId || !amount) throw new HttpsError("invalid-argument", "Missing top-up details");
+    if (!churchId || amount === undefined) throw new HttpsError("invalid-argument", "Missing top-up details");
 
     try { 
-      const result = await creditWallet(churchId, Number(amount), "admin_manual", request.auth.token.email); 
+      const result = await creditWallet(churchId, Number(amount), "admin_manual", email); 
       return result;
     } catch (error) { 
+      console.error("TOPUP_ERROR:", error);
       throw new HttpsError("internal", error.message); 
     }
   }
