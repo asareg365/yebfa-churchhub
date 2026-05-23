@@ -86,7 +86,7 @@ exports.mnotifyDeliveryWebhook = onRequest(
 
       if (logQuery.empty) {
         console.warn(`Webhook: Provider ID ${message_id} not found.`);
-        return res.status(404).send("Log record not found");
+        return res.status(200).send("Log record not found (Ignored)");
       }
 
       const logDoc = logQuery.docs[0];
@@ -145,7 +145,7 @@ exports.getSystemStats = onCall(
 
       const churchList = churchesSnap.docs.map(doc => {
         const data = doc.data();
-        const wallet = walletMap.get(doc.id) || { balance: 0, totalTopups: 0 };
+        const wallet = walletMap.get(doc.id) || { balance: 0, totalTopups: 0, totalSpent: 0 };
         
         const sent = Number(data.sms?.stats?.sent || wallet.totalSpent || 0);
         const failed = Number(data.sms?.stats?.failed || 0);

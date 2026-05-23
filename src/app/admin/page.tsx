@@ -85,7 +85,6 @@ export default function SystemAdminPortal() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const loadStats = async () => {
-    // FIX: Guard against missing auth session
     if (!auth.currentUser) return;
     
     setIsRefreshing(true);
@@ -119,7 +118,6 @@ export default function SystemAdminPortal() {
     }
   }, [user, userLoading, router]);
 
-  // FIX: Resolve race condition by ensuring auth is ready
   useEffect(() => {
     if (user && auth.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
