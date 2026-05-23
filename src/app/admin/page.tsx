@@ -194,17 +194,27 @@ export default function SystemAdminPortal() {
     }
   };
 
+  if (userLoading || !auth.currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   const handleTopUp = async () => {
     if (!managingSmsId || !topUpAmount) return;
 
     try {
       setIsProcessing(true);
 
+      // HARD AUTH CHECK
       const currentUser = auth.currentUser;
       if (!currentUser) {
         throw new Error("Admin session expired. Please login again.");
       }
 
+      // FORCE TOKEN REFRESH
       await currentUser.getIdToken(true);
 
       const topUpFn = httpsCallable(functions, "adminTopUpWallet");
@@ -234,10 +244,6 @@ export default function SystemAdminPortal() {
       setIsProcessing(false);
     }
   };
-
-  if (userLoading || (user && !SUPER_ADMINS.includes(user.email?.toLowerCase() || ''))) {
-    return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
-  }
 
   return (
     <div className="min-h-screen bg-background p-8 space-y-8">
