@@ -10,14 +10,11 @@ if (admin.apps.length === 0) {
 const MNOTIFY_API_KEY = defineSecret("MNOTIFY_API_KEY");
 const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 
-const { dispatchAllBirthdays } = require("./schedulers/birthdayScheduler");
-const { processVisitorFollowups } = require("./schedulers/visitorScheduler");
-const { processEventReminders } = require("./schedulers/eventScheduler");
-const { retryFailedSMS } = require("./schedulers/retryScheduler");
 const { processSMSQueueItem, queueSMS, creditWallet } = require("./services/smsService");
 
 /**
  * ADMIN: System Stats Aggregation (v2 Callable)
+ * STRICT MAPPING: DO NOT RETURN RAW DOCS
  */
 exports.getSystemStats = onCall(async (request) => {
   try {
@@ -33,32 +30,47 @@ exports.getSystemStats = onCall(async (request) => {
     const db = admin.firestore();
     const churchesSnap = await db.collection("churches").get();
 
-    const churches = churchesSnap.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    // STRICT DATA SANITIZATION: Explicitly return only clean fields
+    const churches = churchesSnap.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        name: data.name || "Unnamed Ministry",
+        slug: data.slug || "",
+        plan: data.plan || "Starter",
+        registeredAt: data.registeredAt?.toDate ? data.registeredAt.toDate().toISOString() : null,
+        sms: {
+          credits: Number(data.sms?.credits || 0),
+          sent: Number(data.sms?.sent || 0),
+          failed: Number(data.sms?.failed || 0),
+          totalTopups: Number(data.sms?.totalTopups || 0),
+          subscriptionStatus: data.sms?.subscriptionStatus || "pending"
+        }
+      };
+    });
 
-    const totalRevenue = churches.reduce((sum, c) => sum + Number(c.sms?.totalTopups || 0), 0);
-    const totalSent = churches.reduce((sum, c) => sum + Number(c.sms?.sent || 0), 0);
-    const totalFailed = churches.reduce((sum, c) => sum + Number(c.sms?.failed || 0), 0);
+    const totalRevenue = churches.reduce((sum, c) => sum + Number(c.sms.totalTopups || 0), 0);
+    const totalSent = churches.reduce((sum, c) => sum + Number(c.sms.sent || 0), 0);
+    const totalFailed = churches.reduce((sum, c) => sum + Number(c.sms.failed || 0), 0);
 
     return {
       churches: churches.sort((a, b) => {
-        const getSec = (v) => v?.seconds || (v ? new Date(v).getTime() / 1000 : 0);
-        return getSec(b.registeredAt) - getSec(a.registeredAt);
+        const dateA = a.registeredAt ? new Date(a.registeredAt).getTime() : 0;
+        const dateB = b.registeredAt ? new Date(b.registeredAt).getTime() : 0;
+        return dateB - dateA;
       }),
       totalTenants: churches.length,
-      activeTenants: churches.filter(c => c.sms?.subscriptionStatus === "active").length,
+      activeTenants: churches.filter(c => c.sms.subscriptionStatus === "active").length,
       totalRevenue,
       totalSent,
       totalFailed,
       topSpenders: churches
-        .sort((a, b) => Number(b.sms?.sent || 0) - Number(a.sms?.sent || 0))
+        .sort((a, b) => Number(b.sms.sent || 0) - Number(a.sms.sent || 0))
         .slice(0, 5)
         .map(c => ({
           name: c.name,
-          sent: c.sms?.sent || 0,
-          balance: c.sms?.credits || 0
+          sent: c.sms.sent || 0,
+          balance: c.sms.credits || 0
         }))
     };
   } catch (error) {

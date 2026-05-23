@@ -82,7 +82,7 @@ export default function SystemAdminPortal() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const loadStats = async () => {
-    // Only attempt fetch if user session and auth instance are fully ready
+    // FIX 4: WAIT FOR AUTH SESSION
     if (!auth.currentUser) return;
     
     setIsRefreshing(true);
@@ -117,13 +117,14 @@ export default function SystemAdminPortal() {
   }, [user, userLoading, router]);
 
   useEffect(() => {
-    // RESOLVED RACE CONDITION: Wait for both user state and the underlying currentUser token
+    // FIX 4: RESOLVED RACE CONDITION
     if (user && auth.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
   }, [user, auth.currentUser]);
 
   const filteredChurches = useMemo(() => {
+    // FIX 3: DEFENSIVE MAPPING
     const list = platformStats?.churches;
     if (!Array.isArray(list)) return [];
     return list.filter((c: any) =>
@@ -205,7 +206,7 @@ export default function SystemAdminPortal() {
     <div className="min-h-screen bg-background p-8 space-y-8">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-4xl font-bold tracking-tight mb-1 flex items-center gap-3">
+          <h2 className="text-4xl font-bold tracking-tight mb-1 text-foreground flex items-center gap-3">
             <ShieldCheck className="h-10 w-10 text-primary" />
             System Control Center
           </h2>
@@ -232,6 +233,7 @@ export default function SystemAdminPortal() {
         </Alert>
       )}
 
+      {/* FIX 5: SAFE GUARDED FORMATTING */}
       <div className="grid gap-6 md:grid-cols-4">
         <Card className="glass border-primary/20">
           <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Users className="w-3 h-3"/> Total Tenants</CardTitle></CardHeader>
@@ -293,8 +295,8 @@ export default function SystemAdminPortal() {
                   </TableRow>
                 ) : filteredChurches.map((church: any) => (
                   <TableRow key={church.id}>
-                    <TableCell><div className="font-bold">{church.name}</div><code className="text-[10px] text-primary">{church.slug}</code></TableCell>
-                    <TableCell><Badge variant="outline">{church.plan || 'Starter'}</Badge></TableCell>
+                    <TableCell><div className="font-bold text-foreground">{church.name}</div><code className="text-[10px] text-primary">{church.slug}</code></TableCell>
+                    <TableCell><Badge variant="outline" className="text-foreground">{church.plan || 'Starter'}</Badge></TableCell>
                     <TableCell>
                       <Badge className={cn(
                         "uppercase text-[9px] font-bold px-2 py-0.5",
@@ -307,13 +309,13 @@ export default function SystemAdminPortal() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <CreditCard className="h-3 w-3 text-muted-foreground" />
-                        <span className="font-mono font-bold">{(church.sms?.credits || 0).toLocaleString()}</span>
+                        <span className="font-mono font-bold text-foreground">{(church.sms?.credits || 0).toLocaleString()}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-muted-foreground"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48 glass">
                           <DropdownMenuItem onClick={() => setEditingOrg(church)} className="font-bold"><Pencil className="mr-2 h-4 w-4" /> Edit Details</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setManagingSmsId(church.id)} className="font-bold text-primary"><Zap className="mr-2 h-4 w-4" /> Top-up Wallet</DropdownMenuItem>
                           <DropdownMenuSeparator />
@@ -337,19 +339,20 @@ export default function SystemAdminPortal() {
           </CardContent>
         </Card>
 
+        {/* FIX 3: SAFE MAPPING FOR LEADERBOARD */}
         <Card className="glass h-fit">
           <CardHeader>
-            <CardTitle className="text-sm font-bold uppercase tracking-widest">Top Active Tenants</CardTitle>
+            <CardTitle className="text-sm font-bold uppercase tracking-widest text-foreground">Top Active Tenants</CardTitle>
             <CardDescription className="text-xs">Based on total SMS dispatches.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {(Array.isArray(platformStats?.topSpenders) ? platformStats.topSpenders : []).map((spener: any, i: number) => (
+            {(Array.isArray(platformStats?.topSpenders) ? platformStats.topSpenders : []).map((spender: any, i: number) => (
               <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border group hover:border-primary/20 transition-all">
                 <div className="flex items-center gap-3">
                   <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">#{i + 1}</div>
-                  <div><p className="text-xs font-bold truncate max-w-[120px]">{spener.name}</p><p className="text-[10px] text-muted-foreground">{(spener.sent || 0).toLocaleString()} Msgs</p></div>
+                  <div><p className="text-xs font-bold truncate max-w-[120px] text-foreground">{spender.name}</p><p className="text-[10px] text-muted-foreground">{(spender.sent || 0).toLocaleString()} Msgs</p></div>
                 </div>
-                <div className="text-right"><p className="text-[10px] font-bold text-accent">{(spener.balance || 0).toLocaleString()} Cr</p></div>
+                <div className="text-right"><p className="text-[10px] font-bold text-accent">{(spender.balance || 0).toLocaleString()} Cr</p></div>
               </div>
             ))}
             {!platformStats && !statsError && <div className="py-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}
@@ -370,7 +373,7 @@ export default function SystemAdminPortal() {
           <div className="py-6 space-y-4">
             <div className="p-4 rounded-xl bg-muted/20 border flex justify-between items-center">
               <span className="text-sm font-medium">Current Balance:</span>
-              <span className="text-xl font-bold">{(activeChurchSms?.sms?.credits || 0).toLocaleString()} Credits</span>
+              <span className="text-xl font-bold text-foreground">{(activeChurchSms?.sms?.credits || 0).toLocaleString()} Credits</span>
             </div>
             <div className="space-y-2">
               <Label>SMS Credits to Add</Label>
@@ -394,11 +397,11 @@ export default function SystemAdminPortal() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Ministry Name</Label>
-                  <Input value={editingOrg.name} onChange={(e) => setEditingOrg({...editingOrg, name: e.target.value})} />
+                  <Input value={editingOrg.name} onChange={(e) => setEditingOrg({...editingOrg, name: e.target.value})} className="bg-white" />
                 </div>
                 <div className="space-y-2">
                   <Label>Tenant Slug (System ID)</Label>
-                  <Input value={editingOrg.slug} onChange={(e) => setEditingOrg({...editingOrg, slug: e.target.value})} />
+                  <Input value={editingOrg.slug} onChange={(e) => setEditingOrg({...editingOrg, slug: e.target.value})} className="bg-white" />
                 </div>
               </div>
               <div className="space-y-2">
@@ -406,7 +409,7 @@ export default function SystemAdminPortal() {
                 <Textarea 
                    value={Array.isArray(editingOrg.adminEmails) ? editingOrg.adminEmails.join(', ') : editingOrg.adminEmails} 
                    onChange={(e) => setEditingOrg({...editingOrg, adminEmails: e.target.value})} 
-                   className="h-24 font-mono text-xs"
+                   className="h-24 font-mono text-xs bg-white"
                 />
               </div>
               <div className="space-y-2">
@@ -428,7 +431,7 @@ export default function SystemAdminPortal() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingOrg(null)}>Cancel</Button>
-            <Button onClick={handleUpdateOrg} disabled={isProcessing}>
+            <Button onClick={handleUpdateOrg} disabled={isProcessing} className="bg-primary text-primary-foreground">
               {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ShieldCheck className="h-4 w-4 mr-2" />}
               Save All Changes
             </Button>
