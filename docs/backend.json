@@ -10,7 +10,12 @@
         "status": { "type": "string" },
         "joined": { "type": "string" },
         "dateOfBirth": { "type": "string", "format": "date" },
-        "birthdayKey": { "type": "string", "description": "MMDD index" }
+        "birthdayKey": { "type": "string", "description": "MMDD index" },
+        "societies": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "List of church societies or groups the member belongs to."
+        }
       }
     },
     "SMSWallet": {

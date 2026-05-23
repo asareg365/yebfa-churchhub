@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -81,7 +82,7 @@ export default function SystemAdminPortal() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const loadStats = async () => {
-    // Only fetch if session is established to prevent unauthenticated errors
+    // Only fetch if session is fully established and authenticated
     if (!auth.currentUser) return;
     
     setIsRefreshing(true);
@@ -116,7 +117,7 @@ export default function SystemAdminPortal() {
   }, [user, userLoading, router]);
 
   useEffect(() => {
-    // Race Condition Fix: Wait for both user and auth.currentUser to be ready
+    // Correct Version Fix: Wait for both user and auth.currentUser to be ready
     if (user && auth.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
@@ -172,7 +173,7 @@ export default function SystemAdminPortal() {
   };
 
   const handleResetBalance = async (churchId: string) => {
-    if (!confirm("Are you sure you want to WIPe this organization's balance to 0? This fixes sync issues.")) return;
+    if (!confirm("Are you sure you want to WIPE this organization's balance to 0? This fixes sync issues.")) return;
     setIsProcessing(true);
     const resetFn = httpsCallable(functions, 'adminResetWallet');
     try {

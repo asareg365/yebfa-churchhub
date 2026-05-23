@@ -1,3 +1,4 @@
+
 const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
@@ -14,6 +15,7 @@ const { processSMSQueueItem, queueSMS, creditWallet, resetWallet } = require("./
 
 /**
  * ADMIN: System Stats Aggregation (v2 Callable)
+ * Uses high-integrity safe aggregation logic.
  */
 exports.getSystemStats = onCall(
   {
@@ -21,20 +23,20 @@ exports.getSystemStats = onCall(
     cors: true
   },
   async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication required");
+    }
+
+    const email = request.auth.token.email?.toLowerCase();
+    if (!SUPER_ADMINS.includes(email)) {
+      throw new HttpsError("permission-denied", "Unauthorized access");
+    }
+
     try {
-      if (!request.auth) {
-        throw new HttpsError("unauthenticated", "Authentication required");
-      }
-
-      const email = request.auth.token.email?.toLowerCase();
-      if (!SUPER_ADMINS.includes(email)) {
-        throw new HttpsError("permission-denied", "Unauthorized access");
-      }
-
       const db = admin.firestore();
       const churchesSnap = await db.collection("churches").get();
 
-      // Defensive Data Mapping: Prevents serialization crashes from raw Firestore objects
+      // Defensive Data Mapping: Prevents serialization crashes from raw Firestore objects (like Timestamps)
       const churches = churchesSnap.docs.map(doc => {
         const d = doc.data();
         return {
@@ -43,7 +45,6 @@ exports.getSystemStats = onCall(
           slug: d.slug || "no-slug",
           plan: d.plan || "Starter",
           registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : (d.registeredAt ? String(d.registeredAt) : null),
-          updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate().toISOString() : (d.updatedAt ? String(d.updatedAt) : null),
           sms: {
             credits: Number(d.sms?.credits || 0),
             sent: Number(d.sms?.stats?.sent || 0),
@@ -69,7 +70,7 @@ exports.getSystemStats = onCall(
       });
 
       const topSpenders = churches
-        .sort((a, b) => (b.sms?.sent || 0) - (a.sms?.sent || 0))
+        .sort((a, b) => (Number(b.sms?.sent || 0)) - (Number(a.sms?.sent || 0)))
         .slice(0, 5)
         .map(c => ({
           name: c.name,

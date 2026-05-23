@@ -13,7 +13,9 @@ import {
   Check, 
   Pencil,
   AlertTriangle,
-  Download
+  Download,
+  ChevronDown,
+  Layers
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,18 +46,32 @@ import {
   AlertDialogHeader, 
   AlertDialogTitle 
 } from "@/components/ui/alert-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useCollection, useFirestore, useUser } from "@/firebase";
 import { collection, addDoc, serverTimestamp, doc, deleteDoc, query, where, limit, writeBatch, updateDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
 const DEPARTMENTS = ["Music", "Youth", "Media", "Children", "Welfare", "Ushering", "Evangelism"];
+const STANDARD_SOCIETIES = [
+  "Knights of Columbus",
+  "Catholic Women Association",
+  "Catholic Youth Organization",
+  "Sacred Heart of Jesus",
+  "St. Vincent de Paul",
+  "Legion of Mary",
+  "Charismatic Renewal",
+  "Christian Mothers",
+  "Men's Fellowship",
+  "Women's Fellowship"
+];
 
 export default function MembersPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -67,6 +83,7 @@ export default function MembersPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [memberToDelete, setMemberToDelete] = useState<any>(null);
   const [editingMember, setEditingMember] = useState<any>(null);
+  const [customSocietyInput, setCustomSocietyInput] = useState("");
 
   const db = useFirestore();
   const { user } = useUser();
@@ -88,7 +105,8 @@ export default function MembersPage() {
     status: "Active" as const,
     gender: "Male" as const,
     dateOfBirth: "",
-    phone: ""
+    phone: "",
+    societies: [] as string[]
   });
 
   const calculateBirthdayKey = (dobString: string) => {
@@ -115,7 +133,7 @@ export default function MembersPage() {
     try {
       await addDoc(membersRef, memberData);
       setIsAddDialogOpen(false);
-      setNewMember({ name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "", phone: "" });
+      setNewMember({ name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "", phone: "", societies: [] });
       toast({ title: "Member added successfully" });
     } catch (e) {
       toast({ title: "Save failed", variant: "destructive" });
@@ -134,6 +152,7 @@ export default function MembersPage() {
         status: editingMember.status,
         dateOfBirth: editingMember.dateOfBirth,
         birthdayKey: calculateBirthdayKey(editingMember.dateOfBirth),
+        societies: editingMember.societies || [],
         updatedAt: serverTimestamp()
       });
       setIsEditDialogOpen(false);
@@ -155,47 +174,31 @@ export default function MembersPage() {
     }
   };
 
-  const handleBulkImport = async () => {
-    if (!bulkData || !membersRef || !currentChurch) return;
-    setIsImporting(true);
-    const batch = writeBatch(db);
-    const lines = bulkData.split("\n");
-    let count = 0;
-
-    try {
-      for (const line of lines) {
-        const [name, phone, dob, gender, dept] = line.split(",").map(s => s?.trim());
-        if (!name || !dob) continue;
-
-        const newDocRef = doc(membersRef);
-        batch.set(newDocRef, {
-          name,
-          phone: phone || "",
-          dateOfBirth: dob,
-          birthdayKey: calculateBirthdayKey(dob),
-          gender: gender || "Male",
-          department: dept || "General",
-          status: "Active",
-          joined: new Date().toISOString().split('T')[0],
-          createdAt: serverTimestamp(),
-          photo: `https://picsum.photos/seed/${Math.random()}/100/100`
-        });
-        count++;
-      }
-
-      await batch.commit();
-      toast({ title: "Import successful", description: `${count} members added to directory.` });
-      setBulkData("");
-      setIsBulkImportOpen(false);
-    } catch (error: any) {
-      toast({ title: "Import failed", description: error.message, variant: "destructive" });
-    } finally {
-      setIsImporting(false);
+  const toggleSociety = (society: string, isEdit: boolean) => {
+    if (isEdit) {
+      const current = editingMember.societies || [];
+      const updated = current.includes(society) 
+        ? current.filter((s: string) => s !== society) 
+        : [...current, society];
+      setEditingMember({ ...editingMember, societies: updated });
+    } else {
+      const current = newMember.societies || [];
+      const updated = current.includes(society) 
+        ? current.filter((s: string) => s !== society) 
+        : [...current, society];
+      setNewMember({ ...newMember, societies: updated });
     }
   };
 
+  const addCustomSociety = (isEdit: boolean) => {
+    const val = customSocietyInput.trim();
+    if (!val) return;
+    toggleSociety(val, isEdit);
+    setCustomSocietyInput("");
+  };
+
   const filteredMembers = useMemo(() => {
-    return (members || []).filter(m => {
+    return (Array.isArray(members) ? members : []).filter(m => {
       const matchesSearch = (m.name?.toLowerCase().includes(searchTerm.toLowerCase()) || m.department?.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesStatus = statusTab === "all" || m.status?.toLowerCase() === statusTab.toLowerCase();
       return matchesSearch && matchesStatus;
@@ -216,7 +219,7 @@ export default function MembersPage() {
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild><Button className="flex-1 md:flex-none bg-primary" disabled={!currentChurch}><Plus className="mr-2 h-4 w-4" /> Add Member</Button></DialogTrigger>
             <DialogContent className="glass max-w-2xl">
-              <DialogHeader><DialogTitle>Add New Member</DialogTitle><DialogDescription>Birth dates must be YYYY-MM-DD for automation to function.</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>Add New Member</DialogTitle><DialogDescription>Societies and group memberships are now active.</DialogDescription></DialogHeader>
               <div className="space-y-6 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label>Full Name</Label><Input value={newMember.name} onChange={(e) => setNewMember({...newMember, name: e.target.value})} placeholder="John Doe" /></div>
@@ -225,6 +228,16 @@ export default function MembersPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label>Phone</Label><Input value={newMember.phone} onChange={(e) => setNewMember({...newMember, phone: e.target.value})} placeholder="0240000000" /></div>
                   <div className="space-y-2"><Label>Date of Birth</Label><Input type="date" value={newMember.dateOfBirth} onChange={(e) => setNewMember({...newMember, dateOfBirth: e.target.value})} /></div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Societies & Groups</Label>
+                  <SocietySelector 
+                    selected={newMember.societies} 
+                    onToggle={(s) => toggleSociety(s, false)} 
+                    customInput={customSocietyInput}
+                    setCustomInput={setCustomSocietyInput}
+                    onAddCustom={() => addCustomSociety(false)}
+                  />
                 </div>
               </div>
               <DialogFooter><Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button><Button onClick={handleAddMember}>Save Member</Button></DialogFooter>
@@ -253,8 +266,8 @@ export default function MembersPage() {
               <TableHeader className="bg-white/5">
                 <TableRow>
                   <TableHead className="w-[80px]"></TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>DOB</TableHead>
+                  <TableHead>Member Info</TableHead>
+                  <TableHead>Societies</TableHead>
                   <TableHead>Department</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -264,10 +277,29 @@ export default function MembersPage() {
                 {filteredMembers.map((member) => (
                   <TableRow key={member.id} className="hover:bg-white/5 border-white/5 transition-colors">
                     <TableCell><Avatar className="h-10 w-10 border border-white/10"><AvatarImage src={member.photo} /><AvatarFallback>{member.name?.charAt(0)}</AvatarFallback></Avatar></TableCell>
-                    <TableCell><div className="font-semibold">{member.name}</div><div className="text-[10px] text-muted-foreground">{member.phone}</div></TableCell>
-                    <TableCell className="text-xs font-mono">{member.dateOfBirth}</TableCell>
+                    <TableCell>
+                      <div className="font-semibold">{member.name}</div>
+                      <div className="text-[10px] text-muted-foreground flex items-center gap-2">
+                        <span>{member.phone}</span>
+                        <span>•</span>
+                        <span>{member.dateOfBirth}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1 max-w-[200px]">
+                        {Array.isArray(member.societies) && member.societies.length > 0 ? (
+                          member.societies.map((s: string) => (
+                            <Badge key={s} variant="outline" className="text-[8px] px-1 py-0 border-primary/20 text-primary uppercase font-bold">
+                              {s}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-[9px] text-muted-foreground italic">None</span>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell><Badge variant="secondary" className="bg-primary/10 text-primary border-0">{member.department}</Badge></TableCell>
-                    <TableCell><Badge variant="outline" className={cn("capitalize", member.status === 'Active' ? 'text-accent border-accent/20' : 'text-muted-foreground')}>{member.status}</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className={cn("capitalize text-[10px]", member.status === 'Active' ? 'text-accent border-accent/20' : 'text-muted-foreground')}>{member.status}</Badge></TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
@@ -310,6 +342,16 @@ export default function MembersPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2"><Label>Phone</Label><Input value={editingMember.phone} onChange={(e) => setEditingMember({...editingMember, phone: e.target.value})} /></div>
                 <div className="space-y-2"><Label>Date of Birth</Label><Input type="date" value={editingMember.dateOfBirth} onChange={(e) => setEditingMember({...editingMember, dateOfBirth: e.target.value})} /></div>
+              </div>
+              <div className="space-y-2">
+                  <Label>Societies & Groups</Label>
+                  <SocietySelector 
+                    selected={editingMember.societies || []} 
+                    onToggle={(s) => toggleSociety(s, true)} 
+                    customInput={customSocietyInput}
+                    setCustomInput={setCustomSocietyInput}
+                    onAddCustom={() => addCustomSociety(true)}
+                  />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -357,38 +399,63 @@ export default function MembersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Bulk Import Dialog */}
-      <Dialog open={isBulkImportOpen} onOpenChange={setIsBulkImportOpen}>
-        <DialogContent className="glass max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><FileUp className="w-5 h-5 text-primary" /> Bulk Directory Import</DialogTitle>
-            <DialogDescription>Paste your comma-separated member list below. Format: <strong>Name, Phone, DOB (YYYY-MM-DD), Gender, Department</strong></DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <Textarea 
-              placeholder="Ama Mensah, 0240000000, 1995-05-21, Female, Music" 
-              className="min-h-[300px] font-mono text-xs bg-muted/20"
-              value={bulkData}
-              onChange={(e) => setBulkData(e.target.value)}
-            />
-            <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 flex items-start gap-3">
-               <Download className="w-5 h-5 text-primary mt-1" />
-               <div className="text-xs space-y-1">
-                 <p className="font-bold text-primary">Formatting Tip</p>
-                 <p className="text-muted-foreground">Each line represents one member. Ensure dates are in YYYY-MM-DD format to enable automated birthday greetings.</p>
-               </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsBulkImportOpen(false)}>Cancel</Button>
-            <Button onClick={handleBulkImport} disabled={isImporting || !bulkData}>
-              {isImporting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
-              Import Members
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
+  );
+}
+
+function SocietySelector({ selected, onToggle, customInput, setCustomInput, onAddCustom }: any) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-full justify-between h-11 bg-muted/20 border-white/10">
+          <span className="truncate">{selected.length > 0 ? `${selected.length} Selected` : "Select Societies"}</span>
+          <ChevronDown className="h-4 w-4 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-0 glass overflow-hidden" align="start">
+        <ScrollArea className="h-64 p-2">
+           <div className="space-y-1">
+             {STANDARD_SOCIETIES.map(s => {
+               const isSelected = selected.includes(s);
+               return (
+                 <button 
+                   key={s} 
+                   className={cn(
+                     "w-full flex items-center justify-between p-2 rounded-lg text-sm transition-all",
+                     isSelected ? "bg-primary/20 text-primary font-bold" : "hover:bg-muted"
+                   )}
+                   onClick={() => onToggle(s)}
+                 >
+                   {s}
+                   {isSelected && <Check className="h-3 w-3" />}
+                 </button>
+               );
+             })}
+             {selected.filter((s: string) => !STANDARD_SOCIETIES.includes(s)).map((s: string) => (
+               <button 
+                 key={s} 
+                 className="w-full flex items-center justify-between p-2 rounded-lg text-sm bg-primary/20 text-primary font-bold"
+                 onClick={() => onToggle(s)}
+               >
+                 {s}
+                 <Check className="h-3 w-3" />
+               </button>
+             ))}
+           </div>
+        </ScrollArea>
+        <div className="p-3 border-t border-white/10 bg-muted/20">
+          <div className="flex gap-2">
+            <Input 
+              placeholder="Add other..." 
+              className="h-9 text-xs" 
+              value={customInput} 
+              onChange={e => setCustomInput(e.target.value)} 
+              onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), onAddCustom())}
+            />
+            <Button size="icon" className="h-9 w-9 shrink-0" onClick={onAddCustom}><Plus className="h-4 w-4" /></Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
