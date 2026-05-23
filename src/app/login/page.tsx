@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
@@ -210,9 +209,7 @@ function LoginContent() {
       <div className="mb-8 text-center animate-in fade-in slide-in-from-top-4 duration-700">
         <Link href="/" className="flex flex-col items-center gap-4 justify-center mb-4">
           <div className="w-16 h-16 rounded-[1.25rem] bg-white flex items-center justify-center border border-border shadow-lg">
-             <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center">
-                <CrossIcon className="w-6 h-6 text-primary" />
-             </div>
+             <CrossIcon className="w-10 h-10 text-primary" />
           </div>
           <span className="font-headline text-lg font-bold tracking-tighter text-foreground">CHURCHHUB</span>
         </Link>

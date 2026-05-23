@@ -87,10 +87,8 @@ export default function DashboardLayout({
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-6 animate-in fade-in duration-1000">
-          <div className="w-24 h-24 bg-white rounded-[2rem] shadow-2xl flex items-center justify-center relative overflow-hidden border border-border">
-            <div className="w-16 h-16 bg-black rounded-full flex items-center justify-center">
-               <CrossIcon className="w-10 h-10 text-primary" />
-            </div>
+          <div className="w-20 h-20 bg-white rounded-3xl shadow-2xl flex items-center justify-center border border-border">
+             <CrossIcon className="w-12 h-12 text-primary" />
           </div>
           <div className="text-center space-y-3">
             <h2 className="font-headline text-xl font-bold tracking-tighter text-foreground">CHURCHHUB</h2>

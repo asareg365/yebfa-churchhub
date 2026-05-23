@@ -77,10 +77,8 @@ export default function AdminLoginPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-6 animate-in fade-in duration-1000">
-          <div className="w-24 h-24 bg-white rounded-[2rem] shadow-2xl flex items-center justify-center border border-border">
-            <div className="w-16 h-16 bg-black rounded-full flex items-center justify-center">
-               <CrossIcon className="w-10 h-10 text-primary" />
-            </div>
+          <div className="w-20 h-20 bg-white rounded-3xl shadow-2xl flex items-center justify-center border border-border">
+             <CrossIcon className="w-12 h-12 text-primary" />
           </div>
           <div className="text-center space-y-2">
             <h2 className="font-headline text-xl font-bold tracking-tighter text-foreground">SYSTEM ADMIN</h2>
@@ -103,11 +101,9 @@ export default function AdminLoginPage() {
           <ArrowLeft className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm text-muted-foreground font-medium">Back to Public Site</span>
         </Link>
-        <div className="flex items-center gap-2 justify-center mb-4">
-          <div className="w-16 h-16 rounded-[1.25rem] bg-white flex items-center justify-center border border-border shadow-lg">
-             <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center">
-                <ShieldCheck className="w-6 h-6 text-primary" />
-             </div>
+        <div className="flex items-center gap-4 justify-center mb-4">
+          <div className="w-14 h-14 rounded-2xl bg-white flex items-center justify-center border border-border shadow-lg">
+             <CrossIcon className="w-8 h-8 text-primary" />
           </div>
           <span className="font-headline text-lg font-bold tracking-tighter text-foreground">SYSTEM ADMIN</span>
         </div>

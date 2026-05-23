@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -66,7 +65,7 @@ const CrossIcon = () => (
     strokeWidth="3" 
     strokeLinecap="round" 
     strokeLinejoin="round" 
-    className="w-5 h-5 text-primary"
+    className="w-6 h-6 text-primary"
   >
     <path d="M12 4v16M8 9h8" />
   </svg>
