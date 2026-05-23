@@ -111,7 +111,7 @@ exports.mnotifyDeliveryWebhook = onRequest(
 );
 
 /**
- * ADMIN: System Stats & Organization List (FIX OPTION 1 - Standardized Callable)
+ * ADMIN: System Stats & Organization List (Standardized v2 Callable)
  */
 exports.getSystemStats = onCall(
   { region: "us-central1" },
@@ -147,9 +147,10 @@ exports.getSystemStats = onCall(
         const data = doc.data();
         const wallet = walletMap.get(doc.id) || { balance: 0, totalTopups: 0, totalSpent: 0 };
         
+        // Accurate statistics aggregation from church and wallet data
         const sent = Number(data.sms?.stats?.sent || wallet.totalSpent || 0);
         const failed = Number(data.sms?.stats?.failed || 0);
-        const revenue = Number(wallet.totalTopups || 0);
+        const revenue = Number(wallet.totalTopups || data.sms?.totalTopups || 0);
 
         totalRevenue += revenue;
         totalSent += sent;

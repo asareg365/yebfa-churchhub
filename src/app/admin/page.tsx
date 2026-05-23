@@ -12,16 +12,13 @@ import {
   Zap,
   CheckCircle,
   Ban,
-  Activity,
-  CreditCard,
   TrendingUp,
   DollarSign,
   Users,
-  Info,
-  Target,
   AlertTriangle,
   Pencil,
-  RefreshCcw
+  RefreshCcw,
+  CreditCard
 } from 'lucide-react';
 import {
   Card,
@@ -85,7 +82,7 @@ export default function SystemAdminPortal() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const loadStats = async () => {
-    // Only attempt fetch if user session is fully established
+    // Only attempt fetch if user session and auth instance are fully ready
     if (!auth.currentUser) return;
     
     setIsRefreshing(true);
@@ -120,7 +117,7 @@ export default function SystemAdminPortal() {
   }, [user, userLoading, router]);
 
   useEffect(() => {
-    // Standardized check for auth session before handshaking with backend
+    // RESOLVED RACE CONDITION: Wait for both user state and the underlying currentUser token
     if (user && auth.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
