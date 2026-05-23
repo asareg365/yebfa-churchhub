@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
@@ -155,6 +156,13 @@ function LoginContent() {
             refunded: 0,
             queued: 0
           }
+        },
+        subscription: {
+          plan: 'Basic',
+          status: 'pending',
+          renewalDate: '1st of Month',
+          smsCredits: 0,
+          smsUsed: 0
         },
         mustChangePassword: false,
         registeredAt: serverTimestamp(),

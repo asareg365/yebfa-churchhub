@@ -223,6 +223,18 @@ async function processSMSQueueItem(apiKey, messageId, data) {
   } catch (error) {
     console.error(`[Pipeline Error] ${messageId}:`, error.message);
     
+    // Reconciliation: If credit error, sync the cache immediately
+    if (error.message.includes("Insufficient SMS credits")) {
+      const walletSnap = await db.collection("smsWallets").doc(churchId).get();
+      const realBalance = walletSnap.exists ? Number(walletSnap.data().balance || 0) : 0;
+      
+      await db.collection("churches").doc(churchId).update({
+        "sms.credits": realBalance,
+        "sms.lowBalance": true,
+        "sms.lastLowBalanceAt": admin.firestore.FieldValue.serverTimestamp()
+      }).catch(() => {});
+    }
+
     const ledgerSnap = await db.collection("smsLedger").doc(ledgerId).get();
     if (ledgerSnap.exists && ledgerSnap.data().status === "COMMITTED") {
       await refundWallet(churchId, cost, "dispatch_failed", messageId);
@@ -230,13 +242,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
 
     const retryable = isRetryableError(error.message);
     const retryCount = data.retryCount || 0;
-
-    if (error.message.includes("Insufficient SMS credits")) {
-      await db.collection("churches").doc(churchId).update({
-        "sms.lowBalance": true,
-        "sms.lastLowBalanceAt": admin.firestore.FieldValue.serverTimestamp()
-      }).catch(() => {});
-    }
 
     const batch = db.batch();
     
@@ -251,7 +256,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
         : null
     });
 
-    // CRITICAL: Always write a log so the failure is visible in the dashboard
     batch.set(logRef, {
       churchId,
       phone: data.phone,
@@ -305,7 +309,7 @@ async function refundWallet(churchId, amount, reason, messageId) {
     t.update(churchRef, {
       "sms.credits": newBalance,
       "sms.stats.refunded": admin.firestore.FieldValue.increment(1),
-      "sms.lowBalance": false
+      "sms.lowBalance": newBalance <= 10
     });
   });
 }
@@ -382,7 +386,7 @@ async function creditWallet(churchId, amount, reason, processedBy) {
 
     t.update(churchRef, {
       "sms.credits": newBalance,
-      "sms.lowBalance": newBalance > 10
+      "sms.lowBalance": newBalance <= 10
     });
 
     return { success: true, newBalance };

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
@@ -51,8 +52,23 @@ export default function BillingCenterHub() {
 
   const { data: transactions } = useCollection(transactionsRef ? query(transactionsRef, orderBy('createdAt', 'desc'), limit(5)) : null);
 
-  const sub = currentChurch?.subscription || { plan: 'Basic', smsCredits: 100, smsUsed: 0, status: 'active', renewalDate: 'N/A' };
-  const usagePercent = Math.min(100, ((sub.smsUsed || 0) / (sub.smsCredits || 1)) * 100);
+  // Sync logic: Use real-time SMS credits from church doc as the source of truth
+  const sub = useMemo(() => ({
+    plan: currentChurch?.plan || 'Basic',
+    smsCredits: currentChurch?.sms?.credits || 0,
+    smsUsed: currentChurch?.sms?.stats?.sent || 0,
+    status: currentChurch?.sms?.subscriptionStatus || 'active',
+    renewalDate: currentChurch?.subscription?.renewalDate || '1st of Month'
+  }), [currentChurch]);
+
+  // For usage bar: assuming a standard monthly allocation based on plan
+  const totalAllocation = useMemo(() => {
+    if (sub.plan === 'Premium') return 5000;
+    if (sub.plan === 'Standard') return 1000;
+    return 100;
+  }, [sub.plan]);
+
+  const usagePercent = Math.min(100, ((sub.smsUsed) / totalAllocation) * 100);
 
   if (churchLoading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
@@ -97,13 +113,13 @@ export default function BillingCenterHub() {
                   <div className="space-y-4">
                     <div className="flex justify-between items-end">
                       <div className="space-y-1">
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">SMS Credits Used</p>
-                        <h3 className="text-3xl font-bold">{(sub.smsUsed || 0).toLocaleString()} <span className="text-sm font-medium text-muted-foreground">/ {(sub.smsCredits || 0).toLocaleString()}</span></h3>
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Available SMS Balance</p>
+                        <h3 className="text-3xl font-bold">{sub.smsCredits.toLocaleString()} <span className="text-sm font-medium text-muted-foreground">Credits</span></h3>
                       </div>
                       <p className="text-xs font-bold text-primary">{Math.round(usagePercent)}% Used</p>
                     </div>
                     <Progress value={usagePercent} className="h-2 bg-muted rounded-full overflow-hidden" />
-                    <p className="text-[10px] text-muted-foreground italic flex items-center gap-1"><Info className="w-3 h-3" /> Next billing cycle: {sub.renewalDate}</p>
+                    <p className="text-[10px] text-muted-foreground italic flex items-center gap-1"><Info className="w-3 h-3" /> Monthly allocation reset: {sub.renewalDate}</p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 rounded-2xl bg-muted/20 border border-border">
@@ -111,8 +127,8 @@ export default function BillingCenterHub() {
                       <p className="text-sm font-bold flex items-center gap-2"><Calendar className="w-4 h-4 text-primary" />{sub.renewalDate}</p>
                     </div>
                     <div className="p-4 rounded-2xl bg-muted/20 border border-border">
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Total Credits</p>
-                      <p className="text-sm font-bold flex items-center gap-2"><CreditCard className="w-4 h-4 text-accent" />{sub.smsCredits?.toLocaleString()}</p>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Plan Limit</p>
+                      <p className="text-sm font-bold flex items-center gap-2"><CreditCard className="w-4 h-4 text-accent" />{totalAllocation.toLocaleString()}</p>
                     </div>
                   </div>
                 </div>
