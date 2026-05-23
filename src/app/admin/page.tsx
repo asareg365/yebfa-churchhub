@@ -13,7 +13,7 @@ import {
   CheckCircle,
   Ban,
   TrendingUp,
-  DollarSign,
+  DollarSign as CedisSign,
   Users,
   AlertTriangle,
   Pencil,
@@ -82,7 +82,6 @@ export default function SystemAdminPortal() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const loadStats = async () => {
-    // FIX 4: WAIT FOR AUTH SESSION
     if (!auth.currentUser) return;
     
     setIsRefreshing(true);
@@ -117,14 +116,12 @@ export default function SystemAdminPortal() {
   }, [user, userLoading, router]);
 
   useEffect(() => {
-    // FIX 4: RESOLVED RACE CONDITION
     if (user && auth.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
   }, [user, auth.currentUser]);
 
   const filteredChurches = useMemo(() => {
-    // FIX 3: DEFENSIVE MAPPING
     const list = platformStats?.churches;
     if (!Array.isArray(list)) return [];
     return list.filter((c: any) =>
@@ -233,7 +230,6 @@ export default function SystemAdminPortal() {
         </Alert>
       )}
 
-      {/* FIX 5: SAFE GUARDED FORMATTING */}
       <div className="grid gap-6 md:grid-cols-4">
         <Card className="glass border-primary/20">
           <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Users className="w-3 h-3"/> Total Tenants</CardTitle></CardHeader>
@@ -243,7 +239,7 @@ export default function SystemAdminPortal() {
           </CardContent>
         </Card>
         <Card className="glass border-accent/20">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><DollarSign className="w-3 h-3"/> Platform Revenue</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><CedisSign className="w-3 h-3"/> Platform Revenue</CardTitle></CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-accent">GH₵{(platformStats?.totalRevenue || 0).toLocaleString()}</div>
             <p className="text-[10px] text-muted-foreground mt-1">All-time GH₵ processed</p>
@@ -339,7 +335,6 @@ export default function SystemAdminPortal() {
           </CardContent>
         </Card>
 
-        {/* FIX 3: SAFE MAPPING FOR LEADERBOARD */}
         <Card className="glass h-fit">
           <CardHeader>
             <CardTitle className="text-sm font-bold uppercase tracking-widest text-foreground">Top Active Tenants</CardTitle>
@@ -358,7 +353,7 @@ export default function SystemAdminPortal() {
             {!platformStats && !statsError && <div className="py-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}
             {statsError && <div className="py-8 text-center text-xs text-destructive flex flex-col items-center gap-2">
                <AlertTriangle className="h-4 w-4" />
-               Stats unavailable. <Button variant="link" size="sm" onClick={loadStats}>Retry</Button>
+               Stats engine failure. <Button variant="link" size="sm" onClick={loadStats}>Retry</Button>
             </div>}
           </CardContent>
         </Card>

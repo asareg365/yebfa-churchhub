@@ -14,7 +14,7 @@ const { processSMSQueueItem, queueSMS, creditWallet } = require("./services/smsS
 
 /**
  * ADMIN: System Stats Aggregation (v2 Callable)
- * STRICT MAPPING: DO NOT RETURN RAW DOCS
+ * SAFE AGGREGATION VERSION: Strict mapping and Number conversion
  */
 exports.getSystemStats = onCall(async (request) => {
   try {
@@ -28,30 +28,41 @@ exports.getSystemStats = onCall(async (request) => {
     }
 
     const db = admin.firestore();
-    const churchesSnap = await db.collection("churches").get();
+    const snap = await db.collection("churches").get();
 
-    // STRICT DATA SANITIZATION: Explicitly return only clean fields
-    const churches = churchesSnap.docs.map(doc => {
-      const data = doc.data();
-      return {
+    const churches = [];
+    snap.forEach(doc => {
+      const d = doc.data() || {};
+      churches.push({
         id: doc.id,
-        name: data.name || "Unnamed Ministry",
-        slug: data.slug || "",
-        plan: data.plan || "Starter",
-        registeredAt: data.registeredAt?.toDate ? data.registeredAt.toDate().toISOString() : null,
+        name: d.name || "Unnamed Ministry",
+        slug: d.slug || "",
+        plan: d.plan || "Starter",
+        registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : null,
         sms: {
-          credits: Number(data.sms?.credits || 0),
-          sent: Number(data.sms?.sent || 0),
-          failed: Number(data.sms?.failed || 0),
-          totalTopups: Number(data.sms?.totalTopups || 0),
-          subscriptionStatus: data.sms?.subscriptionStatus || "pending"
+          credits: Number(d.sms?.credits || 0),
+          sent: Number(d.sms?.sent || 0),
+          failed: Number(d.sms?.failed || 0),
+          totalTopups: Number(d.sms?.totalTopups || 0),
+          subscriptionStatus: d.sms?.subscriptionStatus || "pending"
         }
-      };
+      });
     });
 
-    const totalRevenue = churches.reduce((sum, c) => sum + Number(c.sms.totalTopups || 0), 0);
-    const totalSent = churches.reduce((sum, c) => sum + Number(c.sms.sent || 0), 0);
-    const totalFailed = churches.reduce((sum, c) => sum + Number(c.sms.failed || 0), 0);
+    const totalRevenue = churches.reduce(
+      (s, c) => s + Number(c.sms?.totalTopups || 0),
+      0
+    );
+
+    const totalSent = churches.reduce(
+      (s, c) => s + Number(c.sms?.sent || 0),
+      0
+    );
+
+    const totalFailed = churches.reduce(
+      (s, c) => s + Number(c.sms?.failed || 0),
+      0
+    );
 
     return {
       churches: churches.sort((a, b) => {
@@ -65,17 +76,17 @@ exports.getSystemStats = onCall(async (request) => {
       totalSent,
       totalFailed,
       topSpenders: churches
-        .sort((a, b) => Number(b.sms.sent || 0) - Number(a.sms.sent || 0))
+        .sort((a, b) => Number(b.sms?.sent || 0) - Number(a.sms?.sent || 0))
         .slice(0, 5)
         .map(c => ({
           name: c.name,
-          sent: c.sms.sent || 0,
-          balance: c.sms.credits || 0
+          sent: Number(c.sms?.sent || 0),
+          balance: Number(c.sms?.credits || 0)
         }))
     };
-  } catch (error) {
-    console.error("getSystemStats engine failure:", error);
-    throw new HttpsError("internal", error.message || "Stats aggregation failed");
+  } catch (err) {
+    console.error("STATS ENGINE FAILURE:", err);
+    throw new HttpsError("internal", err.message || "Stats engine failed");
   }
 });
 
