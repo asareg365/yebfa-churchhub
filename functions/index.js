@@ -26,7 +26,7 @@ exports.getSystemStats = onCall(
       throw new HttpsError("unauthenticated", "Authentication required");
     }
 
-    const email = request.auth.token.email?.toLowerCase();
+    const email = request.auth.token.email?.toLowerCase().trim();
     if (!SUPER_ADMINS.includes(email)) {
       throw new HttpsError("permission-denied", "Unauthorized access");
     }
@@ -57,7 +57,7 @@ exports.getSystemStats = onCall(
           plan: d.plan || "Starter",
           registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : (d.registeredAt ? String(d.registeredAt) : null),
           sms: {
-            credits: ledgerBalance, // SOURCE OF TRUTH
+            credits: ledgerBalance,
             sent: Number(d.sms?.stats?.sent || 0),
             failed: Number(d.sms?.stats?.failed || 0),
             totalTopups: Number(wallet.totalTopups || d.sms?.totalTopups || 0),
@@ -113,8 +113,13 @@ exports.getSystemStats = onCall(
 exports.initializeWallets = onCall(
   { region: "us-central1", cors: true },
   async (request) => {
-    if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
-      throw new HttpsError("permission-denied", "Unauthorized");
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication required");
+    }
+
+    const email = request.auth.token.email?.toLowerCase().trim();
+    if (!SUPER_ADMINS.includes(email)) {
+      throw new HttpsError("permission-denied", "Unauthorized access");
     }
 
     const db = admin.firestore();
@@ -122,23 +127,27 @@ exports.initializeWallets = onCall(
     let created = 0;
 
     for (const doc of churchesSnap.docs) {
-      const church = doc.data();
-      const churchId = doc.id;
-      const walletRef = db.collection("smsWallets").doc(churchId);
-      const walletSnap = await walletRef.get();
+      try {
+        const church = doc.data();
+        const churchId = doc.id;
+        const walletRef = db.collection("smsWallets").doc(churchId);
+        const walletSnap = await walletRef.get();
 
-      if (!walletSnap.exists) {
-        const credits = Number(church.sms?.credits || 0);
-        await walletRef.set({
-          balance: credits,
-          totalSpent: Number(church.sms?.stats?.sent || 0),
-          totalTopups: credits,
-          currency: "SMS_CREDIT",
-          status: "active",
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-        created++;
+        if (!walletSnap.exists) {
+          const credits = Number(church.sms?.credits || 0);
+          await walletRef.set({
+            balance: credits,
+            totalSpent: Number(church.sms?.stats?.sent || 0),
+            totalTopups: credits,
+            currency: "SMS_CREDIT",
+            status: "active",
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          created++;
+        }
+      } catch (err) {
+        console.error(`Migration failed for ${doc.id}:`, err.message);
       }
     }
 
@@ -161,9 +170,8 @@ exports.updateChurchStatus = onCall(
     const { churchId, status } = request.data;
     if (!churchId || !status) throw new HttpsError("invalid-argument", "Missing parameters");
 
-    const isApproved = status === 'active';
-    
     try {
+      const isApproved = status === 'active';
       await admin.firestore().collection("churches").doc(churchId).update({
         "sms.subscriptionStatus": status,
         "sms.approved": isApproved,

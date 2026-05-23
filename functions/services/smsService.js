@@ -4,7 +4,6 @@ const admin = require("firebase-admin");
 const { formatPhone } = require("../utils/phoneFormatter");
 
 const MAX_MESSAGE_LENGTH = 700;
-const SPAM_KEYWORDS = ["bitcoin", "crypto", "investment", "prize", "won", "password", "otp", "lottery", "claim", "verify"];
 
 /**
  * PRODUCTION-GRADE ERROR CLASSIFICATION
@@ -324,8 +323,6 @@ async function queueSMS(churchId, payload) {
 
   if (!isApproved) return { success: false, error: "SMS service not approved" };
   if (!smsConfig.enabled || smsConfig.subscriptionStatus !== "active") return { success: false, error: "SMS service disabled/inactive" };
-
-  if ((payload.message || "").length > MAX_MESSAGE_LENGTH) return { success: false, error: "Message too long" };
 
   const formattedPhone = formatPhone(payload.phone);
   const dedupeKey = payload.dedupeKey || crypto.createHash("sha256")
