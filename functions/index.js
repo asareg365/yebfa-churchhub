@@ -14,7 +14,6 @@ const { processSMSQueueItem, queueSMS, creditWallet, resetWallet } = require("./
 
 /**
  * ADMIN: System Stats Aggregation (v2 Callable)
- * STRICT SERIALIZATION VERSION: Converts all Timestamps to Strings.
  */
 exports.getSystemStats = onCall(
   {
@@ -62,7 +61,6 @@ exports.getSystemStats = onCall(
       let activeTenants = 0;
 
       churches.forEach(church => {
-        // Safe numeric aggregation
         totalRevenue += Number(church.sms?.totalTopups || 0);
         totalSent += Number(church.sms?.sent || 0);
         totalFailed += Number(church.sms?.failed || 0);
@@ -100,57 +98,91 @@ exports.getSystemStats = onCall(
 /**
  * ADMIN: Update Church Status
  */
-exports.updateChurchStatus = onCall({ region: "us-central1" }, async (request) => {
-  if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
-    throw new HttpsError("permission-denied", "Unauthorized");
+exports.updateChurchStatus = onCall(
+  { region: "us-central1", cors: true }, 
+  async (request) => {
+    if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
+      throw new HttpsError("permission-denied", "Unauthorized");
+    }
+    const { churchId, status } = request.data;
+    const isApproved = status === 'active';
+    
+    try {
+      await admin.firestore().collection("churches").doc(churchId).update({
+        "sms.subscriptionStatus": status,
+        "sms.approved": isApproved,
+        "sms.status": isApproved ? 'Approved' : 'Suspended',
+        "sms.enabled": isApproved,
+        status: isApproved ? 'Approved' : 'Suspended',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return { success: true };
+    } catch (error) { 
+      throw new HttpsError("internal", error.message); 
+    }
   }
-  const { churchId, status } = request.data;
-  const isApproved = status === 'active';
-  
-  try {
-    await admin.firestore().collection("churches").doc(churchId).update({
-      "sms.subscriptionStatus": status,
-      "sms.approved": isApproved,
-      "sms.status": isApproved ? 'Approved' : 'Suspended',
-      "sms.enabled": isApproved,
-      status: isApproved ? 'Approved' : 'Suspended',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-    return { success: true };
-  } catch (error) { 
-    throw new HttpsError("internal", error.message); 
+);
+
+/**
+ * ADMIN: Update Organization Details
+ */
+exports.updateOrganization = onCall(
+  { region: "us-central1", cors: true }, 
+  async (request) => {
+    if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
+      throw new HttpsError("permission-denied", "Unauthorized");
+    }
+    const { churchId, name, slug, plan } = request.data;
+    
+    try {
+      await admin.firestore().collection("churches").doc(churchId).update({
+        name,
+        slug,
+        plan,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return { success: true };
+    } catch (error) { 
+      throw new HttpsError("internal", error.message); 
+    }
   }
-});
+);
 
 /**
  * ADMIN: Reset Balance (Wipe to 0)
  */
-exports.adminResetWallet = onCall({ region: "us-central1" }, async (request) => {
-  if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
-    throw new HttpsError("permission-denied", "Unauthorized");
+exports.adminResetWallet = onCall(
+  { region: "us-central1", cors: true }, 
+  async (request) => {
+    if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
+      throw new HttpsError("permission-denied", "Unauthorized");
+    }
+    const { churchId } = request.data;
+    try {
+      return await resetWallet(churchId, request.auth.token.email);
+    } catch (error) {
+      throw new HttpsError("internal", error.message);
+    }
   }
-  const { churchId } = request.data;
-  try {
-    return await resetWallet(churchId, request.auth.token.email);
-  } catch (error) {
-    throw new HttpsError("internal", error.message);
-  }
-});
+);
 
 /**
  * ADMIN: Top Up Wallet
  */
-exports.adminTopUpWallet = onCall({ region: "us-central1" }, async (request) => {
-  if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
-    throw new HttpsError("permission-denied", "Unauthorized");
+exports.adminTopUpWallet = onCall(
+  { region: "us-central1", cors: true }, 
+  async (request) => {
+    if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
+      throw new HttpsError("permission-denied", "Unauthorized");
+    }
+    const { churchId, amount } = request.data;
+    try { 
+      return await creditWallet(churchId, amount, "admin_manual", request.auth.token.email); 
+    } catch (error) { 
+      throw new HttpsError("internal", error.message); 
+    }
   }
-  const { churchId, amount } = request.data;
-  try { 
-    return await creditWallet(churchId, amount, "admin_manual", request.auth.token.email); 
-  } catch (error) { 
-    throw new HttpsError("internal", error.message); 
-  }
-});
+);
 
 /**
  * SYSTEM: Send SMS

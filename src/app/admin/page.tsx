@@ -54,12 +54,12 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser, useAuth, useFunctions } from '@/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { signOut } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { Textarea } from '@/components/ui/textarea';
 
 const SUPER_ADMINS = ['asareg365@gmail.com', 'frankyeb@gmail.com'];
 
@@ -150,6 +150,27 @@ export default function SystemAdminPortal() {
     }
   };
 
+  const handleSaveOrg = async () => {
+    if (!editingOrg) return;
+    setIsProcessing(true);
+    const updateFn = httpsCallable(functions, 'updateOrganization');
+    try {
+      await updateFn({ 
+        churchId: editingOrg.id, 
+        name: editingOrg.name, 
+        slug: editingOrg.slug, 
+        plan: editingOrg.plan 
+      });
+      toast({ title: "Organization Updated", description: "Details have been securely applied." });
+      setEditingOrg(null);
+      await loadStats();
+    } catch (e: any) {
+      toast({ title: "Update Failed", description: e.message, variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleResetBalance = async (churchId: string) => {
     if (!confirm("Are you sure you want to WIPe this organization's balance to 0? This fixes sync issues.")) return;
     setIsProcessing(true);
@@ -157,7 +178,6 @@ export default function SystemAdminPortal() {
     try {
       await resetFn({ churchId });
       toast({ title: "Wallet Reset", description: "Balance has been cleared to 0." });
-      // Forced reload to reflect new source-of-truth
       await loadStats();
     } catch (e: any) {
       toast({ title: "Reset Failed", description: e.message, variant: "destructive" });
@@ -351,6 +371,43 @@ export default function SystemAdminPortal() {
         </Card>
       </div>
 
+      {/* Edit Organization Dialog */}
+      <Dialog open={!!editingOrg} onOpenChange={(o) => !o && setEditingOrg(null)}>
+        <DialogContent className="glass">
+          <DialogHeader>
+            <DialogTitle>Edit Organization</DialogTitle>
+            <DialogDescription>Modify primary markers for {editingOrg?.name}.</DialogDescription>
+          </DialogHeader>
+          <div className="py-6 space-y-4">
+            <div className="space-y-2">
+              <Label>Ministry Name</Label>
+              <Input value={editingOrg?.name || ''} onChange={(e) => setEditingOrg({...editingOrg, name: e.target.value})} className="bg-white" />
+            </div>
+            <div className="space-y-2">
+              <Label>Tenant Slug</Label>
+              <Input value={editingOrg?.slug || ''} onChange={(e) => setEditingOrg({...editingOrg, slug: e.target.value})} className="bg-white font-mono" />
+            </div>
+            <div className="space-y-2">
+              <Label>Service Plan</Label>
+              <Select value={editingOrg?.plan || 'Basic'} onValueChange={(v) => setEditingOrg({...editingOrg, plan: v})}>
+                <SelectTrigger className="bg-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Basic">Starter (Basic)</SelectItem>
+                  <SelectItem value="Standard">Ministry Growth (Standard)</SelectItem>
+                  <SelectItem value="Premium">Enterprise (Premium)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button className="w-full bg-primary h-12 rounded-xl mt-4" onClick={handleSaveOrg} disabled={isProcessing}>
+              {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Top-up Dialog */}
       <Dialog open={!!managingSmsId} onOpenChange={(o) => !o && setManagingSmsId(null)}>
         <DialogContent className="glass">
           <DialogHeader>
