@@ -85,6 +85,7 @@ export default function SystemAdminPortal() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const loadStats = async () => {
+    // Only attempt fetch if user session is fully established
     if (!auth.currentUser) return;
     
     setIsRefreshing(true);
@@ -119,6 +120,7 @@ export default function SystemAdminPortal() {
   }, [user, userLoading, router]);
 
   useEffect(() => {
+    // Standardized check for auth session before handshaking with backend
     if (user && auth.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
