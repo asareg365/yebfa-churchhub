@@ -1,4 +1,3 @@
-
 const axios = require("axios");
 const crypto = require("crypto");
 const admin = require("firebase-admin");
@@ -40,22 +39,6 @@ function getBackoffDelay(retryCount) {
 function isPotentiallyMalicious(message) {
   const normalized = (message || "").toLowerCase().replace(/[^a-z0-9 ]/g, "");
   return SPAM_KEYWORDS.some(keyword => normalized.includes(keyword));
-}
-
-/**
- * Audit Logger for SMS events
- */
-async function logSmsEvent(type, churchId, payload = {}) {
-  try {
-    await admin.firestore().collection("smsAuditLogs").add({
-      type,
-      churchId,
-      payload,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-  } catch (err) {
-    console.error("Audit Logging Error:", err.message);
-  }
 }
 
 /**
@@ -223,7 +206,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
   } catch (error) {
     console.error(`[Pipeline Error] ${messageId}:`, error.message);
     
-    // Reconciliation: If credit error, sync the cache immediately
     if (error.message.includes("Insufficient SMS credits")) {
       const walletSnap = await db.collection("smsWallets").doc(churchId).get();
       const realBalance = walletSnap.exists ? Number(walletSnap.data().balance || 0) : 0;
@@ -244,7 +226,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
     const retryCount = data.retryCount || 0;
 
     const batch = db.batch();
-    
     batch.update(db.collection("smsQueue").doc(messageId), {
       status: retryable ? "queued_retry" : "failed_permanent",
       retryable,
@@ -295,12 +276,10 @@ async function refundWallet(churchId, amount, reason, messageId) {
     if (ledgerSnap.exists && ledgerSnap.data().status === "REFUNDED") return;
 
     t.update(ledgerRef, { status: "REFUND_PENDING" });
-
     const balance = walletSnap.exists ? Number(walletSnap.data().balance || 0) : 0;
     const newBalance = balance + amount;
 
     t.update(ledgerRef, { status: "REFUNDED", refundReason: reason });
-
     t.set(walletRef, {
       balance: newBalance,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -308,47 +287,51 @@ async function refundWallet(churchId, amount, reason, messageId) {
 
     t.update(churchRef, {
       "sms.credits": newBalance,
-      "sms.stats.refunded": admin.firestore.FieldValue.increment(1),
-      "sms.lowBalance": newBalance <= 10
+      "sms.stats.refunded": admin.firestore.FieldValue.increment(1)
     });
   });
+}
+
+async function resetWallet(churchId, processedBy) {
+  const db = admin.firestore();
+  const walletRef = db.collection("smsWallets").doc(churchId);
+  const churchRef = db.collection("churches").doc(churchId);
+
+  await db.runTransaction(async (t) => {
+    t.set(walletRef, {
+      balance: 0,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastResetBy: processedBy
+    }, { merge: true });
+
+    t.update(churchRef, {
+      "sms.credits": 0,
+      "sms.lastResetAt": admin.firestore.FieldValue.serverTimestamp()
+    });
+  });
+
+  return { success: true };
 }
 
 async function queueSMS(churchId, payload) {
   const db = admin.firestore();
   const churchDoc = await db.collection("churches").doc(churchId).get();
   
-  if (!churchDoc.exists) {
-    await logSmsEvent("SMS_BLOCKED_CHURCH_NOT_FOUND", churchId);
-    return { success: false, error: "Church not found" };
-  }
+  if (!churchDoc.exists) return { success: false, error: "Church not found" };
   
   const churchData = churchDoc.data();
   const smsConfig = churchData.sms || {};
   const isApproved = smsConfig.approved === true || smsConfig.status === "Approved";
 
-  if (!isApproved) {
-    await logSmsEvent("SMS_BLOCKED_NOT_APPROVED", churchId, { smsConfig });
-    return { success: false, error: "SMS service not approved" };
-  }
-  
-  if (!smsConfig.enabled || smsConfig.subscriptionStatus !== "active") {
-    await logSmsEvent("SMS_BLOCKED_INACTIVE", churchId, { smsConfig });
-    return { success: false, error: "SMS service disabled or subscription inactive" };
-  }
+  if (!isApproved) return { success: false, error: "SMS service not approved" };
+  if (!smsConfig.enabled || smsConfig.subscriptionStatus !== "active") return { success: false, error: "SMS service disabled/inactive" };
 
   if ((payload.message || "").length > MAX_MESSAGE_LENGTH) return { success: false, error: "Message too long" };
-  if (isPotentiallyMalicious(payload.message)) {
-    await logSmsEvent("SMS_BLOCKED_SECURITY", churchId, { message: payload.message });
-    return { success: false, error: "Security policy block" };
-  }
 
   const formattedPhone = formatPhone(payload.phone);
   const dedupeKey = payload.dedupeKey || crypto.createHash("sha256")
     .update(`${churchId}:${formattedPhone}:${payload.message}`)
     .digest("hex");
-
-  const cost = payload.cost || 1;
 
   const queueRef = await db.collection("smsQueue").add({
     churchId,
@@ -357,8 +340,7 @@ async function queueSMS(churchId, payload) {
     type: payload.type || "other",
     status: "queued",
     retryCount: 0,
-    cost: cost,
-    costLocked: true,
+    cost: payload.cost || 1,
     dedupeKey,
     memberName: payload.memberName || "Guest",
     memberId: payload.memberId || null,
@@ -397,5 +379,6 @@ module.exports = {
   queueSMS,
   processSMSQueueItem,
   creditWallet,
-  refundWallet
+  refundWallet,
+  resetWallet
 };

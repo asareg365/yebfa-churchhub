@@ -10,10 +10,10 @@ if (admin.apps.length === 0) {
 const MNOTIFY_API_KEY = defineSecret("MNOTIFY_API_KEY");
 const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 
-const { processSMSQueueItem, queueSMS, creditWallet } = require("./services/smsService");
+const { processSMSQueueItem, queueSMS, creditWallet, resetWallet } = require("./services/smsService");
 
 /**
- * ADMIN: System Stats Aggregation (v2 Callable) - SANITIZED VERSION
+ * ADMIN: System Stats Aggregation (v2 Callable)
  */
 exports.getSystemStats = onCall(
   {
@@ -22,7 +22,6 @@ exports.getSystemStats = onCall(
   },
   async (request) => {
     try {
-      // AUTH CHECK
       if (!request.auth) {
         throw new HttpsError("unauthenticated", "Authentication required");
       }
@@ -33,8 +32,6 @@ exports.getSystemStats = onCall(
       }
 
       const db = admin.firestore();
-
-      // Load churches
       const churchesSnap = await db.collection("churches").get();
 
       // Serialization Safety: Map to clean JS objects and handle Timestamps
@@ -58,7 +55,6 @@ exports.getSystemStats = onCall(
         };
       });
 
-      // Stats aggregation
       let totalRevenue = 0;
       let totalSent = 0;
       let totalFailed = 0;
@@ -100,7 +96,7 @@ exports.getSystemStats = onCall(
 );
 
 /**
- * ADMIN: Update Church Status (v2 Callable)
+ * ADMIN: Update Church Status
  */
 exports.updateChurchStatus = onCall({ region: "us-central1" }, async (request) => {
   if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
@@ -125,32 +121,22 @@ exports.updateChurchStatus = onCall({ region: "us-central1" }, async (request) =
 });
 
 /**
- * ADMIN: Update Organization Profile (v2 Callable)
+ * ADMIN: Reset Balance (Wipe to 0)
  */
-exports.updateOrganization = onCall({ region: "us-central1" }, async (request) => {
+exports.adminResetWallet = onCall({ region: "us-central1" }, async (request) => {
   if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
     throw new HttpsError("permission-denied", "Unauthorized");
   }
-  
-  const { churchId, name, slug, adminEmails, plan } = request.data;
-  if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId");
-
+  const { churchId } = request.data;
   try {
-    await admin.firestore().collection("churches").doc(churchId).update({
-      name,
-      slug,
-      adminEmails: adminEmails || [],
-      plan: plan || 'Basic',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-    return { success: true };
-  } catch (error) { 
-    throw new HttpsError("internal", error.message); 
+    return await resetWallet(churchId, request.auth.token.email);
+  } catch (error) {
+    throw new HttpsError("internal", error.message);
   }
 });
 
 /**
- * ADMIN: Top Up Wallet (v2 Callable)
+ * ADMIN: Top Up Wallet
  */
 exports.adminTopUpWallet = onCall({ region: "us-central1" }, async (request) => {
   if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
@@ -165,7 +151,7 @@ exports.adminTopUpWallet = onCall({ region: "us-central1" }, async (request) => 
 });
 
 /**
- * SYSTEM: Send SMS (v2 Callable)
+ * SYSTEM: Send SMS
  */
 exports.sendSMS = onCall({ region: "us-central1" }, async (request) => {
   const { phone, message, type, churchId, memberName, memberId } = request.data;
@@ -216,7 +202,7 @@ exports.mnotifyDeliveryWebhook = onRequest(
 );
 
 /**
- * MISSION CRITICAL WORKER (Triggers)
+ * WORKER Triggers
  */
 exports.onSmsQueued = onDocumentCreated(
   { region: "us-central1", document: "smsQueue/{messageId}", secrets: [MNOTIFY_API_KEY] },

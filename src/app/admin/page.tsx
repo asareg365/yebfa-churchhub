@@ -18,7 +18,8 @@ import {
   AlertTriangle,
   Pencil,
   RefreshCcw,
-  CreditCard
+  CreditCard,
+  Trash2
 } from 'lucide-react';
 import {
   Card,
@@ -90,10 +91,10 @@ export default function SystemAdminPortal() {
     const fetchStats = httpsCallable(functions, 'getSystemStats');
     try {
       const res: any = await fetchStats();
-      if (res.data) {
+      if (res.data && res.data.success) {
         setPlatformStats(res.data);
       } else {
-        throw new Error("Empty response from platform engine.");
+        throw new Error(res.data?.error || "Empty response from platform engine.");
       }
     } catch (err: any) {
       console.error("System Stats Sync Error:", err);
@@ -116,7 +117,6 @@ export default function SystemAdminPortal() {
   }, [user, userLoading, router]);
 
   useEffect(() => {
-    // RACE CONDITION FIX: Load only when both user AND auth session are verified
     if (user && auth.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
@@ -145,6 +145,21 @@ export default function SystemAdminPortal() {
       await loadStats(); 
     } catch (e: any) {
       toast({ title: "Operation Failed", description: e.message, variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleResetBalance = async (churchId: string) => {
+    if (!confirm("Are you sure you want to WIPe this organization's balance to 0? This fixes sync issues.")) return;
+    setIsProcessing(true);
+    const resetFn = httpsCallable(functions, 'adminResetWallet');
+    try {
+      await resetFn({ churchId });
+      toast({ title: "Wallet Reset", description: "Balance has been cleared to 0." });
+      await loadStats();
+    } catch (e: any) {
+      toast({ title: "Reset Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
@@ -316,6 +331,7 @@ export default function SystemAdminPortal() {
                           <DropdownMenuItem onClick={() => setEditingOrg(church)} className="font-bold"><Pencil className="mr-2 h-4 w-4" /> Edit Details</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setManagingSmsId(church.id)} className="font-bold text-primary"><Zap className="mr-2 h-4 w-4" /> Top-up Wallet</DropdownMenuItem>
                           <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleResetBalance(church.id)} className="text-amber-600 font-bold"><RefreshCcw className="mr-2 h-4 w-4" /> Reset Balance</DropdownMenuItem>
                           {church.sms?.subscriptionStatus !== 'active' ? (
                             <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'active')}><CheckCircle className="mr-2 h-4 w-4 text-accent" /> Activate Org</DropdownMenuItem>
                           ) : (
@@ -377,6 +393,7 @@ export default function SystemAdminPortal() {
                 <Input type="number" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="h-12 bg-white" />
                 <Button className="bg-primary h-12 px-6" onClick={handleTopUp} disabled={isProcessing}>{isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}</Button>
               </div>
+              <p className="text-[10px] text-muted-foreground italic">Use the "Reset Balance" feature in the directory if you need to clear the wallet first.</p>
             </div>
           </div>
         </DialogContent>
