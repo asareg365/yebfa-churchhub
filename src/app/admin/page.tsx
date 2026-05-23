@@ -82,10 +82,12 @@ export default function SystemAdminPortal() {
   const [topUpAmount, setTopUpAmount] = useState('500');
   const [platformStats, setPlatformStats] = useState<any>(null);
   const [statsError, setStatsError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const loadStats = async () => {
     setIsRefreshing(true);
     setStatsError(false);
+    setErrorMessage('');
     const fetchStats = httpsCallable(functions, 'getSystemStats');
     try {
       const res: any = await fetchStats();
@@ -97,9 +99,10 @@ export default function SystemAdminPortal() {
     } catch (err: any) {
       console.error("System Stats Sync Error:", err);
       setStatsError(true);
+      setErrorMessage(err.message || "Could not fetch platform data.");
       toast({ 
         title: "Stats Sync Failed", 
-        description: err.message || "Could not fetch platform data.", 
+        description: err.message || "Internal system error during statistics aggregation.", 
         variant: "destructive" 
       });
     } finally {
@@ -218,9 +221,9 @@ export default function SystemAdminPortal() {
       {statsError && (
         <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 animate-in fade-in zoom-in-95">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle className="font-bold ml-2">Sync Error:</AlertTitle>
+          <AlertTitle className="font-bold ml-2">Sync Error</AlertTitle>
           <AlertDescription className="ml-2 text-sm">
-            The platform stats engine returned an error. Some organization data may be stale.
+            {errorMessage || "The platform stats engine returned an error. Some organization data may be stale."}
             <Button variant="link" size="sm" onClick={loadStats} className="text-destructive font-bold underline ml-4 p-0 h-auto">Retry Sync</Button>
           </AlertDescription>
         </Alert>

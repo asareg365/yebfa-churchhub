@@ -1,4 +1,3 @@
-
 const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
@@ -172,15 +171,18 @@ exports.getSystemStats = onCall(
         });
       });
 
-      // Defensive sorting logic
+      // Defensive sorting logic: handles Timestamp objects, Date strings, or nulls
       const getSeconds = (val) => {
         if (!val) return 0;
-        if (val.seconds !== undefined) return val.seconds;
+        // If it's a Firestore Timestamp object
+        if (typeof val === 'object' && val.seconds !== undefined) return val.seconds;
+        // If it's a Firestore Timestamp from some libraries
         if (typeof val.toDate === 'function') {
-          try { return val.toDate().getTime() / 1000; } catch (e) { return 0; }
+          try { return Math.floor(val.toDate().getTime() / 1000); } catch (e) { return 0; }
         }
+        // If it's a string or native Date
         const d = new Date(val);
-        return isNaN(d.getTime()) ? 0 : d.getTime() / 1000;
+        return isNaN(d.getTime()) ? 0 : Math.floor(d.getTime() / 1000);
       };
 
       return {
