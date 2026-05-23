@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
@@ -7,8 +6,9 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
 } from "firebase/auth";
-import { useAuth, useFirestore } from "@/firebase";
+import { useAuth, useUser } from "@/firebase";
 import { collection, doc, setDoc, serverTimestamp, query, where, getDocs, limit } from "firebase/firestore";
+import { useFirestore } from "@/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,7 +33,7 @@ const AVAILABLE_MODULES = [
   { id: "reports", label: "Detailed Reports" },
 ];
 
-const CrossIcon = () => (
+const CrossIcon = ({ className }: { className?: string }) => (
   <svg 
     xmlns="http://www.w3.org/2000/svg" 
     viewBox="0 0 24 24" 
@@ -42,7 +42,7 @@ const CrossIcon = () => (
     strokeWidth="3" 
     strokeLinecap="round" 
     strokeLinejoin="round" 
-    className="w-6 h-6 text-primary"
+    className={className || "w-6 h-6 text-primary"}
   >
     <path d="M12 4v16M8 9h8" />
   </svg>
@@ -201,8 +201,10 @@ function LoginContent() {
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-background relative overflow-hidden">
       <div className="mb-8 text-center animate-in fade-in slide-in-from-top-4 duration-700">
         <Link href="/" className="flex flex-col items-center gap-4 justify-center mb-4">
-          <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center border border-border shadow-md">
-            <CrossIcon />
+          <div className="w-16 h-16 rounded-[1.25rem] bg-white flex items-center justify-center border border-border shadow-lg">
+             <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center">
+                <CrossIcon className="w-6 h-6 text-primary" />
+             </div>
           </div>
           <span className="font-headline text-lg font-bold tracking-tighter text-foreground">CHURCHHUB</span>
         </Link>

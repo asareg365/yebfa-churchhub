@@ -14,6 +14,21 @@ import Link from "next/link";
 
 const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 
+const CrossIcon = ({ className }: { className?: string }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="3" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className || "w-6 h-6 text-primary"}
+  >
+    <path d="M12 4v16M8 9h8" />
+  </svg>
+);
+
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -61,7 +76,17 @@ export default function AdminLoginPage() {
   if (userLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <div className="flex flex-col items-center gap-6 animate-in fade-in duration-1000">
+          <div className="w-24 h-24 bg-white rounded-[2rem] shadow-2xl flex items-center justify-center border border-border">
+            <div className="w-16 h-16 bg-black rounded-full flex items-center justify-center">
+               <CrossIcon className="w-10 h-10 text-primary" />
+            </div>
+          </div>
+          <div className="text-center space-y-2">
+            <h2 className="font-headline text-xl font-bold tracking-tighter text-foreground">SYSTEM ADMIN</h2>
+            <Loader2 className="w-5 h-5 animate-spin text-primary/40 mx-auto" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -79,8 +104,10 @@ export default function AdminLoginPage() {
           <span className="text-sm text-muted-foreground font-medium">Back to Public Site</span>
         </Link>
         <div className="flex items-center gap-2 justify-center mb-4">
-          <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30">
-            <ShieldCheck className="text-primary w-6 h-6" />
+          <div className="w-16 h-16 rounded-[1.25rem] bg-white flex items-center justify-center border border-border shadow-lg">
+             <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center">
+                <ShieldCheck className="w-6 h-6 text-primary" />
+             </div>
           </div>
           <span className="font-headline text-lg font-bold tracking-tighter text-foreground">SYSTEM ADMIN</span>
         </div>

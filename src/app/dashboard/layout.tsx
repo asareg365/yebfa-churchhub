@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useMemo } from 'react';
@@ -14,10 +13,25 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { SearchProvider } from '@/context/search-context';
 
+const CrossIcon = ({ className }: { className?: string }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="3" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+  >
+    <path d="M12 4v16M8 9h8" />
+  </svg>
+);
+
 export default function DashboardLayout({
   children,
 }: {
-  children: React.Node;
+  children: React.ReactNode;
 }) {
   const { user, loading } = useUser();
   const db = useFirestore();
@@ -72,9 +86,21 @@ export default function DashboardLayout({
   if (loading || churchLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-10 h-10 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground animate-pulse">Initializing Ministry Hub...</p>
+        <div className="flex flex-col items-center gap-6 animate-in fade-in duration-1000">
+          <div className="w-24 h-24 bg-white rounded-[2rem] shadow-2xl flex items-center justify-center relative overflow-hidden border border-border">
+            <div className="w-16 h-16 bg-black rounded-full flex items-center justify-center">
+               <CrossIcon className="w-10 h-10 text-primary" />
+            </div>
+          </div>
+          <div className="text-center space-y-3">
+            <h2 className="font-headline text-xl font-bold tracking-tighter text-foreground">CHURCHHUB</h2>
+            <div className="flex flex-col items-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin text-primary/40" />
+              <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-muted-foreground animate-pulse">
+                Initializing Ministry Hub
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     );
