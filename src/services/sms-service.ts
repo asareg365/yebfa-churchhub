@@ -9,7 +9,8 @@ import {
   doc,
   getDoc
 } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '@/firebase';
 
 /**
  * Enterprise SMS Log Interface
@@ -49,7 +50,7 @@ function normalizePhone(phone: string): string {
 
 /**
  * Optimized push to Enterprise Queue via Cloud Function bridge.
- * Region is explicitly forced to us-central1 to ensure connectivity.
+ * Uses shared region-bound singleton for us-central1 connectivity.
  */
 export async function sendAndLogSMS(
   db: Firestore,
@@ -63,7 +64,6 @@ export async function sendAndLogSMS(
     retryCount?: number;
   }
 ) {
-  const functions = getFunctions(undefined, "us-central1");
   const sendSMSFn = httpsCallable(functions, "sendSMS");
 
   try {

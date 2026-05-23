@@ -1,8 +1,8 @@
 'use client';
 
-import { ReactNode, useState } from 'react';
-import { initializeFirebase } from './index';
+import { ReactNode } from 'react';
 import { FirebaseProvider } from './provider';
+import { firebaseApp } from './index';
 import { AlertCircle, Terminal } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -11,10 +11,8 @@ export function FirebaseClientProvider({
 }: {
   children: ReactNode;
 }) {
-  // Initialize Firebase only on the client
-  const [firebaseInstance] = useState(() => initializeFirebase());
-
-  if (!firebaseInstance) {
+  // Check if singleton initialized correctly
+  if (!firebaseApp) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-6">
         <div className="w-full max-w-2xl space-y-6">
@@ -57,12 +55,7 @@ export function FirebaseClientProvider({
   }
 
   return (
-    <FirebaseProvider 
-      firebaseApp={firebaseInstance.firebaseApp} 
-      firestore={firebaseInstance.firestore} 
-      auth={firebaseInstance.auth}
-      functions={firebaseInstance.functions}
-    >
+    <FirebaseProvider>
       {children}
     </FirebaseProvider>
   );

@@ -19,8 +19,7 @@ import {
   Pencil,
   RefreshCcw,
   CreditCard,
-  Database,
-  ArrowRight
+  Database
 } from 'lucide-react';
 import {
   Card,
@@ -57,7 +56,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useUser, useAuth, useFunctions } from '@/firebase';
+import { useUser, auth, functions } from '@/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { signOut } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -67,8 +66,6 @@ const SUPER_ADMINS = ['asareg365@gmail.com', 'frankyeb@gmail.com'];
 
 export default function SystemAdminPortal() {
   const { user, loading: userLoading } = useUser();
-  const auth = useAuth();
-  const functions = useFunctions();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -115,7 +112,7 @@ export default function SystemAdminPortal() {
     if (user && auth.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
-  }, [user, auth.currentUser]);
+  }, [user]);
 
   const filteredChurches = useMemo(() => {
     const list = platformStats?.churches;
@@ -194,31 +191,22 @@ export default function SystemAdminPortal() {
     }
   };
 
-  if (userLoading || !auth.currentUser) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   const handleTopUp = async () => {
     if (!managingSmsId || !topUpAmount) return;
   
     try {
       setIsProcessing(true);
   
-      // FORCE AUTH TOKEN REFRESH
+      // HARD AUTH SESSION HANDSHAKE
       const currentUser = auth.currentUser;
   
       if (!currentUser) {
-        throw new Error("You are no longer authenticated. Please login again.");
+        throw new Error("Administrative session expired. Please login again.");
       }
   
+      // FORCE TOKEN REFRESH BEFORE FINANCIAL ADJUSTMENT
       await currentUser.getIdToken(true);
   
-      // IMPORTANT:
-      // initialize callable AFTER token refresh
       const topUpFn = httpsCallable(functions, "adminTopUpWallet");
   
       const result: any = await topUpFn({
@@ -226,30 +214,33 @@ export default function SystemAdminPortal() {
         amount: Number(topUpAmount),
       });
   
-      console.log("TOPUP RESULT:", result);
-  
       toast({
         title: "Credits Allocated",
         description: `${topUpAmount} SMS credits added successfully.`,
       });
   
       setManagingSmsId(null);
-  
       await loadStats();
   
     } catch (e: any) {
       console.error("TOPUP ERROR:", e);
-  
       toast({
         title: "Top-up Failed",
         description: e.message || "Internal error.",
         variant: "destructive",
       });
-  
     } finally {
       setIsProcessing(false);
     }
   };
+
+  if (userLoading || !auth.currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-8 space-y-8">

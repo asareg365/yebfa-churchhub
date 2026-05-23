@@ -1,41 +1,30 @@
 'use client';
 
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, Firestore } from 'firebase/firestore';
-import { getAuth, Auth } from 'firebase/auth';
-import { getFunctions, Functions } from 'firebase/functions';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { getFunctions } from 'firebase/functions';
 import { firebaseConfig } from './config';
 
-export function initializeFirebase(): {
-  firebaseApp: FirebaseApp;
-  firestore: Firestore;
-  auth: Auth;
-  functions: Functions;
-} | null {
-  // Validate config
-  const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined';
+// Validate config
+const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined';
 
-  if (!isConfigValid) {
-    return null;
-  }
+/**
+ * SHARED FIREBASE SINGLETONS
+ * Direct exports for consistent access across the app.
+ */
+export const firebaseApp = isConfigValid 
+  ? (getApps().length > 0 ? getApp() : initializeApp(firebaseConfig))
+  : null as any;
 
-  try {
-    const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-    const firestore = getFirestore(firebaseApp);
-    const auth = getAuth(firebaseApp);
-    
-    /**
-     * CRITICAL REGIONAL ALIGNMENT
-     * Standardized to us-central1 across both frontend and backend.
-     */
-    const functions = getFunctions(firebaseApp, "us-central1");
+export const firestore = firebaseApp ? getFirestore(firebaseApp) : null as any;
+export const auth = firebaseApp ? getAuth(firebaseApp) : null as any;
 
-    return { firebaseApp, firestore, auth, functions };
-  } catch (error) {
-    console.error('Firebase initialization failed:', error);
-    return null;
-  }
-}
+/**
+ * CRITICAL REGIONAL ALIGNMENT
+ * Explicitly bound to us-central1 for all administrative handshakes.
+ */
+export const functions = firebaseApp ? getFunctions(firebaseApp, "us-central1") : null as any;
 
 export * from './provider';
 export * from './client-provider';
