@@ -124,16 +124,18 @@ export default function SystemAdminPortal() {
   }, [user, auth.currentUser]);
 
   const filteredChurches = useMemo(() => {
-    if (!platformStats?.churches || !Array.isArray(platformStats.churches)) return [];
-    return platformStats.churches.filter((c: any) =>
+    const list = platformStats?.churches;
+    if (!Array.isArray(list)) return [];
+    return list.filter((c: any) =>
       c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.slug?.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [platformStats, searchTerm]);
 
-  const activeChurchSms = useMemo(() => 
-    (Array.isArray(platformStats?.churches) ? platformStats.churches : []).find((c: any) => c.id === managingSmsId), 
-  [platformStats, managingSmsId]);
+  const activeChurchSms = useMemo(() => {
+    const list = platformStats?.churches;
+    return (Array.isArray(list) ? list : []).find((c: any) => c.id === managingSmsId);
+  }, [platformStats, managingSmsId]);
 
   const handleUpdateStatus = async (churchId: string, status: string) => {
     setIsProcessing(true);
@@ -234,7 +236,7 @@ export default function SystemAdminPortal() {
         <Card className="glass border-primary/20">
           <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Users className="w-3 h-3"/> Total Tenants</CardTitle></CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{platformStats?.totalTenants ?? (isRefreshing ? "..." : "0")}</div>
+            <div className="text-3xl font-bold">{(platformStats?.totalTenants || 0).toLocaleString()}</div>
             <p className="text-[10px] text-muted-foreground mt-1">{platformStats?.activeTenants || 0} Active Organizations</p>
           </CardContent>
         </Card>
