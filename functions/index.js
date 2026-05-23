@@ -36,30 +36,51 @@ exports.onSmsQueued = onDocumentCreated(
 );
 
 /**
- * mNotify Delivery Webhook
+ * mNotify Delivery Webhook (Enterprise Handset Confirmation)
  */
 exports.mnotifyDeliveryWebhook = onRequest(
   { region: "us-central1", cors: true },
   async (req, res) => {
-    const { message_id, status, recipient, network } = req.body;
+    const { message_id, status } = req.body;
     if (!message_id) return res.status(400).send("Missing message_id");
+    
     const db = admin.firestore();
     try {
-      await db.collection("smsDeliveryReports").doc(message_id).set({
-        status, recipient, network, updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      // Find the log regardless of which church subcollection it's in
+      const logQuery = await db.collectionGroup("smsLogs")
+        .where("providerId", "==", String(message_id))
+        .limit(1)
+        .get();
 
-      const logQuery = await db.collectionGroup("smsLogs").where("providerId", "==", message_id).limit(1).get();
-      if (!logQuery.empty) {
-        const statusMap = { "delivered": "sent", "undelivered": "failed", "expired": "failed" };
-        await logQuery.docs[0].ref.update({
-          providerStatus: status,
-          status: statusMap[status.toLowerCase()] || "sent",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+      if (logQuery.empty) {
+        console.warn(`Webhook: Provider ID ${message_id} not found in any logs.`);
+        return res.status(404).send("Log record not found");
       }
+
+      const logDoc = logQuery.docs[0];
+      const statusMap = { 
+        "delivered": "sent", 
+        "undelivered": "failed", 
+        "expired": "failed",
+        "failed": "failed",
+        "rejected": "failed"
+      };
+
+      const normalizedStatus = (status || "sent").toLowerCase();
+      
+      await logDoc.ref.update({
+        providerStatus: normalizedStatus,
+        status: statusMap[normalizedStatus] || "sent",
+        deliveredAt: normalizedStatus === "delivered" ? admin.firestore.FieldValue.serverTimestamp() : null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      console.log(`Webhook: Updated message ${message_id} to ${normalizedStatus}`);
       res.status(200).send("OK");
-    } catch (error) { res.status(500).send("Error"); }
+    } catch (error) { 
+      console.error("Webhook Logic Error:", error.message);
+      res.status(500).send("Internal processing error"); 
+    }
   }
 );
 

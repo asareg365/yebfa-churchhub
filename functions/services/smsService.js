@@ -76,7 +76,7 @@ async function debitWalletTx(t, db, churchId, cost, messageId, type) {
 
   if (ledgerSnap.exists) {
     const existing = ledgerSnap.data();
-    if (existing.status === "COMMITTED" || existing.status === "SENT") return; 
+    if (existing.status === "COMMITTED" || existing.status === "SENT" || existing.status === "SUBMITTED") return; 
     if (existing.status === "RESERVED") throw new Error("Transaction already in progress");
   }
 
@@ -112,7 +112,7 @@ async function debitWalletTx(t, db, churchId, cost, messageId, type) {
 }
 
 /**
- * Mission Critical SMS Pipeline (Standardized Schema)
+ * Mission Critical SMS Pipeline (Enterprise Lifecycle)
  */
 async function processSMSQueueItem(apiKey, messageId, data) {
   const db = admin.firestore();
@@ -122,7 +122,7 @@ async function processSMSQueueItem(apiKey, messageId, data) {
 
   try {
     const earlyLedger = await db.collection("smsLedger").doc(ledgerId).get();
-    if (earlyLedger.exists && ["SENT", "COMMITTED"].includes(earlyLedger.data().status)) {
+    if (earlyLedger.exists && ["SENT", "COMMITTED", "SUBMITTED"].includes(earlyLedger.data().status)) {
       return { skipped: true, reason: "already_processed" };
     }
 
@@ -149,23 +149,46 @@ async function processSMSQueueItem(apiKey, messageId, data) {
       is_schedule: false
     }, { timeout: 15000 });
 
-    const isSent = response.status === 200 && (response.data?.code === "1000" || response.data?.status === "success");
+    console.log("MNOTIFY RESPONSE:", JSON.stringify(response.data, null, 2));
 
-    if (isSent) {
-      const providerId = response.data?.summary?.[0]?.message_id || "mnotify_" + Date.now();
+    const isAccepted = response.status === 200 && (response.data?.code === "1000" || response.data?.status === "success");
+
+    if (isAccepted) {
+      const providerId = String(response.data?.summary?.[0]?.message_id || "mnotify_" + Date.now());
       
       const batch = db.batch();
+      
+      // Update Queue status
       batch.update(db.collection("smsQueue").doc(messageId), { 
-        status: "sent", 
-        sentAt: admin.firestore.FieldValue.serverTimestamp() 
+        status: "submitted", 
+        providerId,
+        submittedAt: admin.firestore.FieldValue.serverTimestamp() 
       });
+
+      // Update Ledger status
       batch.update(db.collection("smsLedger").doc(ledgerId), { 
-        status: "SENT", 
+        status: "SUBMITTED", 
         processedAt: admin.firestore.FieldValue.serverTimestamp(), 
         providerId 
       });
+
+      // Create detailed log in church subcollection for UI
+      const logRef = db.collection("churches").doc(churchId).collection("smsLogs").doc(messageId);
+      batch.set(logRef, {
+        churchId,
+        phone: data.phone,
+        message: data.message,
+        provider: "mnotify",
+        providerId,
+        status: "submitted",
+        cost,
+        type: data.type,
+        memberName: data.memberName || "Guest",
+        memberId: data.memberId || null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
       await batch.commit();
-      
       return { success: true };
     } else {
       throw new Error(response.data?.message || "Provider Rejection");
@@ -250,6 +273,9 @@ async function queueSMS(churchId, payload) {
     return { success: false, error: "Organization not found" };
   }
   
+  const formattedPhone = formatPhone(payload.phone);
+  console.log("Formatted Phone:", formattedPhone);
+
   const churchData = churchDoc.data();
   const smsConfig = churchData.sms || {};
   const isApproved = smsConfig.approved === true || smsConfig.status === "Approved";
@@ -277,7 +303,7 @@ async function queueSMS(churchId, payload) {
     await db.collection("smsAbuseLogs").add({
       churchId, 
       message: payload.message, 
-      phone: payload.phone, 
+      phone: formattedPhone, 
       blockedAt: admin.firestore.FieldValue.serverTimestamp(), 
       reason: "Spam Block"
     });
@@ -285,14 +311,14 @@ async function queueSMS(churchId, payload) {
   }
 
   const dedupeKey = payload.dedupeKey || crypto.createHash("sha256")
-    .update(`${churchId}:${payload.phone}:${payload.message}`)
+    .update(`${churchId}:${formattedPhone}:${payload.message}`)
     .digest("hex");
 
   const cost = payload.cost || 1;
 
   await db.collection("smsQueue").add({
     churchId,
-    phone: formatPhone(payload.phone),
+    phone: formattedPhone,
     message: payload.message,
     type: payload.type || "other",
     status: "queued",
@@ -300,6 +326,8 @@ async function queueSMS(churchId, payload) {
     cost: cost,
     costLocked: true,
     dedupeKey,
+    memberName: payload.memberName || "Guest",
+    memberId: payload.memberId || null,
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   });
 
