@@ -111,95 +111,87 @@ exports.mnotifyDeliveryWebhook = onRequest(
 );
 
 /**
- * ADMIN: System Stats & Organization List (Reinforced Engine)
+ * ADMIN: System Stats & Organization List (FIX OPTION 1 - Standardized Callable)
  */
 exports.getSystemStats = onCall(
   { region: "us-central1" },
   async (request) => {
-    const userEmail = request.auth?.token?.email?.toLowerCase() || "";
-    if (!request.auth || !SUPER_ADMINS.includes(userEmail)) {
-      throw new HttpsError("permission-denied", "Unauthorized access.");
-    }
-
-    const db = admin.firestore();
     try {
+      if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Authentication required");
+      }
+
+      const email = request.auth.token.email?.toLowerCase();
+      if (!SUPER_ADMINS.includes(email)) {
+        throw new HttpsError("permission-denied", "Unauthorized");
+      }
+
+      const db = admin.firestore();
+
       // Parallel fetch for high performance
-      const [churchesSnap, walletsSnap, ledgerSnap, failedSnap] = await Promise.all([
+      const [churchesSnap, walletsSnap] = await Promise.all([
         db.collection("churches").get(),
-        db.collection("smsWallets").get(),
-        db.collection("smsLedger").where("status", "==", "SUBMITTED").limit(500).get(),
-        db.collection("smsLedger").where("status", "==", "FAILED").limit(100).get()
+        db.collection("smsWallets").get()
       ]);
 
-      let totalRevenue = 0;
-      const topSpenders = [];
-      const churchList = [];
-
-      // Optimized Wallet Mapping (O(N))
       const walletMap = new Map();
       walletsSnap.docs.forEach(doc => {
-        const d = doc.data();
-        if (!d) return;
-        walletMap.set(doc.id, d);
-        totalRevenue += Number(d.totalTopups || 0);
+        walletMap.set(doc.id, doc.data());
       });
 
-      churchesSnap.docs.forEach(doc => {
+      let totalRevenue = 0;
+      let totalSent = 0;
+      let totalFailed = 0;
+
+      const churchList = churchesSnap.docs.map(doc => {
         const data = doc.data();
-        if (!data) return;
+        const wallet = walletMap.get(doc.id) || { balance: 0, totalTopups: 0 };
         
-        const churchId = doc.id;
-        const wallet = walletMap.get(churchId) || { balance: 0 };
-        
-        const churchEntry = {
-          id: churchId,
+        const sent = Number(data.sms?.stats?.sent || wallet.totalSpent || 0);
+        const failed = Number(data.sms?.stats?.failed || 0);
+        const revenue = Number(wallet.totalTopups || 0);
+
+        totalRevenue += revenue;
+        totalSent += sent;
+        totalFailed += failed;
+
+        return {
+          id: doc.id,
           name: data.name || "Unnamed Ministry",
-          slug: data.slug || churchId,
+          slug: data.slug || doc.id,
           plan: data.plan || "Starter",
           adminEmails: data.adminEmails || [],
           registeredAt: data.registeredAt || null,
           sms: {
             credits: Number(data.sms?.credits ?? wallet.balance ?? 0),
             subscriptionStatus: data.sms?.subscriptionStatus || 'pending',
-            stats: data.sms?.stats || { sent: 0 }
+            stats: { sent, failed }
           }
         };
-
-        churchList.push(churchEntry);
-
-        topSpenders.push({
-          name: data.name || "Church " + churchId.substring(0, 4),
-          sent: Number(data.sms?.stats?.sent || 0),
-          balance: Number(wallet.balance || 0)
-        });
       });
 
-      // Defensive sorting logic: handles Timestamp objects, Date strings, or nulls
-      const getSeconds = (val) => {
-        if (!val) return 0;
-        if (typeof val === 'object' && val.seconds !== undefined) return val.seconds;
-        if (typeof val.toDate === 'function') {
-          try { return Math.floor(val.toDate().getTime() / 1000); } catch (e) { return 0; }
-        }
-        const d = new Date(val);
-        return isNaN(d.getTime()) ? 0 : Math.floor(d.getTime() / 1000);
-      };
-
       return {
+        churches: churchList.sort((a, b) => {
+          const getSec = (v) => v?.seconds || (v ? new Date(v).getTime() / 1000 : 0);
+          return getSec(b.registeredAt) - getSec(a.registeredAt);
+        }),
         totalTenants: churchesSnap.size,
         activeTenants: churchList.filter(c => c.sms?.subscriptionStatus === 'active').length,
-        totalSent: ledgerSnap.size,
-        totalFailed: failedSnap.size,
-        totalRevenue: totalRevenue,
-        topSpenders: topSpenders
-          .sort((a, b) => (Number(b.sent) || 0) - (Number(a.sent) || 0))
-          .slice(0, 5),
-        churches: churchList
-          .sort((a, b) => getSeconds(b.registeredAt) - getSeconds(a.registeredAt))
+        totalRevenue,
+        totalSent,
+        totalFailed,
+        topSpenders: churchList
+          .sort((a, b) => Number(b.sms?.stats?.sent || 0) - Number(a.sms?.stats?.sent || 0))
+          .slice(0, 5)
+          .map(c => ({
+            name: c.name,
+            sent: c.sms?.stats?.sent || 0,
+            balance: c.sms?.credits || 0
+          }))
       };
-    } catch (error) { 
-      console.error("System Stats Engine Critical Failure:", error);
-      throw new HttpsError("internal", "Statistics engine failure: " + error.message); 
+    } catch (error) {
+      console.error("getSystemStats engine failure:", error);
+      throw new HttpsError("internal", error.message || "Stats aggregation failed");
     }
   }
 );
@@ -207,8 +199,9 @@ exports.getSystemStats = onCall(
 exports.updateChurchStatus = onCall(
   { region: "us-central1" },
   async (request) => {
-    const userEmail = request.auth?.token?.email?.toLowerCase() || "";
-    if (!request.auth || !SUPER_ADMINS.includes(userEmail)) throw new HttpsError("permission-denied", "Unauthorized");
+    if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
+      throw new HttpsError("permission-denied", "Unauthorized");
+    }
     const { churchId, status } = request.data;
     const isApproved = status === 'active';
     
@@ -229,8 +222,9 @@ exports.updateChurchStatus = onCall(
 exports.updateOrganization = onCall(
   { region: "us-central1" },
   async (request) => {
-    const userEmail = request.auth?.token?.email?.toLowerCase() || "";
-    if (!request.auth || !SUPER_ADMINS.includes(userEmail)) throw new HttpsError("permission-denied", "Unauthorized");
+    if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
+      throw new HttpsError("permission-denied", "Unauthorized");
+    }
     
     const { churchId, name, slug, adminEmails, plan } = request.data;
     if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId");
@@ -251,10 +245,11 @@ exports.updateOrganization = onCall(
 exports.adminTopUpWallet = onCall(
   { region: "us-central1" },
   async (request) => {
-    const userEmail = request.auth?.token?.email?.toLowerCase() || "";
-    if (!request.auth || !SUPER_ADMINS.includes(userEmail)) throw new HttpsError("permission-denied", "Unauthorized");
+    if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
+      throw new HttpsError("permission-denied", "Unauthorized");
+    }
     const { churchId, amount } = request.data;
-    try { return await creditWallet(churchId, amount, "admin_manual", userEmail); }
+    try { return await creditWallet(churchId, amount, "admin_manual", request.auth.token.email); }
     catch (error) { throw new HttpsError("internal", error.message); }
   }
 );

@@ -85,6 +85,9 @@ export default function SystemAdminPortal() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const loadStats = async () => {
+    // FIX: Guard against missing auth session
+    if (!auth.currentUser) return;
+    
     setIsRefreshing(true);
     setStatsError(false);
     setErrorMessage('');
@@ -116,11 +119,12 @@ export default function SystemAdminPortal() {
     }
   }, [user, userLoading, router]);
 
+  // FIX: Resolve race condition by ensuring auth is ready
   useEffect(() => {
-    if (user && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
+    if (user && auth.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
-  }, [user]);
+  }, [user, auth.currentUser]);
 
   const filteredChurches = useMemo(() => {
     if (!platformStats?.churches || !Array.isArray(platformStats.churches)) return [];
@@ -131,7 +135,7 @@ export default function SystemAdminPortal() {
   }, [platformStats, searchTerm]);
 
   const activeChurchSms = useMemo(() => 
-    platformStats?.churches?.find((c: any) => c.id === managingSmsId), 
+    (Array.isArray(platformStats?.churches) ? platformStats.churches : []).find((c: any) => c.id === managingSmsId), 
   [platformStats, managingSmsId]);
 
   const handleUpdateStatus = async (churchId: string, status: string) => {
@@ -340,13 +344,13 @@ export default function SystemAdminPortal() {
             <CardDescription className="text-xs">Based on total SMS dispatches.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {platformStats?.topSpenders?.map((spener: any, i: number) => (
+            {(Array.isArray(platformStats?.topSpenders) ? platformStats.topSpenders : []).map((spener: any, i: number) => (
               <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border group hover:border-primary/20 transition-all">
                 <div className="flex items-center gap-3">
                   <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">#{i + 1}</div>
-                  <div><p className="text-xs font-bold truncate max-w-[120px]">{spener.name}</p><p className="text-[10px] text-muted-foreground">{spener.sent?.toLocaleString() || 0} Msgs</p></div>
+                  <div><p className="text-xs font-bold truncate max-w-[120px]">{spener.name}</p><p className="text-[10px] text-muted-foreground">{(spener.sent || 0).toLocaleString()} Msgs</p></div>
                 </div>
-                <div className="text-right"><p className="text-[10px] font-bold text-accent">{spener.balance?.toLocaleString() || 0} Cr</p></div>
+                <div className="text-right"><p className="text-[10px] font-bold text-accent">{(spener.balance || 0).toLocaleString()} Cr</p></div>
               </div>
             ))}
             {!platformStats && !statsError && <div className="py-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}
