@@ -81,12 +81,10 @@ export default function SystemAdminPortal() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const loadStats = async () => {
-    // Only fetch if session is fully established and authenticated
     if (!auth.currentUser) return;
     
     setIsRefreshing(true);
     setStatsError(false);
-    setErrorMessage('');
     const fetchStats = httpsCallable(functions, 'getSystemStats');
     try {
       const res: any = await fetchStats();
@@ -99,11 +97,7 @@ export default function SystemAdminPortal() {
       console.error("System Stats Sync Error:", err);
       setStatsError(true);
       setErrorMessage(err.message || "Could not fetch platform data.");
-      toast({ 
-        title: "Stats Sync Failed", 
-        description: err.message || "Internal system error during statistics aggregation.", 
-        variant: "destructive" 
-      });
+      toast({ title: "Stats Sync Failed", description: err.message, variant: "destructive" });
     } finally {
       setIsRefreshing(false);
     }
@@ -116,7 +110,6 @@ export default function SystemAdminPortal() {
   }, [user, userLoading, router]);
 
   useEffect(() => {
-    // Correct Version Fix: Wait for both user and auth.currentUser to be ready
     if (user && auth.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
@@ -155,13 +148,8 @@ export default function SystemAdminPortal() {
     setIsProcessing(true);
     const updateFn = httpsCallable(functions, 'updateOrganization');
     try {
-      await updateFn({ 
-        churchId: editingOrg.id, 
-        name: editingOrg.name, 
-        slug: editingOrg.slug, 
-        plan: editingOrg.plan 
-      });
-      toast({ title: "Organization Updated", description: "Details have been securely applied." });
+      await updateFn({ churchId: editingOrg.id, name: editingOrg.name, slug: editingOrg.slug, plan: editingOrg.plan });
+      toast({ title: "Organization Updated" });
       setEditingOrg(null);
       await loadStats();
     } catch (e: any) {
@@ -196,18 +184,14 @@ export default function SystemAdminPortal() {
       setManagingSmsId(null);
       await loadStats(); 
     } catch (e: any) {
-      toast({ title: "Top-up Failed", description: e.message || "Internal error.", variant: "destructive" });
+      toast({ title: "Top-up Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
   };
 
   if (userLoading || (user && !SUPER_ADMINS.includes(user.email?.toLowerCase() || ''))) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
   }
 
   return (
@@ -221,104 +205,44 @@ export default function SystemAdminPortal() {
           <p className="text-muted-foreground text-lg">Global multi-tenant infrastructure management.</p>
         </div>
         <div className="flex gap-4">
-          <Button variant="outline" size="icon" onClick={loadStats} className={cn("rounded-xl transition-all", isRefreshing && "animate-spin")} disabled={isRefreshing}>
-             <RefreshCcw className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" onClick={() => signOut(auth)} className="rounded-xl">
-            <LogOut className="mr-2 h-4 w-4" /> Logout
-          </Button>
+          <Button variant="outline" size="icon" onClick={loadStats} className={cn("rounded-xl transition-all", isRefreshing && "animate-spin")} disabled={isRefreshing}><RefreshCcw className="h-4 w-4" /></Button>
+          <Button variant="outline" onClick={() => signOut(auth)} className="rounded-xl"><LogOut className="mr-2 h-4 w-4" /> Logout</Button>
         </div>
       </div>
 
       {statsError && (
-        <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 animate-in fade-in zoom-in-95">
+        <Alert variant="destructive" className="bg-destructive/10 border-destructive/20">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle className="font-bold ml-2">Sync Error</AlertTitle>
-          <AlertDescription className="ml-2 text-sm">
-            {errorMessage || "The platform stats engine returned an error. Some organization data may be stale."}
-            <Button variant="link" size="sm" onClick={loadStats} className="text-destructive font-bold underline ml-4 p-0 h-auto">Retry Sync</Button>
-          </AlertDescription>
+          <AlertDescription className="ml-2 text-sm">{errorMessage} <Button variant="link" size="sm" onClick={loadStats} className="text-destructive font-bold underline p-0 h-auto">Retry Sync</Button></AlertDescription>
         </Alert>
       )}
 
       <div className="grid gap-6 md:grid-cols-4">
-        <Card className="glass border-primary/20">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Users className="w-3 h-3"/> Total Tenants</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{(platformStats?.totalTenants || 0).toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">{platformStats?.activeTenants || 0} Active Organizations</p>
-          </CardContent>
-        </Card>
-        <Card className="glass border-accent/20">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Coins className="w-3 h-3"/> Platform Revenue</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-accent">GH₵{(platformStats?.totalRevenue || 0).toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">All-time credits allocated</p>
-          </CardContent>
-        </Card>
-        <Card className="glass">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><TrendingUp className="w-3 h-3"/> Global Sent</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-primary">{(platformStats?.totalSent || 0).toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">Total platform dispatches</p>
-          </CardContent>
-        </Card>
-        <Card className="glass border-destructive/20">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><AlertTriangle className="w-3 h-3"/> Global Failures</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-destructive">{(platformStats?.totalFailed || 0).toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">System-wide errors</p>
-          </CardContent>
-        </Card>
+        <Card className="glass border-primary/20"><CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Users className="w-3 h-3"/> Total Tenants</CardTitle></CardHeader><CardContent><div className="text-3xl font-bold">{(platformStats?.totalTenants || 0).toLocaleString()}</div><p className="text-[10px] text-muted-foreground mt-1">{platformStats?.activeTenants || 0} Active Organizations</p></CardContent></Card>
+        <Card className="glass border-accent/20"><CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Coins className="w-3 h-3"/> Platform Revenue</CardTitle></CardHeader><CardContent><div className="text-3xl font-bold text-accent">GH₵{(platformStats?.totalRevenue || 0).toLocaleString()}</div><p className="text-[10px] text-muted-foreground mt-1">All-time credits allocated</p></CardContent></Card>
+        <Card className="glass"><CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><TrendingUp className="w-3 h-3"/> Global Sent</CardTitle></CardHeader><CardContent><div className="text-3xl font-bold text-primary">{(platformStats?.totalSent || 0).toLocaleString()}</div><p className="text-[10px] text-muted-foreground mt-1">Total platform dispatches</p></CardContent></Card>
+        <Card className="glass border-destructive/20"><CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><AlertTriangle className="w-3 h-3"/> Global Failures</CardTitle></CardHeader><CardContent><div className="text-3xl font-bold text-destructive">{(platformStats?.totalFailed || 0).toLocaleString()}</div><p className="text-[10px] text-muted-foreground mt-1">System-wide errors</p></CardContent></Card>
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
         <Card className="glass md:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-7">
-            <div>
-              <CardTitle>Organization Directory</CardTitle>
-              <CardDescription>Manage tenant lifecycles and source-of-truth wallets.</CardDescription>
-            </div>
-            <div className="relative w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search ministries..." className="pl-10 h-11" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-            </div>
+            <div><CardTitle>Organization Directory</CardTitle><CardDescription>Manage tenant lifecycles and source-of-truth wallets.</CardDescription></div>
+            <div className="relative w-72"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search ministries..." className="pl-10 h-11" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
           </CardHeader>
           <CardContent>
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Ministry</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Balance (Credits)</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
+              <TableHeader><TableRow><TableHead>Ministry</TableHead><TableHead>Plan</TableHead><TableHead>Status</TableHead><TableHead>Balance (Credits)</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {isRefreshing && !platformStats ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-20"><Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" /></TableCell>
-                  </TableRow>
-                ) : (Array.isArray(filteredChurches) ? filteredChurches : []).map((church: any) => (
+                  <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                ) : filteredChurches.map((church: any) => (
                   <TableRow key={church.id}>
                     <TableCell><div className="font-bold text-foreground">{church.name}</div><code className="text-[10px] text-primary">{church.slug}</code></TableCell>
                     <TableCell><Badge variant="outline" className="text-foreground">{church.plan || 'Starter'}</Badge></TableCell>
-                    <TableCell>
-                      <Badge className={cn(
-                        "uppercase text-[9px] font-bold px-2 py-0.5",
-                        church.sms?.subscriptionStatus === 'active' ? "bg-accent text-white" : 
-                        church.sms?.subscriptionStatus === 'suspended' ? "bg-destructive text-white" : "bg-amber-100 text-amber-700"
-                      )}>
-                        {church.sms?.subscriptionStatus || 'Pending'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <CreditCard className="h-3 w-3 text-muted-foreground" />
-                        <span className="font-mono font-bold text-foreground">{(church.sms?.credits || 0).toLocaleString()}</span>
-                      </div>
-                    </TableCell>
+                    <TableCell><Badge className={cn("uppercase text-[9px] font-bold px-2 py-0.5", church.sms?.subscriptionStatus === 'active' ? "bg-accent text-white" : church.sms?.subscriptionStatus === 'suspended' ? "bg-destructive text-white" : "bg-amber-100 text-amber-700")}>{church.sms?.subscriptionStatus || 'Pending'}</Badge></TableCell>
+                    <TableCell><div className="flex items-center gap-2"><CreditCard className="h-3 w-3 text-muted-foreground" /><span className="font-mono font-bold text-foreground">{(church.sms?.credits || 0).toLocaleString()}</span></div></TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-muted-foreground"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
@@ -337,23 +261,15 @@ export default function SystemAdminPortal() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {(!filteredChurches || filteredChurches.length === 0) && !isRefreshing && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">No organizations found.</TableCell>
-                  </TableRow>
-                )}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
 
         <Card className="glass h-fit">
-          <CardHeader>
-            <CardTitle className="text-sm font-bold uppercase tracking-widest text-foreground">Top Active Tenants</CardTitle>
-            <CardDescription className="text-xs">Based on total SMS dispatches.</CardDescription>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-sm font-bold uppercase tracking-widest text-foreground">Top Active Tenants</CardTitle><CardDescription className="text-xs">Based on total SMS dispatches.</CardDescription></CardHeader>
           <CardContent className="space-y-4">
-            {(Array.isArray(platformStats?.topSpenders) ? platformStats.topSpenders : []).map((spender: any, i: number) => (
+            {(platformStats?.topSpenders || []).map((spender: any, i: number) => (
               <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border group hover:border-primary/20 transition-all">
                 <div className="flex items-center gap-3">
                   <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">#{i + 1}</div>
@@ -362,11 +278,6 @@ export default function SystemAdminPortal() {
                 <div className="text-right"><p className="text-[10px] font-bold text-accent">{(spender.balance || 0).toLocaleString()} Cr</p></div>
               </div>
             ))}
-            {!platformStats && !statsError && <div className="py-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}
-            {statsError && <div className="py-8 text-center text-xs text-destructive flex flex-col items-center gap-2">
-               <AlertTriangle className="h-4 w-4" />
-               Stats engine failure. <Button variant="link" size="sm" onClick={loadStats}>Retry Sync</Button>
-            </div>}
           </CardContent>
         </Card>
       </div>
@@ -374,35 +285,12 @@ export default function SystemAdminPortal() {
       {/* Edit Organization Dialog */}
       <Dialog open={!!editingOrg} onOpenChange={(o) => !o && setEditingOrg(null)}>
         <DialogContent className="glass">
-          <DialogHeader>
-            <DialogTitle>Edit Organization</DialogTitle>
-            <DialogDescription>Modify primary markers for {editingOrg?.name}.</DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Edit Organization</DialogTitle><DialogDescription>Modify primary markers for {editingOrg?.name}.</DialogDescription></DialogHeader>
           <div className="py-6 space-y-4">
-            <div className="space-y-2">
-              <Label>Ministry Name</Label>
-              <Input value={editingOrg?.name || ''} onChange={(e) => setEditingOrg({...editingOrg, name: e.target.value})} className="bg-white" />
-            </div>
-            <div className="space-y-2">
-              <Label>Tenant Slug</Label>
-              <Input value={editingOrg?.slug || ''} onChange={(e) => setEditingOrg({...editingOrg, slug: e.target.value})} className="bg-white font-mono" />
-            </div>
-            <div className="space-y-2">
-              <Label>Service Plan</Label>
-              <Select value={editingOrg?.plan || 'Basic'} onValueChange={(v) => setEditingOrg({...editingOrg, plan: v})}>
-                <SelectTrigger className="bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Basic">Starter (Basic)</SelectItem>
-                  <SelectItem value="Standard">Ministry Growth (Standard)</SelectItem>
-                  <SelectItem value="Premium">Enterprise (Premium)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button className="w-full bg-primary h-12 rounded-xl mt-4" onClick={handleSaveOrg} disabled={isProcessing}>
-              {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
-            </Button>
+            <div className="space-y-2"><Label>Ministry Name</Label><Input value={editingOrg?.name || ''} onChange={(e) => setEditingOrg({...editingOrg, name: e.target.value})} className="bg-white" /></div>
+            <div className="space-y-2"><Label>Tenant Slug</Label><Input value={editingOrg?.slug || ''} onChange={(e) => setEditingOrg({...editingOrg, slug: e.target.value})} className="bg-white font-mono" /></div>
+            <div className="space-y-2"><Label>Service Plan</Label><Select value={editingOrg?.plan || 'Basic'} onValueChange={(v) => setEditingOrg({...editingOrg, plan: v})}><SelectTrigger className="bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Basic">Starter (Basic)</SelectItem><SelectItem value="Standard">Ministry Growth (Standard)</SelectItem><SelectItem value="Premium">Enterprise (Premium)</SelectItem></SelectContent></Select></div>
+            <Button className="w-full bg-primary h-12 rounded-xl mt-4" onClick={handleSaveOrg} disabled={isProcessing}>{isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -410,21 +298,12 @@ export default function SystemAdminPortal() {
       {/* Top-up Dialog */}
       <Dialog open={!!managingSmsId} onOpenChange={(o) => !o && setManagingSmsId(null)}>
         <DialogContent className="glass">
-          <DialogHeader>
-            <DialogTitle>Wallet Credit Allocation</DialogTitle>
-            <DialogDescription>Adding credits for <strong>{activeChurchSms?.name}</strong>.</DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Wallet Credit Allocation</DialogTitle><DialogDescription>Adding credits for <strong>{activeChurchSms?.name}</strong>.</DialogDescription></DialogHeader>
           <div className="py-6 space-y-4">
-            <div className="p-4 rounded-xl bg-muted/20 border flex justify-between items-center">
-              <span className="text-sm font-medium">Current Balance:</span>
-              <span className="text-xl font-bold text-foreground">{(activeChurchSms?.sms?.credits || 0).toLocaleString()} Credits</span>
-            </div>
+            <div className="p-4 rounded-xl bg-muted/20 border flex justify-between items-center"><span className="text-sm font-medium">Current Balance:</span><span className="text-xl font-bold text-foreground">{(activeChurchSms?.sms?.credits || 0).toLocaleString()} Credits</span></div>
             <div className="space-y-2">
               <Label>SMS Credits to Add</Label>
-              <div className="flex gap-2">
-                <Input type="number" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="h-12 bg-white" />
-                <Button className="bg-primary h-12 px-6" onClick={handleTopUp} disabled={isProcessing}>{isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}</Button>
-              </div>
+              <div className="flex gap-2"><Input type="number" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="h-12 bg-white" /><Button className="bg-primary h-12 px-6" onClick={handleTopUp} disabled={isProcessing}>{isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}</Button></div>
               <p className="text-[10px] text-muted-foreground italic">Use the "Reset Balance" feature in the directory if you need to clear the wallet first.</p>
             </div>
           </div>

@@ -34,14 +34,6 @@ function getBackoffDelay(retryCount) {
 }
 
 /**
- * ABUSE DETECTION
- */
-function isPotentiallyMalicious(message) {
-  const normalized = (message || "").toLowerCase().replace(/[^a-z0-9 ]/g, "");
-  return SPAM_KEYWORDS.some(keyword => normalized.includes(keyword));
-}
-
-/**
  * Distributed Locking
  */
 async function acquireLock(db, churchId, messageId) {
@@ -73,7 +65,7 @@ async function releaseLock(db, churchId) {
 }
 
 /**
- * Transactional Wallet Debit
+ * Transactional Wallet Debit with SAFETY AUTO-HEAL
  */
 async function debitWalletTx(t, db, churchId, cost, messageId, type) {
   const ledgerId = `${churchId}_${messageId}`;
@@ -91,9 +83,28 @@ async function debitWalletTx(t, db, churchId, cost, messageId, type) {
     if (["COMMITTED", "SENT", "SUBMITTED"].includes(existing.status)) return;
   }
 
-  const wallet = walletSnap.exists ? walletSnap.data() : { balance: 0 };
-  const balance = Number(wallet.balance || 0);
+  let walletData;
+  if (!walletSnap.exists) {
+    const churchSnap = await t.get(churchRef);
+    const fallbackCredits = Number(churchSnap.data()?.sms?.credits || 0);
 
+    walletData = {
+      balance: fallbackCredits,
+      totalSpent: 0,
+      totalTopups: fallbackCredits,
+      currency: "SMS_CREDIT",
+      status: "active",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    t.set(walletRef, walletData);
+    console.warn(`AUTO-RECOVERY: Wallet recreated for ${churchId} with ${fallbackCredits} credits.`);
+  } else {
+    walletData = walletSnap.data();
+  }
+
+  const balance = Number(walletData.balance || 0);
   if (balance < cost) throw new Error("Insufficient SMS credits");
 
   const newBalance = balance - cost;
@@ -185,12 +196,9 @@ async function processSMSQueueItem(apiKey, messageId, data) {
         message: data.message,
         type: data.type || "general",
         status: "sent",
-        provider: "mnotify",
         providerId: providerId,
         cost: cost,
-        queuedAt: data.createdAt || null,
         sentAt: admin.firestore.FieldValue.serverTimestamp(),
-        retryCount: data.retryCount || 0,
         memberName: data.memberName || "Guest",
         memberId: data.memberId || null,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -206,17 +214,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
   } catch (error) {
     console.error(`[Pipeline Error] ${messageId}:`, error.message);
     
-    if (error.message.includes("Insufficient SMS credits")) {
-      const walletSnap = await db.collection("smsWallets").doc(churchId).get();
-      const realBalance = walletSnap.exists ? Number(walletSnap.data().balance || 0) : 0;
-      
-      await db.collection("churches").doc(churchId).update({
-        "sms.credits": realBalance,
-        "sms.lowBalance": true,
-        "sms.lastLowBalanceAt": admin.firestore.FieldValue.serverTimestamp()
-      }).catch(() => {});
-    }
-
     const ledgerSnap = await db.collection("smsLedger").doc(ledgerId).get();
     if (ledgerSnap.exists && ledgerSnap.data().status === "COMMITTED") {
       await refundWallet(churchId, cost, "dispatch_failed", messageId);
@@ -244,7 +241,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
       type: data.type || "general",
       status: "failed",
       error: error.message,
-      retryable,
       cost: cost,
       memberName: data.memberName || "Guest",
       memberId: data.memberId || null,
@@ -275,7 +271,6 @@ async function refundWallet(churchId, amount, reason, messageId) {
 
     if (ledgerSnap.exists && ledgerSnap.data().status === "REFUNDED") return;
 
-    t.update(ledgerRef, { status: "REFUND_PENDING" });
     const balance = walletSnap.exists ? Number(walletSnap.data().balance || 0) : 0;
     const newBalance = balance + amount;
 
@@ -292,17 +287,12 @@ async function refundWallet(churchId, amount, reason, messageId) {
   });
 }
 
-/**
- * Force Wipes Credit Balance
- * Syncs both transactional wallet and display cache to zero.
- */
 async function resetWallet(churchId, processedBy) {
   const db = admin.firestore();
   const walletRef = db.collection("smsWallets").doc(churchId);
   const churchRef = db.collection("churches").doc(churchId);
 
   await db.runTransaction(async (t) => {
-    // ResetTransactional Source
     t.set(walletRef, {
       balance: 0,
       totalSpent: 0,
@@ -311,7 +301,6 @@ async function resetWallet(churchId, processedBy) {
       lastResetBy: processedBy
     }, { merge: true });
 
-    // Reset Display Cache
     t.update(churchRef, {
       "sms.credits": 0,
       "sms.stats.sent": 0,
