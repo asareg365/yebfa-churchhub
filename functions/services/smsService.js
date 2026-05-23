@@ -292,20 +292,30 @@ async function refundWallet(churchId, amount, reason, messageId) {
   });
 }
 
+/**
+ * Force Wipes Credit Balance
+ * Syncs both transactional wallet and display cache to zero.
+ */
 async function resetWallet(churchId, processedBy) {
   const db = admin.firestore();
   const walletRef = db.collection("smsWallets").doc(churchId);
   const churchRef = db.collection("churches").doc(churchId);
 
   await db.runTransaction(async (t) => {
+    // ResetTransactional Source
     t.set(walletRef, {
       balance: 0,
+      totalSpent: 0,
+      totalTopups: 0,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastResetBy: processedBy
     }, { merge: true });
 
+    // Reset Display Cache
     t.update(churchRef, {
       "sms.credits": 0,
+      "sms.stats.sent": 0,
+      "sms.stats.failed": 0,
       "sms.lastResetAt": admin.firestore.FieldValue.serverTimestamp()
     });
   });

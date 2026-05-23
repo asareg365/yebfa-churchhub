@@ -19,7 +19,6 @@ import {
   Pencil,
   RefreshCcw,
   CreditCard,
-  Trash2
 } from 'lucide-react';
 import {
   Card,
@@ -51,7 +50,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -83,6 +81,7 @@ export default function SystemAdminPortal() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const loadStats = async () => {
+    // Only fetch if session is established to prevent unauthenticated errors
     if (!auth.currentUser) return;
     
     setIsRefreshing(true);
@@ -117,6 +116,7 @@ export default function SystemAdminPortal() {
   }, [user, userLoading, router]);
 
   useEffect(() => {
+    // Race Condition Fix: Wait for both user and auth.currentUser to be ready
     if (user && auth.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
@@ -157,6 +157,7 @@ export default function SystemAdminPortal() {
     try {
       await resetFn({ churchId });
       toast({ title: "Wallet Reset", description: "Balance has been cleared to 0." });
+      // Forced reload to reflect new source-of-truth
       await loadStats();
     } catch (e: any) {
       toast({ title: "Reset Failed", description: e.message, variant: "destructive" });
@@ -176,32 +177,6 @@ export default function SystemAdminPortal() {
       await loadStats(); 
     } catch (e: any) {
       toast({ title: "Top-up Failed", description: e.message || "Internal error.", variant: "destructive" });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleUpdateOrg = async () => {
-    if (!editingOrg) return;
-    setIsProcessing(true);
-    const updateFn = httpsCallable(functions, 'updateOrganization');
-    try {
-      const adminEmailsArr = typeof editingOrg.adminEmails === 'string' 
-        ? editingOrg.adminEmails.split(',').map((e: string) => e.trim().toLowerCase())
-        : editingOrg.adminEmails;
-
-      await updateFn({
-        churchId: editingOrg.id,
-        name: editingOrg.name,
-        slug: editingOrg.slug,
-        adminEmails: adminEmailsArr,
-        plan: editingOrg.plan
-      });
-      toast({ title: "Organization Updated", description: "Details have been synchronized across nodes." });
-      setEditingOrg(null);
-      await loadStats();
-    } catch (e: any) {
-      toast({ title: "Update Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
@@ -396,59 +371,6 @@ export default function SystemAdminPortal() {
               <p className="text-[10px] text-muted-foreground italic">Use the "Reset Balance" feature in the directory if you need to clear the wallet first.</p>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!editingOrg} onOpenChange={(o) => !o && setEditingOrg(null)}>
-        <DialogContent className="glass max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Organization Profile</DialogTitle>
-            <DialogDescription>Update platform-level settings for this ministry.</DialogDescription>
-          </DialogHeader>
-          {editingOrg && (
-            <div className="space-y-6 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Ministry Name</Label>
-                  <Input value={editingOrg.name} onChange={(e) => setEditingOrg({...editingOrg, name: e.target.value})} className="bg-white" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Tenant Slug (System ID)</Label>
-                  <Input value={editingOrg.slug} onChange={(e) => setEditingOrg({...editingOrg, slug: e.target.value})} className="bg-white" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Authorized Admin Emails (Comma separated)</Label>
-                <Textarea 
-                   value={Array.isArray(editingOrg.adminEmails) ? editingOrg.adminEmails.join(', ') : editingOrg.adminEmails} 
-                   onChange={(e) => setEditingOrg({...editingOrg, adminEmails: e.target.value})} 
-                   className="h-24 font-mono text-xs bg-white"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Current Plan</Label>
-                <div className="flex gap-2">
-                  {['Basic', 'Standard', 'Premium'].map(p => (
-                    <Button 
-                      key={p} 
-                      variant={editingOrg.plan === p ? 'default' : 'outline'} 
-                      className="flex-1"
-                      onClick={() => setEditingOrg({...editingOrg, plan: p})}
-                    >
-                      {p}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingOrg(null)}>Cancel</Button>
-            <Button onClick={handleUpdateOrg} disabled={isProcessing} className="bg-primary text-primary-foreground">
-              {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ShieldCheck className="h-4 w-4 mr-2" />}
-              Save All Changes
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

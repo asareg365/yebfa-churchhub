@@ -14,6 +14,7 @@ const { processSMSQueueItem, queueSMS, creditWallet, resetWallet } = require("./
 
 /**
  * ADMIN: System Stats Aggregation (v2 Callable)
+ * STRICT SERIALIZATION VERSION: Converts all Timestamps to Strings.
  */
 exports.getSystemStats = onCall(
   {
@@ -34,7 +35,7 @@ exports.getSystemStats = onCall(
       const db = admin.firestore();
       const churchesSnap = await db.collection("churches").get();
 
-      // Serialization Safety: Map to clean JS objects and handle Timestamps
+      // Sanitized Data Mapping: Prevents serialization errors from raw Firestore objects
       const churches = churchesSnap.docs.map(doc => {
         const d = doc.data();
         return {
@@ -42,13 +43,13 @@ exports.getSystemStats = onCall(
           name: d.name || "Unnamed Ministry",
           slug: d.slug || "no-slug",
           plan: d.plan || "Starter",
-          // Convert Timestamps to strings to avoid serialization errors in v2 Callable
-          registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : (d.registeredAt || null),
-          updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate().toISOString() : (d.updatedAt || null),
+          // Convert internal Timestamps to ISO strings for serialization safety
+          registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : (d.registeredAt ? String(d.registeredAt) : null),
+          updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate().toISOString() : (d.updatedAt ? String(d.updatedAt) : null),
           sms: {
             credits: Number(d.sms?.credits || 0),
-            sent: Number(d.sms?.sent || 0),
-            failed: Number(d.sms?.failed || 0),
+            sent: Number(d.sms?.stats?.sent || 0),
+            failed: Number(d.sms?.stats?.failed || 0),
             totalTopups: Number(d.sms?.totalTopups || 0),
             subscriptionStatus: d.sms?.subscriptionStatus || "inactive"
           }
@@ -61,6 +62,7 @@ exports.getSystemStats = onCall(
       let activeTenants = 0;
 
       churches.forEach(church => {
+        // Safe numeric aggregation
         totalRevenue += Number(church.sms?.totalTopups || 0);
         totalSent += Number(church.sms?.sent || 0);
         totalFailed += Number(church.sms?.failed || 0);
