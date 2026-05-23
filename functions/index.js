@@ -111,7 +111,7 @@ exports.mnotifyDeliveryWebhook = onRequest(
 );
 
 /**
- * ADMIN: System Stats & Organization List
+ * ADMIN: System Stats & Organization List (Reinforced Engine)
  */
 exports.getSystemStats = onCall(
   { region: "us-central1" },
@@ -123,7 +123,7 @@ exports.getSystemStats = onCall(
 
     const db = admin.firestore();
     try {
-      // Parallel fetch for performance
+      // Parallel fetch for high performance
       const [churchesSnap, walletsSnap, ledgerSnap, failedSnap] = await Promise.all([
         db.collection("churches").get(),
         db.collection("smsWallets").get(),
@@ -135,16 +135,19 @@ exports.getSystemStats = onCall(
       const topSpenders = [];
       const churchList = [];
 
-      // Map wallets for O(1) lookup
+      // Optimized Wallet Mapping (O(N))
       const walletMap = new Map();
       walletsSnap.docs.forEach(doc => {
         const d = doc.data();
+        if (!d) return;
         walletMap.set(doc.id, d);
         totalRevenue += Number(d.totalTopups || 0);
       });
 
       churchesSnap.docs.forEach(doc => {
         const data = doc.data();
+        if (!data) return;
+        
         const churchId = doc.id;
         const wallet = walletMap.get(churchId) || { balance: 0 };
         
@@ -156,7 +159,7 @@ exports.getSystemStats = onCall(
           adminEmails: data.adminEmails || [],
           registeredAt: data.registeredAt || null,
           sms: {
-            credits: data.sms?.credits ?? wallet.balance ?? 0,
+            credits: Number(data.sms?.credits ?? wallet.balance ?? 0),
             subscriptionStatus: data.sms?.subscriptionStatus || 'pending',
             stats: data.sms?.stats || { sent: 0 }
           }
@@ -165,22 +168,19 @@ exports.getSystemStats = onCall(
         churchList.push(churchEntry);
 
         topSpenders.push({
-          name: data.name || churchId,
-          sent: data.sms?.stats?.sent || 0,
-          balance: wallet.balance || 0
+          name: data.name || "Church " + churchId.substring(0, 4),
+          sent: Number(data.sms?.stats?.sent || 0),
+          balance: Number(wallet.balance || 0)
         });
       });
 
       // Defensive sorting logic: handles Timestamp objects, Date strings, or nulls
       const getSeconds = (val) => {
         if (!val) return 0;
-        // If it's a Firestore Timestamp object
         if (typeof val === 'object' && val.seconds !== undefined) return val.seconds;
-        // If it's a Firestore Timestamp from some libraries
         if (typeof val.toDate === 'function') {
           try { return Math.floor(val.toDate().getTime() / 1000); } catch (e) { return 0; }
         }
-        // If it's a string or native Date
         const d = new Date(val);
         return isNaN(d.getTime()) ? 0 : Math.floor(d.getTime() / 1000);
       };
@@ -191,12 +191,15 @@ exports.getSystemStats = onCall(
         totalSent: ledgerSnap.size,
         totalFailed: failedSnap.size,
         totalRevenue: totalRevenue,
-        topSpenders: topSpenders.sort((a, b) => (Number(b.sent) || 0) - (Number(a.sent) || 0)).slice(0, 5),
-        churches: churchList.sort((a, b) => getSeconds(b.registeredAt) - getSeconds(a.registeredAt))
+        topSpenders: topSpenders
+          .sort((a, b) => (Number(b.sent) || 0) - (Number(a.sent) || 0))
+          .slice(0, 5),
+        churches: churchList
+          .sort((a, b) => getSeconds(b.registeredAt) - getSeconds(a.registeredAt))
       };
     } catch (error) { 
-      console.error("System Stats Engine Error:", error);
-      throw new HttpsError("internal", error.message || "Cloud Statistics Engine Failure"); 
+      console.error("System Stats Engine Critical Failure:", error);
+      throw new HttpsError("internal", "Statistics engine failure: " + error.message); 
     }
   }
 );

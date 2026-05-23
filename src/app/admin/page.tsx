@@ -94,7 +94,7 @@ export default function SystemAdminPortal() {
       if (res.data) {
         setPlatformStats(res.data);
       } else {
-        throw new Error("Empty response from stats engine.");
+        throw new Error("Empty response from platform engine.");
       }
     } catch (err: any) {
       console.error("System Stats Sync Error:", err);
@@ -344,9 +344,9 @@ export default function SystemAdminPortal() {
               <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border group hover:border-primary/20 transition-all">
                 <div className="flex items-center gap-3">
                   <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">#{i + 1}</div>
-                  <div><p className="text-xs font-bold truncate max-w-[120px]">{spener.name}</p><p className="text-[10px] text-muted-foreground">{spener.sent.toLocaleString()} Msgs</p></div>
+                  <div><p className="text-xs font-bold truncate max-w-[120px]">{spener.name}</p><p className="text-[10px] text-muted-foreground">{spener.sent?.toLocaleString() || 0} Msgs</p></div>
                 </div>
-                <div className="text-right"><p className="text-[10px] font-bold text-accent">{spener.balance.toLocaleString()} Cr</p></div>
+                <div className="text-right"><p className="text-[10px] font-bold text-accent">{spener.balance?.toLocaleString() || 0} Cr</p></div>
               </div>
             ))}
             {!platformStats && !statsError && <div className="py-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}
