@@ -74,10 +74,15 @@ export default function SMSCenterHub() {
   const stats = useMemo(() => {
     const sms = currentChurch?.sms || { credits: 0, enabled: false, subscriptionStatus: 'pending' };
     if (!allLogs) return { today: 0, failed: 0, remaining: sms.credits, enabled: sms.enabled, status: sms.subscriptionStatus };
+    
     const today = startOfDay(new Date());
-    const logsToday = allLogs.filter(l => l.createdAt?.toDate?.() >= today);
+    const logsToday = allLogs.filter(l => {
+      const d = l.createdAt?.toDate?.() || new Date(l.createdAt);
+      return d >= today;
+    });
+
     return {
-      today: logsToday.filter(l => l.status === 'sent').length,
+      today: logsToday.filter(l => l.status === 'sent' || l.status === 'delivered').length,
       failed: logsToday.filter(l => l.status === 'failed').length,
       remaining: sms.credits || 0,
       enabled: sms.enabled,
@@ -165,7 +170,7 @@ export default function SMSCenterHub() {
           <div className="grid gap-4 md:grid-cols-4">
             <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Available Credits</p><h3 className="text-2xl font-bold text-primary">{stats.remaining.toLocaleString()}</h3></CardContent></Card>
             <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sent Today</p><h3 className="text-2xl font-bold text-accent">{stats.today}</h3></CardContent></Card>
-            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Failures</p><h3 className="text-2xl font-bold text-destructive">{stats.failed}</h3></CardContent></Card>
+            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Failures Today</p><h3 className="text-2xl font-bold text-destructive">{stats.failed}</h3></CardContent></Card>
             <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Service Status</p><h3 className="text-2xl font-bold capitalize">{stats.status}</h3></CardContent></Card>
           </div>
 
@@ -254,15 +259,19 @@ export default function SMSCenterHub() {
                               {camp.scheduledAt?.toDate ? format(camp.scheduledAt.toDate(), 'MMM d, HH:mm') : 'N/A'}
                             </td>
                             <td className="p-4">
-                              <Badge className={cn(
-                                "text-[10px] font-bold uppercase",
-                                camp.status === 'completed' ? "bg-accent" : "bg-primary"
-                              )}>
-                                {camp.status}
-                              </Badge>
+                              <div className="flex flex-col gap-1">
+                                <Badge className={cn(
+                                  "text-[10px] font-bold uppercase w-fit",
+                                  camp.status === 'completed' ? "bg-accent" : 
+                                  camp.status === 'failed' ? "bg-destructive" : "bg-primary"
+                                )}>
+                                  {camp.status}
+                                </Badge>
+                                {camp.error && <span className="text-[9px] text-destructive truncate max-w-[150px]">{camp.error}</span>}
+                              </div>
                             </td>
                             <td className="p-4 text-right">
-                              {camp.status === 'pending' && (
+                              {camp.status !== 'completed' && (
                                 <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteDoc(doc(campaignRef!, camp.id))}>
                                   <Trash2 className="w-4 h-4" />
                                 </Button>

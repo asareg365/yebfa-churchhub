@@ -21,38 +21,60 @@ async function processScheduledCampaigns(apiKey) {
     for (const campDoc of campaignsSnap.docs) {
       const campaign = campDoc.data();
       
-      // Mark as processing
-      await campDoc.ref.update({ status: "processing" });
+      try {
+        // Mark as processing
+        await campDoc.ref.update({ status: "processing" });
 
-      // Fetch target audience
-      let membersSnap;
-      if (campaign.target === "all members") {
-        membersSnap = await churchDoc.ref.collection("members").where("status", "==", "Active").get();
-      } else {
-        membersSnap = await churchDoc.ref.collection("members")
-          .where("department", "==", campaign.target)
-          .where("status", "==", "Active")
-          .get();
-      }
+        // Fetch target audience
+        let membersSnap;
+        if (campaign.target === "all members") {
+          membersSnap = await churchDoc.ref.collection("members").where("status", "==", "Active").get();
+        } else {
+          membersSnap = await churchDoc.ref.collection("members")
+            .where("department", "==", campaign.target)
+            .where("status", "==", "Active")
+            .get();
+        }
 
-      for (const memDoc of membersSnap.docs) {
-        const member = memDoc.data();
-        if (!member.phone) continue;
+        if (membersSnap.empty) {
+          await campDoc.ref.update({ status: "completed", result: "No active members found for target." });
+          continue;
+        }
 
-        // PUSH TO QUEUE
-        await queueSMS(churchId, {
-          phone: member.phone,
-          message: campaign.message,
-          type: "announcement",
-          memberName: member.name,
-          memberId: memDoc.id
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const memDoc of membersSnap.docs) {
+          const member = memDoc.data();
+          if (!member.phone) continue;
+
+          // PUSH TO QUEUE
+          const result = await queueSMS(churchId, {
+            phone: member.phone,
+            message: campaign.message,
+            type: "announcement",
+            memberName: member.name,
+            memberId: memDoc.id
+          });
+
+          if (result.success) successCount++;
+          else failCount++;
+        }
+
+        await campDoc.ref.update({ 
+          status: "completed",
+          processedAt: admin.firestore.FieldValue.serverTimestamp(),
+          stats: { success: successCount, failed: failCount }
+        });
+
+      } catch (error) {
+        console.error(`Error processing campaign ${campDoc.id}:`, error.message);
+        await campDoc.ref.update({ 
+          status: "failed", 
+          error: error.message,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
       }
-
-      await campDoc.ref.update({ 
-        status: "completed",
-        processedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
     }
   }
 }
