@@ -116,6 +116,7 @@ export default function SystemAdminPortal() {
   }, [user, userLoading, router]);
 
   useEffect(() => {
+    // RACE CONDITION FIX: Load only when both user AND auth session are verified
     if (user && auth.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
@@ -242,7 +243,7 @@ export default function SystemAdminPortal() {
           <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><CedisSign className="w-3 h-3"/> Platform Revenue</CardTitle></CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-accent">GH₵{(platformStats?.totalRevenue || 0).toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">All-time GH₵ processed</p>
+            <p className="text-[10px] text-muted-foreground mt-1">All-time credits allocated</p>
           </CardContent>
         </Card>
         <Card className="glass">
@@ -353,7 +354,7 @@ export default function SystemAdminPortal() {
             {!platformStats && !statsError && <div className="py-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}
             {statsError && <div className="py-8 text-center text-xs text-destructive flex flex-col items-center gap-2">
                <AlertTriangle className="h-4 w-4" />
-               Stats engine failure. <Button variant="link" size="sm" onClick={loadStats}>Retry</Button>
+               Stats engine failure. <Button variant="link" size="sm" onClick={loadStats}>Retry Sync</Button>
             </div>}
           </CardContent>
         </Card>

@@ -13,87 +13,94 @@ const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 const { processSMSQueueItem, queueSMS, creditWallet } = require("./services/smsService");
 
 /**
- * ADMIN: System Stats Aggregation (v2 Callable)
- * SAFE AGGREGATION VERSION: Strict mapping and Number conversion
+ * ADMIN: System Stats Aggregation (v2 Callable) - CORRECT VERSION
  */
-exports.getSystemStats = onCall(async (request) => {
-  try {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Authentication required");
-    }
+exports.getSystemStats = onCall(
+  {
+    region: "us-central1",
+    cors: true
+  },
+  async (request) => {
+    try {
+      // AUTH CHECK
+      if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Authentication required");
+      }
 
-    const email = request.auth.token.email?.toLowerCase();
-    if (!SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized");
-    }
+      const email = request.auth.token.email?.toLowerCase();
+      if (!SUPER_ADMINS.includes(email)) {
+        throw new HttpsError("permission-denied", "Unauthorized");
+      }
 
-    const db = admin.firestore();
-    const snap = await db.collection("churches").get();
+      const db = admin.firestore();
 
-    const churches = [];
-    snap.forEach(doc => {
-      const d = doc.data() || {};
-      churches.push({
-        id: doc.id,
-        name: d.name || "Unnamed Ministry",
-        slug: d.slug || "",
-        plan: d.plan || "Starter",
-        registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : null,
-        sms: {
-          credits: Number(d.sms?.credits || 0),
-          sent: Number(d.sms?.sent || 0),
-          failed: Number(d.sms?.failed || 0),
-          totalTopups: Number(d.sms?.totalTopups || 0),
-          subscriptionStatus: d.sms?.subscriptionStatus || "pending"
+      // Load churches
+      const churchesSnap = await db.collection("churches").get();
+
+      // Serialization Safety: Map to clean JS objects and handle Timestamps
+      const churches = churchesSnap.docs.map(doc => {
+        const d = doc.data();
+        return {
+          ...d,
+          id: doc.id,
+          // Convert Timestamps to strings to avoid serialization errors in v2 Callable
+          registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : d.registeredAt,
+          updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate().toISOString() : d.updatedAt,
+          sms: {
+            credits: Number(d.sms?.credits || 0),
+            sent: Number(d.sms?.sent || 0),
+            failed: Number(d.sms?.failed || 0),
+            totalTopups: Number(d.sms?.totalTopups || 0),
+            subscriptionStatus: d.sms?.subscriptionStatus || "inactive"
+          }
+        };
+      });
+
+      // Stats aggregation
+      let totalRevenue = 0;
+      let totalSent = 0;
+      let totalFailed = 0;
+      let activeTenants = 0;
+
+      churches.forEach(church => {
+        totalRevenue += Number(church.sms?.totalTopups || 0);
+        totalSent += Number(church.sms?.sent || 0);
+        totalFailed += Number(church.sms?.failed || 0);
+        if (church.sms?.subscriptionStatus === "active") {
+          activeTenants++;
         }
       });
-    });
 
-    const totalRevenue = churches.reduce(
-      (s, c) => s + Number(c.sms?.totalTopups || 0),
-      0
-    );
-
-    const totalSent = churches.reduce(
-      (s, c) => s + Number(c.sms?.sent || 0),
-      0
-    );
-
-    const totalFailed = churches.reduce(
-      (s, c) => s + Number(c.sms?.failed || 0),
-      0
-    );
-
-    return {
-      churches: churches.sort((a, b) => {
-        const dateA = a.registeredAt ? new Date(a.registeredAt).getTime() : 0;
-        const dateB = b.registeredAt ? new Date(b.registeredAt).getTime() : 0;
-        return dateB - dateA;
-      }),
-      totalTenants: churches.length,
-      activeTenants: churches.filter(c => c.sms.subscriptionStatus === "active").length,
-      totalRevenue,
-      totalSent,
-      totalFailed,
-      topSpenders: churches
-        .sort((a, b) => Number(b.sms?.sent || 0) - Number(a.sms?.sent || 0))
+      const topSpenders = churches
+        .sort((a, b) => (b.sms?.sent || 0) - (a.sms?.sent || 0))
         .slice(0, 5)
         .map(c => ({
-          name: c.name,
+          name: c.name || "Unnamed Ministry",
           sent: Number(c.sms?.sent || 0),
           balance: Number(c.sms?.credits || 0)
-        }))
-    };
-  } catch (err) {
-    console.error("STATS ENGINE FAILURE:", err);
-    throw new HttpsError("internal", err.message || "Stats engine failed");
+        }));
+
+      return {
+        success: true,
+        totalTenants: churches.length,
+        activeTenants,
+        totalRevenue,
+        totalSent,
+        totalFailed,
+        churches,
+        topSpenders
+      };
+    } catch (err) {
+      console.error("STATS ENGINE FAILURE:", err);
+      throw new HttpsError("internal", err.message || "Stats engine failed");
+    }
   }
-});
+);
 
 /**
  * ADMIN: Update Church Status (v2 Callable)
  */
-exports.updateChurchStatus = onCall(async (request) => {
+exports.updateChurchStatus = onCall({ region: "us-central1" }, async (request) => {
   if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
     throw new HttpsError("permission-denied", "Unauthorized");
   }
@@ -118,7 +125,7 @@ exports.updateChurchStatus = onCall(async (request) => {
 /**
  * ADMIN: Update Organization Profile (v2 Callable)
  */
-exports.updateOrganization = onCall(async (request) => {
+exports.updateOrganization = onCall({ region: "us-central1" }, async (request) => {
   if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
     throw new HttpsError("permission-denied", "Unauthorized");
   }
@@ -143,7 +150,7 @@ exports.updateOrganization = onCall(async (request) => {
 /**
  * ADMIN: Top Up Wallet (v2 Callable)
  */
-exports.adminTopUpWallet = onCall(async (request) => {
+exports.adminTopUpWallet = onCall({ region: "us-central1" }, async (request) => {
   if (!request.auth || !SUPER_ADMINS.includes(request.auth.token.email?.toLowerCase())) {
     throw new HttpsError("permission-denied", "Unauthorized");
   }
@@ -158,7 +165,7 @@ exports.adminTopUpWallet = onCall(async (request) => {
 /**
  * SYSTEM: Send SMS (v2 Callable)
  */
-exports.sendSMS = onCall(async (request) => {
+exports.sendSMS = onCall({ region: "us-central1" }, async (request) => {
   const { phone, message, type, churchId, memberName, memberId } = request.data;
   if (!churchId) throw new HttpsError("invalid-argument", "Missing context");
   try { 
