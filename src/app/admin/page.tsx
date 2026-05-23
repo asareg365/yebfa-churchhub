@@ -13,7 +13,7 @@ import {
   CheckCircle,
   Ban,
   TrendingUp,
-  DollarSign as CedisSign,
+  Coins,
   Users,
   AlertTriangle,
   Pencil,
@@ -240,7 +240,7 @@ export default function SystemAdminPortal() {
           </CardContent>
         </Card>
         <Card className="glass border-accent/20">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><CedisSign className="w-3 h-3"/> Platform Revenue</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Coins className="w-3 h-3"/> Platform Revenue</CardTitle></CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-accent">GH₵{(platformStats?.totalRevenue || 0).toLocaleString()}</div>
             <p className="text-[10px] text-muted-foreground mt-1">All-time credits allocated</p>
@@ -290,7 +290,7 @@ export default function SystemAdminPortal() {
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-20"><Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" /></TableCell>
                   </TableRow>
-                ) : filteredChurches.map((church: any) => (
+                ) : (Array.isArray(filteredChurches) ? filteredChurches : []).map((church: any) => (
                   <TableRow key={church.id}>
                     <TableCell><div className="font-bold text-foreground">{church.name}</div><code className="text-[10px] text-primary">{church.slug}</code></TableCell>
                     <TableCell><Badge variant="outline" className="text-foreground">{church.plan || 'Starter'}</Badge></TableCell>
@@ -326,7 +326,7 @@ export default function SystemAdminPortal() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {filteredChurches.length === 0 && !isRefreshing && (
+                {(!filteredChurches || filteredChurches.length === 0) && !isRefreshing && (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">No organizations found.</TableCell>
                   </TableRow>

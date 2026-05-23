@@ -13,7 +13,7 @@ const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 const { processSMSQueueItem, queueSMS, creditWallet } = require("./services/smsService");
 
 /**
- * ADMIN: System Stats Aggregation (v2 Callable) - CORRECT VERSION
+ * ADMIN: System Stats Aggregation (v2 Callable) - SANITIZED VERSION
  */
 exports.getSystemStats = onCall(
   {
@@ -41,11 +41,13 @@ exports.getSystemStats = onCall(
       const churches = churchesSnap.docs.map(doc => {
         const d = doc.data();
         return {
-          ...d,
           id: doc.id,
+          name: d.name || "Unnamed Ministry",
+          slug: d.slug || "no-slug",
+          plan: d.plan || "Starter",
           // Convert Timestamps to strings to avoid serialization errors in v2 Callable
-          registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : d.registeredAt,
-          updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate().toISOString() : d.updatedAt,
+          registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : (d.registeredAt || null),
+          updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate().toISOString() : (d.updatedAt || null),
           sms: {
             credits: Number(d.sms?.credits || 0),
             sent: Number(d.sms?.sent || 0),
@@ -75,7 +77,7 @@ exports.getSystemStats = onCall(
         .sort((a, b) => (b.sms?.sent || 0) - (a.sms?.sent || 0))
         .slice(0, 5)
         .map(c => ({
-          name: c.name || "Unnamed Ministry",
+          name: c.name,
           sent: Number(c.sms?.sent || 0),
           balance: Number(c.sms?.credits || 0)
         }));
