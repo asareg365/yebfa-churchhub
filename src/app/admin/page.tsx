@@ -58,8 +58,7 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { useCollection, useFirestore, useUser, useAuth, useFunctions } from '@/firebase';
-import { collection, query, limit } from 'firebase/firestore';
+import { useUser, useAuth, useFunctions } from '@/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { signOut } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -71,50 +70,33 @@ const SUPER_ADMINS = ['asareg365@gmail.com', 'frankyeb@gmail.com'];
 export default function SystemAdminPortal() {
   const { user, loading: userLoading } = useUser();
   const auth = useAuth();
-  const db = useFirestore();
   const functions = useFunctions();
   const router = useRouter();
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [managingSmsId, setManagingSmsId] = useState<string | null>(null);
   const [editingOrg, setEditingOrg] = useState<any>(null);
   const [topUpAmount, setTopUpAmount] = useState('500');
   const [platformStats, setPlatformStats] = useState<any>(null);
   const [statsError, setStatsError] = useState(false);
 
-  const churchesQuery = useMemo(() => {
-    const email = user?.email?.toLowerCase().trim();
-    if (!user || !email || !SUPER_ADMINS.includes(email)) return null;
-    return query(collection(db, 'churches'), limit(100));
-  }, [db, user]);
-
-  const { data: rawChurches, loading: collectionLoading } = useCollection(churchesQuery);
-
-  const sortedChurches = useMemo(() => {
-    if (!rawChurches) return [];
-    return rawChurches
-      .filter((c) =>
-        c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.slug?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-      .sort((a, b) => (b.registeredAt?.seconds || 0) - (a.registeredAt?.seconds || 0));
-  }, [rawChurches, searchTerm]);
-
-  const activeChurchSms = useMemo(() => 
-    sortedChurches.find(c => c.id === managingSmsId), 
-  [sortedChurches, managingSmsId]);
-
-  const loadStats = () => {
+  const loadStats = async () => {
+    setIsRefreshing(true);
     setStatsError(false);
     const fetchStats = httpsCallable(functions, 'getSystemStats');
-    fetchStats()
-      .then((res: any) => setPlatformStats(res.data))
-      .catch(err => {
-        console.error("System Stats Error:", err);
-        setStatsError(true);
-      });
+    try {
+      const res: any = await fetchStats();
+      setPlatformStats(res.data);
+    } catch (err) {
+      console.error("System Stats Error:", err);
+      setStatsError(true);
+      toast({ title: "Stats Sync Failed", description: "Could not fetch platform data.", variant: "destructive" });
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   useEffect(() => {
@@ -127,7 +109,19 @@ export default function SystemAdminPortal() {
     if (user && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
-  }, [user, functions]);
+  }, [user]);
+
+  const filteredChurches = useMemo(() => {
+    if (!platformStats?.churches) return [];
+    return platformStats.churches.filter((c: any) =>
+      c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.slug?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [platformStats, searchTerm]);
+
+  const activeChurchSms = useMemo(() => 
+    platformStats?.churches?.find((c: any) => c.id === managingSmsId), 
+  [platformStats, managingSmsId]);
 
   const handleUpdateStatus = async (churchId: string, status: string) => {
     setIsProcessing(true);
@@ -135,6 +129,7 @@ export default function SystemAdminPortal() {
     try {
       await updateFn({ churchId, status });
       toast({ title: `Organization ${status.toUpperCase()}`, description: "Status updated in secure ledger." });
+      loadStats(); // Refresh to show new status
     } catch (e: any) {
       toast({ title: "Operation Failed", description: e.message, variant: "destructive" });
     } finally {
@@ -150,7 +145,7 @@ export default function SystemAdminPortal() {
       await topUpFn({ churchId: managingSmsId, amount: parseInt(topUpAmount) });
       toast({ title: "Credits Allocated", description: `${topUpAmount} SMS credits added successfully.` });
       setManagingSmsId(null);
-      loadStats(); // Refresh stats after top-up
+      loadStats(); 
     } catch (e: any) {
       toast({ title: "Top-up Failed", description: e.message || "Internal error.", variant: "destructive" });
     } finally {
@@ -176,6 +171,7 @@ export default function SystemAdminPortal() {
       });
       toast({ title: "Organization Updated", description: "Details have been synchronized across nodes." });
       setEditingOrg(null);
+      loadStats();
     } catch (e: any) {
       toast({ title: "Update Failed", description: e.message, variant: "destructive" });
     } finally {
@@ -202,7 +198,7 @@ export default function SystemAdminPortal() {
           <p className="text-muted-foreground text-lg">Global multi-tenant infrastructure management.</p>
         </div>
         <div className="flex gap-4">
-          <Button variant="outline" size="icon" onClick={loadStats} className="rounded-xl">
+          <Button variant="outline" size="icon" onClick={loadStats} className={cn("rounded-xl transition-all", isRefreshing && "animate-spin")} disabled={isRefreshing}>
              <RefreshCcw className="h-4 w-4" />
           </Button>
           <Button variant="outline" onClick={() => signOut(auth)} className="rounded-xl">
@@ -215,7 +211,7 @@ export default function SystemAdminPortal() {
         <Card className="glass border-primary/20">
           <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-muted-foreground tracking-widest flex items-center gap-2"><Users className="w-3 h-3"/> Total Tenants</CardTitle></CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{platformStats?.totalTenants ?? (collectionLoading ? "..." : rawChurches?.length ?? 0)}</div>
+            <div className="text-3xl font-bold">{platformStats?.totalTenants ?? (isRefreshing ? "..." : "0")}</div>
             <p className="text-[10px] text-muted-foreground mt-1">{platformStats?.activeTenants || 0} Active Organizations</p>
           </CardContent>
         </Card>
@@ -266,11 +262,11 @@ export default function SystemAdminPortal() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {collectionLoading ? (
+                {isRefreshing && !platformStats ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-20"><Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" /></TableCell>
                   </TableRow>
-                ) : sortedChurches.map((church) => (
+                ) : filteredChurches.map((church: any) => (
                   <TableRow key={church.id}>
                     <TableCell><div className="font-bold">{church.name}</div><code className="text-[10px] text-primary">{church.slug}</code></TableCell>
                     <TableCell><Badge variant="outline">{church.plan || 'Starter'}</Badge></TableCell>
@@ -306,7 +302,7 @@ export default function SystemAdminPortal() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {sortedChurches.length === 0 && !collectionLoading && (
+                {filteredChurches.length === 0 && !isRefreshing && (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">No organizations found.</TableCell>
                   </TableRow>
@@ -340,7 +336,6 @@ export default function SystemAdminPortal() {
         </Card>
       </div>
 
-      {/* Top-up Dialog */}
       <Dialog open={!!managingSmsId} onOpenChange={(o) => !o && setManagingSmsId(null)}>
         <DialogContent className="glass">
           <DialogHeader>
@@ -358,13 +353,11 @@ export default function SystemAdminPortal() {
                 <Input type="number" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="h-12 bg-white" />
                 <Button className="bg-primary h-12 px-6" onClick={handleTopUp} disabled={isProcessing}>{isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}</Button>
               </div>
-              <p className="text-[10px] text-muted-foreground italic mt-1">Note: 1 Credit = 1 GH₵ for manual allocations.</p>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Organization Dialog */}
       <Dialog open={!!editingOrg} onOpenChange={(o) => !o && setEditingOrg(null)}>
         <DialogContent className="glass max-w-2xl">
           <DialogHeader>

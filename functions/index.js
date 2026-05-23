@@ -66,7 +66,6 @@ exports.mnotifyDeliveryWebhook = onRequest(
       const logDoc = logQuery.docs[0];
       const normalizedStatus = (status || "").toLowerCase();
       
-      // Map provider status to handset-verified 'delivered'
       const finalStatus = normalizedStatus === "delivered" ? "delivered" : "sent";
 
       await logDoc.ref.update({
@@ -86,7 +85,7 @@ exports.mnotifyDeliveryWebhook = onRequest(
 );
 
 /**
- * ADMIN: System Stats
+ * ADMIN: System Stats & Organization List
  */
 exports.getSystemStats = onCall(
   { region: "us-central1" },
@@ -101,35 +100,60 @@ exports.getSystemStats = onCall(
       const churchesSnap = await db.collection("churches").get();
       const walletsSnap = await db.collection("smsWallets").get();
       
-      // Resilient count for global sent
       const ledgerSnap = await db.collection("smsLedger")
         .where("status", "==", "SUBMITTED")
-        .limit(1000)
+        .limit(500)
+        .get();
+
+      const failedSnap = await db.collection("smsLedger")
+        .where("status", "==", "FAILED")
+        .limit(100)
         .get();
 
       let totalRevenue = 0;
       const topSpenders = [];
+      const churchList = [];
 
       walletsSnap.docs.forEach(doc => {
-        const walletData = doc.data();
-        totalRevenue += Number(walletData.totalTopups || 0);
+        totalRevenue += Number(doc.data().totalTopups || 0);
+      });
+
+      churchesSnap.docs.forEach(doc => {
+        const data = doc.data();
+        const churchId = doc.id;
+        const wallet = walletsSnap.docs.find(w => w.id === churchId)?.data() || { balance: 0 };
         
-        const church = churchesSnap.docs.find(c => c.id === doc.id);
-        const churchData = church?.data();
-        
+        const churchEntry = {
+          id: churchId,
+          name: data.name,
+          slug: data.slug,
+          plan: data.plan,
+          adminEmails: data.adminEmails || [],
+          registeredAt: data.registeredAt,
+          sms: {
+            credits: data.sms?.credits || 0,
+            subscriptionStatus: data.sms?.subscriptionStatus || 'pending',
+            stats: data.sms?.stats || { sent: 0 }
+          }
+        };
+
+        churchList.push(churchEntry);
+
         topSpenders.push({
-          name: churchData?.name || doc.id,
-          sent: churchData?.sms?.stats?.sent || 0,
-          balance: walletData.balance || 0
+          name: data.name || churchId,
+          sent: data.sms?.stats?.sent || 0,
+          balance: wallet.balance || 0
         });
       });
 
       return {
         totalTenants: churchesSnap.size,
-        activeTenants: churchesSnap.docs.filter(c => c.data().sms?.subscriptionStatus === 'active').length,
+        activeTenants: churchList.filter(c => c.sms?.subscriptionStatus === 'active').length,
         totalSent: ledgerSnap.size,
+        totalFailed: failedSnap.size,
         totalRevenue: totalRevenue,
-        topSpenders: topSpenders.sort((a, b) => b.sent - a.sent).slice(0, 5)
+        topSpenders: topSpenders.sort((a, b) => b.sent - a.sent).slice(0, 5),
+        churches: churchList.sort((a, b) => (b.registeredAt?.seconds || 0) - (a.registeredAt?.seconds || 0))
       };
     } catch (error) { 
       console.error("System Stats Error:", error.message);
