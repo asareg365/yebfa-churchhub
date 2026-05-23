@@ -19,7 +19,6 @@ import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 import { Checkbox } from "@/components/ui/checkbox";
-import { format } from "date-fns";
 import Link from "next/link";
 
 const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
@@ -40,12 +39,12 @@ const CrossIcon = () => (
     viewBox="0 0 24 24" 
     fill="none" 
     stroke="currentColor" 
-    strokeWidth="2.5" 
+    strokeWidth="3" 
     strokeLinecap="round" 
     strokeLinejoin="round" 
-    className="w-5 h-5 text-primary"
+    className="w-6 h-6 text-primary"
   >
-    <path d="M12 3v18M8 8h8" />
+    <path d="M12 4v16M8 9h8" />
   </svg>
 );
 
@@ -201,8 +200,8 @@ function LoginContent() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-background relative overflow-hidden">
       <div className="mb-8 text-center animate-in fade-in slide-in-from-top-4 duration-700">
-        <Link href="/" className="flex items-center gap-2 justify-center mb-4">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/30">
+        <Link href="/" className="flex flex-col items-center gap-4 justify-center mb-4">
+          <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center border border-border shadow-md">
             <CrossIcon />
           </div>
           <span className="font-headline text-lg font-bold tracking-tighter text-foreground">CHURCHHUB</span>

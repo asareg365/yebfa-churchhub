@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -13,12 +14,12 @@ const CrossIcon = () => (
     viewBox="0 0 24 24" 
     fill="none" 
     stroke="currentColor" 
-    strokeWidth="2.5" 
+    strokeWidth="3" 
     strokeLinecap="round" 
     strokeLinejoin="round" 
-    className="w-5 h-5 text-primary"
+    className="w-6 h-6 text-primary"
   >
-    <path d="M12 3v18M8 8h8" />
+    <path d="M12 4v16M8 9h8" />
   </svg>
 );
 
@@ -79,7 +80,7 @@ export default function LandingPage() {
       <header className="fixed top-0 w-full z-50 glass border-b border-border py-4 px-8">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/30">
+            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-border shadow-sm">
               <CrossIcon />
             </div>
             <span className="font-headline text-sm font-bold tracking-tighter text-foreground">CHURCHHUB</span>
@@ -232,7 +233,7 @@ export default function LandingPage() {
       <footer className="py-12 px-8 border-t border-border bg-white mt-20">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-primary flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-white border border-border shadow-sm flex items-center justify-center">
               <CrossIcon />
             </div>
             <span className="font-headline text-xs font-bold text-foreground">YEBFA CHURCHHUB</span>

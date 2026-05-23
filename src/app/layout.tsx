@@ -7,12 +7,15 @@ import { FirebaseClientProvider } from '@/firebase';
 export const metadata: Metadata = {
   title: 'Yebfa ChurchHub | Enterprise Church Management',
   description: 'A sophisticated multi-tenant SaaS platform for modern religious organizations.',
+  icons: {
+    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="30" fill="white"/><path d="M50 20v60M30 42h40" stroke="%236d28d9" stroke-width="12" stroke-linecap="round"/></svg>',
+  },
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: React.Node;
 }>) {
   return (
     <html lang="en">

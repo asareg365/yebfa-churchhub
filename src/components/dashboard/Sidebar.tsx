@@ -63,12 +63,12 @@ const CrossIcon = () => (
     viewBox="0 0 24 24" 
     fill="none" 
     stroke="currentColor" 
-    strokeWidth="2.5" 
+    strokeWidth="3" 
     strokeLinecap="round" 
     strokeLinejoin="round" 
     className="w-5 h-5 text-primary"
   >
-    <path d="M12 3v18M8 8h8" />
+    <path d="M12 4v16M8 9h8" />
   </svg>
 );
 
@@ -125,8 +125,8 @@ export function Sidebar() {
   return (
     <div className="fixed left-4 top-4 bottom-4 w-72 bg-white rounded-3xl z-50 flex flex-col p-6 border border-border shadow-xl overflow-hidden">
       <div className="mb-8 px-2">
-        <h1 className="font-headline text-lg font-bold text-primary flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/30">
+        <h1 className="font-headline text-lg font-bold text-primary flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-white border border-border shadow-sm flex items-center justify-center">
             <CrossIcon />
           </div>
           <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">CHURCHHUB</span>
