@@ -363,10 +363,30 @@ async function creditWallet(churchId, amount, reason, processedBy) {
   const walletRef = db.collection("smsWallets").doc(churchId);
   const churchRef = db.collection("churches").doc(churchId);
 
+  const PLAN_LIMITS = {
+    Starter: 100,
+    Basic: 100,
+    Standard: 1000,
+    Premium: 10000
+  };
+
   return await db.runTransaction(async (t) => {
-    const walletSnap = await t.get(walletRef);
+    const [walletSnap, churchSnap] = await Promise.all([
+      t.get(walletRef),
+      t.get(churchRef)
+    ]);
+
+    if (!churchSnap.exists) throw new Error("Organization not found");
+    const churchData = churchSnap.data() || {};
+    
     const currentBalance = walletSnap.exists ? Number(walletSnap.data().balance || 0) : 0;
     const newBalance = currentBalance + Number(amount);
+
+    const limit = PLAN_LIMITS[churchData.plan || "Starter"] || 100;
+
+    if (newBalance > limit) {
+      throw new Error(`Plan limit exceeded. Max allowed credits for ${churchData.plan || "Starter"} is ${limit}. Current balance: ${currentBalance}.`);
+    }
 
     t.set(walletRef, {
       balance: newBalance,
