@@ -1,0 +1,70 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isSuperAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email.lower() == "asareg365@gmail.com" || 
+         request.auth.token.email.lower() == "frankyeb@gmail.com");
+    }
+    
+    function getChurch(churchId) {
+      return get(/databases/$(database)/documents/churches/$(churchId)).data;
+    }
+    
+    function isChurchAdmin(churchId) {
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/churches/$(churchId)) && 
+         request.auth.token.email.lower() in get(/databases/$(database)/documents/churches/$(churchId)).data.adminEmails) || 
+        isSuperAdmin()
+      );
+    }
+
+    // Churches collection
+    match /churches/{churchId} {
+      // Allow reading if the user is an admin of the church or a super admin
+      allow read: if isAuthenticated() && (request.auth.token.email.lower() in resource.data.adminEmails || isSuperAdmin());
+      
+      // Allow writing if the user is an admin of the church or a super admin
+      allow write: if isAuthenticated() && (request.auth.token.email.lower() in resource.data.adminEmails || isSuperAdmin());
+      
+      // Allow creation for onboarding
+      allow create: if isAuthenticated();
+      
+      // All subcollections within a church (members, attendance, finances, smsLogs, visitors, etc.)
+      match /{allSubcollections=**} {
+        allow read, write: if isChurchAdmin(churchId);
+      }
+    }
+
+    // SMS Wallets - Transactional source of truth
+    match /smsWallets/{churchId} {
+      allow read: if isChurchAdmin(churchId);
+      allow write: if isSuperAdmin();
+    }
+    
+    // SMS Ledger - Immutable audit trail
+    match /smsLedger/{ledgerId} {
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() || 
+        (exists(/databases/$(database)/documents/smsLedger/$(ledgerId)) && 
+         isChurchAdmin(get(/databases/$(database)/documents/smsLedger/$(ledgerId)).data.churchId))
+      );
+      allow write: if isSuperAdmin();
+    }
+    
+    // SMS Queue & Locks (System Internal)
+    match /smsQueue/{messageId} {
+      allow read, write: if isSuperAdmin();
+    }
+    match /smsLocks/{churchId} {
+      allow read, write: if isSuperAdmin();
+    }
+  }
+}
