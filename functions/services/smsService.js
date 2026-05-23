@@ -379,6 +379,8 @@ async function creditWallet(churchId, amount, reason, processedBy) {
     t.set(churchRef, {
       sms: {
         credits: newBalance,
+        totalTopups: admin.firestore.FieldValue.increment(Number(amount)),
+        lastTopupAt: admin.firestore.FieldValue.serverTimestamp(),
         lowBalance: newBalance <= 10,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }
