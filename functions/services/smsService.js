@@ -61,7 +61,7 @@ async function releaseLock(db, churchId) {
 }
 
 /**
- * Transactional Wallet Debit (Standardized Stats Pattern)
+ * Transactional Wallet Debit
  */
 async function debitWalletTx(t, db, churchId, cost, messageId, type) {
   const ledgerId = `${churchId}_${messageId}`;
@@ -76,8 +76,7 @@ async function debitWalletTx(t, db, churchId, cost, messageId, type) {
 
   if (ledgerSnap.exists) {
     const existing = ledgerSnap.data();
-    if (existing.status === "COMMITTED" || existing.status === "SENT" || existing.status === "SUBMITTED") return; 
-    if (existing.status === "RESERVED") throw new Error("Transaction already in progress");
+    if (["COMMITTED", "SENT", "SUBMITTED"].includes(existing.status)) return;
   }
 
   const wallet = walletSnap.exists ? walletSnap.data() : { balance: 0 };
@@ -130,7 +129,7 @@ async function processSMSQueueItem(apiKey, messageId, data) {
 
     const lockVerify = await db.collection("smsLocks").doc(churchId).get();
     if (lockVerify.data()?.messageId !== messageId) {
-      throw new Error("Lock Mismatch: Parallel worker detected.");
+      throw new Error("Lock Mismatch");
     }
 
     const churchSnap = await db.collection("churches").doc(churchId).get();
@@ -149,8 +148,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
       is_schedule: false
     }, { timeout: 15000 });
 
-    console.log("MNOTIFY RESPONSE:", JSON.stringify(response.data, null, 2));
-
     const isAccepted = response.status === 200 && (response.data?.code === "1000" || response.data?.status === "success");
 
     if (isAccepted) {
@@ -158,31 +155,33 @@ async function processSMSQueueItem(apiKey, messageId, data) {
       
       const batch = db.batch();
       
-      // Update Queue status
+      // Update Queue
       batch.update(db.collection("smsQueue").doc(messageId), { 
-        status: "submitted", 
+        status: "sent", 
         providerId,
         submittedAt: admin.firestore.FieldValue.serverTimestamp() 
       });
 
-      // Update Ledger status
+      // Update Ledger
       batch.update(db.collection("smsLedger").doc(ledgerId), { 
         status: "SUBMITTED", 
-        processedAt: admin.firestore.FieldValue.serverTimestamp(), 
         providerId 
       });
 
-      // Create detailed log in church subcollection for UI
+      // Detailed SMS Log for Audit & UI
       const logRef = db.collection("churches").doc(churchId).collection("smsLogs").doc(messageId);
       batch.set(logRef, {
         churchId,
         phone: data.phone,
         message: data.message,
+        type: data.type || "general",
+        status: "sent",
         provider: "mnotify",
-        providerId,
-        status: "submitted",
-        cost,
-        type: data.type,
+        providerId: providerId,
+        cost: cost,
+        queuedAt: data.createdAt || null,
+        sentAt: admin.firestore.FieldValue.serverTimestamp(),
+        retryCount: data.retryCount || 0,
         memberName: data.memberName || "Guest",
         memberId: data.memberId || null,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -209,10 +208,6 @@ async function processSMSQueueItem(apiKey, messageId, data) {
       retryCount: admin.firestore.FieldValue.increment(1)
     });
 
-    await admin.firestore().collection("churches").doc(churchId).update({
-      "sms.stats.failed": admin.firestore.FieldValue.increment(1)
-    });
-
     return { success: false, error: error.message };
 
   } finally {
@@ -225,7 +220,6 @@ async function refundWallet(churchId, amount, reason, messageId) {
   const walletRef = db.collection("smsWallets").doc(churchId);
   const churchRef = db.collection("churches").doc(churchId);
   const ledgerId = `${churchId}_${messageId}`;
-  const refundLedgerId = `${churchId}_${messageId}_refund`;
 
   await db.runTransaction(async (t) => {
     const [ledgerSnap, walletSnap] = await Promise.all([
@@ -238,7 +232,7 @@ async function refundWallet(churchId, amount, reason, messageId) {
     const balance = walletSnap.exists ? Number(walletSnap.data().balance || 0) : 0;
     const newBalance = balance + amount;
 
-    t.update(db.collection("smsLedger").doc(ledgerId), { status: "REFUND_PENDING" });
+    t.update(db.collection("smsLedger").doc(ledgerId), { status: "REFUNDED" });
 
     t.set(walletRef, {
       balance: newBalance,
@@ -249,18 +243,6 @@ async function refundWallet(churchId, amount, reason, messageId) {
       "sms.credits": newBalance,
       "sms.stats.refunded": admin.firestore.FieldValue.increment(1)
     });
-
-    t.set(db.collection("smsLedger").doc(refundLedgerId), {
-      churchId,
-      messageId,
-      type: "REFUND",
-      amount,
-      reason,
-      status: "COMPLETED",
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    t.update(db.collection("smsLedger").doc(ledgerId), { status: "REFUNDED" });
   });
 }
 
@@ -268,53 +250,24 @@ async function queueSMS(churchId, payload) {
   const db = admin.firestore();
   const churchDoc = await db.collection("churches").doc(churchId).get();
   
-  if (!churchDoc.exists) {
-    await logSmsEvent("SMS_BLOCKED_CHURCH_NOT_FOUND", churchId, { payload });
-    return { success: false, error: "Organization not found" };
-  }
+  if (!churchDoc.exists) return { success: false, error: "Church not found" };
   
-  const formattedPhone = formatPhone(payload.phone);
-  console.log("Formatted Phone:", formattedPhone);
-
   const churchData = churchDoc.data();
   const smsConfig = churchData.sms || {};
   const isApproved = smsConfig.approved === true || smsConfig.status === "Approved";
 
-  if (!isApproved) {
-    await logSmsEvent("SMS_BLOCKED_NOT_APPROVED", churchId, { smsConfig });
-    return { success: false, error: "SMS service not approved" };
-  }
-  if (!smsConfig.enabled) {
-    await logSmsEvent("SMS_BLOCKED_DISABLED", churchId, { smsConfig });
-    return { success: false, error: "SMS service disabled" };
-  }
-  if (smsConfig.subscriptionStatus !== "active") {
-    await logSmsEvent("SMS_BLOCKED_INACTIVE", churchId, { smsConfig });
-    return { success: false, error: "SMS subscription inactive" };
+  if (!isApproved || !smsConfig.enabled || smsConfig.subscriptionStatus !== "active") {
+    await logSmsEvent("SMS_BLOCKED_STATUS", churchId, { smsConfig });
+    return { success: false, error: "SMS service inactive or not approved" };
   }
 
-  if (payload.message.length > MAX_MESSAGE_LENGTH) {
-    await logSmsEvent("SMS_BLOCKED_LENGTH", churchId, { length: payload.message.length });
-    return { success: false, error: "Message too long (700 chars max)" };
-  }
+  if (payload.message.length > MAX_MESSAGE_LENGTH) return { success: false, error: "Message too long" };
+  if (isPotentiallyMalicious(payload.message)) return { success: false, error: "Security policy block" };
 
-  if (isPotentiallyMalicious(payload.message)) {
-    await logSmsEvent("SMS_BLOCKED_SPAM", churchId, { message: payload.message, phone: payload.phone });
-    await db.collection("smsAbuseLogs").add({
-      churchId, 
-      message: payload.message, 
-      phone: formattedPhone, 
-      blockedAt: admin.firestore.FieldValue.serverTimestamp(), 
-      reason: "Spam Block"
-    });
-    return { success: false, error: "Security policy block: Content flagged as potential spam." };
-  }
-
+  const formattedPhone = formatPhone(payload.phone);
   const dedupeKey = payload.dedupeKey || crypto.createHash("sha256")
     .update(`${churchId}:${formattedPhone}:${payload.message}`)
     .digest("hex");
-
-  const cost = payload.cost || 1;
 
   await db.collection("smsQueue").add({
     churchId,
@@ -323,16 +276,11 @@ async function queueSMS(churchId, payload) {
     type: payload.type || "other",
     status: "queued",
     retryCount: 0,
-    cost: cost,
-    costLocked: true,
+    cost: payload.cost || 1,
     dedupeKey,
     memberName: payload.memberName || "Guest",
     memberId: payload.memberId || null,
     createdAt: admin.firestore.FieldValue.serverTimestamp()
-  });
-
-  await db.collection("churches").doc(churchId).update({
-    "sms.stats.queued": admin.firestore.FieldValue.increment(1)
   });
 
   return { success: true };
@@ -355,8 +303,7 @@ async function creditWallet(churchId, amount, reason, processedBy) {
     }, { merge: true });
 
     t.update(churchRef, {
-      "sms.credits": newBalance,
-      "sms.lastTopupAt": admin.firestore.FieldValue.serverTimestamp()
+      "sms.credits": newBalance
     });
 
     return { success: true, newBalance };

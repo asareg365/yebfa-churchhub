@@ -15,8 +15,6 @@ const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 const { dispatchAllBirthdays } = require("./schedulers/birthdayScheduler");
 const { processVisitorFollowups } = require("./schedulers/visitorScheduler");
 const { processEventReminders } = require("./schedulers/eventScheduler");
-const { processScheduledCampaigns } = require("./schedulers/campaignScheduler");
-const { retryFailedSMS } = require("./schedulers/retryScheduler");
 const { processSMSQueueItem, queueSMS, creditWallet } = require("./services/smsService");
 
 /**
@@ -36,7 +34,7 @@ exports.onSmsQueued = onDocumentCreated(
 );
 
 /**
- * mNotify Delivery Webhook (Enterprise Handset Confirmation)
+ * mNotify Delivery Webhook (Handset Confirmation)
  */
 exports.mnotifyDeliveryWebhook = onRequest(
   { region: "us-central1", cors: true },
@@ -46,46 +44,40 @@ exports.mnotifyDeliveryWebhook = onRequest(
     
     const db = admin.firestore();
     try {
-      // Find the log regardless of which church subcollection it's in
       const logQuery = await db.collectionGroup("smsLogs")
         .where("providerId", "==", String(message_id))
         .limit(1)
         .get();
 
       if (logQuery.empty) {
-        console.warn(`Webhook: Provider ID ${message_id} not found in any logs.`);
+        console.warn(`Webhook: Provider ID ${message_id} not found.`);
         return res.status(404).send("Log record not found");
       }
 
       const logDoc = logQuery.docs[0];
-      const statusMap = { 
-        "delivered": "sent", 
-        "undelivered": "failed", 
-        "expired": "failed",
-        "failed": "failed",
-        "rejected": "failed"
-      };
-
-      const normalizedStatus = (status || "sent").toLowerCase();
+      const normalizedStatus = (status || "").toLowerCase();
       
+      // Map provider status to handset-verified 'delivered'
+      const finalStatus = normalizedStatus === "delivered" ? "delivered" : "sent";
+
       await logDoc.ref.update({
         providerStatus: normalizedStatus,
-        status: statusMap[normalizedStatus] || "sent",
-        deliveredAt: normalizedStatus === "delivered" ? admin.firestore.FieldValue.serverTimestamp() : null,
+        status: finalStatus,
+        deliveredAt: finalStatus === "delivered" ? admin.firestore.FieldValue.serverTimestamp() : null,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
       console.log(`Webhook: Updated message ${message_id} to ${normalizedStatus}`);
       res.status(200).send("OK");
     } catch (error) { 
-      console.error("Webhook Logic Error:", error.message);
-      res.status(500).send("Internal processing error"); 
+      console.error("Webhook Error:", error.message);
+      res.status(500).send("Internal error"); 
     }
   }
 );
 
 /**
- * SYSTEM ADMIN: Platform Stats
+ * ADMIN: System Stats
  */
 exports.getSystemStats = onCall(
   { region: "us-central1" },
@@ -99,62 +91,22 @@ exports.getSystemStats = onCall(
     try {
       const churchesSnap = await db.collection("churches").get();
       const walletsSnap = await db.collection("smsWallets").get();
-      const ledgerSnap = await db.collection("smsLedger").where("status", "==", "SENT").limit(1000).get();
-      const failedSnap = await db.collection("smsLedger").where("status", "==", "FAILED").limit(1000).get();
+      const ledgerSnap = await db.collection("smsLedger").where("status", "==", "SUBMITTED").limit(1000).get();
 
       let totalRevenue = 0;
-      const walletsMap = {};
-      
       walletsSnap.docs.forEach(doc => {
-        const data = doc.data();
-        totalRevenue += Number(data.totalTopups || 0);
-        walletsMap[doc.id] = { balance: data.balance || 0, spent: data.totalSpent || 0 };
+        totalRevenue += Number(doc.data().totalTopups || 0);
       });
-
-      const topSpenders = churchesSnap.docs.map(doc => {
-        const wallet = walletsMap[doc.id] || { balance: 0, spent: 0 };
-        return { 
-          id: doc.id,
-          name: doc.data().name || "Unknown Ministry", 
-          sent: wallet.spent, 
-          balance: wallet.balance 
-        };
-      })
-      .sort((a, b) => b.sent - a.sent)
-      .slice(0, 5);
 
       return {
         totalTenants: churchesSnap.size,
         activeTenants: churchesSnap.docs.filter(c => c.data().sms?.subscriptionStatus === 'active').length,
         totalSent: ledgerSnap.size,
-        totalFailed: failedSnap.size,
-        totalRevenue: totalRevenue,
-        topSpenders
+        totalRevenue: totalRevenue
       };
     } catch (error) { 
-      console.error("System Stats Engine Error:", error);
       throw new HttpsError("internal", error.message); 
     }
-  }
-);
-
-/**
- * SELF-HEALING: Cleanup Stuck Locks
- */
-exports.cleanupSmsLocks = onSchedule(
-  { schedule: "every 5 minutes", region: "us-central1" },
-  async () => {
-    const db = admin.firestore();
-    const now = Date.now();
-    const expiredLocks = await db.collection("smsLocks").where("expiresAt", "<", now).get();
-    
-    if (expiredLocks.empty) return null;
-    
-    const batch = db.batch();
-    expiredLocks.docs.forEach(doc => batch.delete(doc.ref));
-    await batch.commit();
-    console.log(`Cleaned up ${expiredLocks.size} stuck SMS locks.`);
-    return null;
   }
 );
 
@@ -173,25 +125,6 @@ exports.updateChurchStatus = onCall(
         "sms.status": isApproved ? 'Approved' : 'Suspended',
         "sms.enabled": isApproved,
         status: isApproved ? 'Approved' : 'Suspended'
-      });
-      return { success: true };
-    } catch (error) { throw new HttpsError("internal", error.message); }
-  }
-);
-
-exports.updateOrganization = onCall(
-  { region: "us-central1" },
-  async (request) => {
-    const userEmail = request.auth?.token?.email?.toLowerCase() || "";
-    if (!request.auth || !SUPER_ADMINS.includes(userEmail)) throw new HttpsError("permission-denied", "Unauthorized");
-    const { churchId, name, slug, adminEmails, plan } = request.data;
-    try {
-      await admin.firestore().collection("churches").doc(churchId).update({
-        name,
-        slug,
-        adminEmails,
-        plan,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       return { success: true };
     } catch (error) { throw new HttpsError("internal", error.message); }
@@ -219,13 +152,8 @@ exports.sendSMS = onCall(
   }
 );
 
-exports.retryFailedSmsEngine = onSchedule(
-  { schedule: "every 5 minutes", timeZone: "Africa/Accra", region: "us-central1", secrets: [MNOTIFY_API_KEY] },
-  async () => { return retryFailedSMS(MNOTIFY_API_KEY.value()); }
-);
-
 exports.runDailyAutomations = onSchedule(
-  { schedule: "0 6 * * *", timeZone: "Africa/Accra", region: "us-central1", secrets: [MNOTIFY_API_KEY], timeoutSeconds: 540, memory: "512MiB" },
+  { schedule: "0 6 * * *", timeZone: "Africa/Accra", region: "us-central1", secrets: [MNOTIFY_API_KEY] },
   async () => {
     const key = MNOTIFY_API_KEY.value();
     await dispatchAllBirthdays(key);
