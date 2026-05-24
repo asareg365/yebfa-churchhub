@@ -47,8 +47,7 @@ exports.getSystemStats = onCall(
             sent: Number(sms.stats?.sent || 0),
             failed: Number(sms.stats?.failed || 0),
             totalTopups: Number(sms.totalTopups || 0),
-            subscriptionStatus: sms.subscriptionStatus || "inactive",
-            hasWallet: true
+            subscriptionStatus: sms.subscriptionStatus || "inactive"
           }
         };
       });

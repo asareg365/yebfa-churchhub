@@ -3,7 +3,7 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { FirebaseProvider } from './provider';
 import { firebaseApp } from './index';
-import { AlertCircle, Terminal, Loader2 } from "lucide-react";
+import { AlertCircle, Terminal } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export function FirebaseClientProvider({

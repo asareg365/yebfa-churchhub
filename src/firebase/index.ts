@@ -8,7 +8,7 @@ import { firebaseConfig } from './config';
 
 /**
  * SHARED FIREBASE SINGLETONS
- * This is the central source of truth for all Firebase services.
+ * Central source of truth for all Firebase services.
  * Regional binding for Functions is enforced here (us-central1).
  */
 
@@ -19,14 +19,14 @@ const app = isConfigValid
   : null;
 
 export const firebaseApp = app;
-export const firestore: Firestore = app ? getFirestore(app) : null as any;
-export const auth: Auth = app ? getAuth(app) : null as any;
+export const firestore: Firestore = app ? getFirestore(app) : null;
+export const auth: Auth = app ? getAuth(app) : null;
 
 /**
  * PRODUCTION REGION: us-central1
  * All administrative callable handshakes are routed here.
  */
-export const functions: Functions = app ? getFunctions(app, "us-central1") : null as any;
+export const functions: Functions = app ? getFunctions(app, "us-central1") : null;
 
 // Export supporting hooks and providers
 export * from './provider';
