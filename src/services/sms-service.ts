@@ -64,6 +64,7 @@ export async function sendAndLogSMS(
     retryCount?: number;
   }
 ) {
+  // Uses standardized us-central1 singleton
   const sendSMSFn = httpsCallable(functions, "sendSMS");
 
   try {

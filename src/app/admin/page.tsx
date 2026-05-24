@@ -199,30 +199,46 @@ export default function SystemAdminPortal() {
     }
   };
 
+  /**
+   * EXACT IMPLEMENTATION AS REQUESTED
+   */
   const handleTopUp = async () => {
-    if (!managingSmsId || !topUpAmount || !functions) return;
-  
+    if (!auth.currentUser) {
+      console.error("NO AUTH USER");
+      toast({ title: "Session Expired", description: "Please log in again.", variant: "destructive" });
+      return;
+    }
+
+    if (!managingSmsId || !topUpAmount) return;
+
     setIsProcessing(true);
-  
     try {
+      console.log("AUTH USER:", auth.currentUser.email);
+
+      // FORCE TOKEN REFRESH
+      const token = await auth.currentUser.getIdToken(true);
+      console.log("TOKEN EXISTS:", !!token);
+
       const topUpFn = httpsCallable(functions, "adminTopUpWallet");
-  
+
       const result: any = await topUpFn({
         churchId: managingSmsId,
         amount: Number(topUpAmount),
       });
-  
+
+      console.log("TOPUP SUCCESS:", result);
+
       toast({
         title: "Credits Allocated",
         description: `${topUpAmount} SMS credits added successfully.`,
       });
-  
+
       setManagingSmsId(null);
       await loadStats();
-  
+
     } catch (e: any) {
-      console.error("TOPUP ERROR:", e);
-  
+      console.error("TOPUP FAILURE:", e);
+
       toast({
         title: "Top-up Failed",
         description: e.message || "Internal error.",
@@ -308,7 +324,7 @@ export default function SystemAdminPortal() {
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-muted-foreground"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48 glass">
+                        <DropdownMenuContent align="end" className="glass w-48">
                           <DropdownMenuItem onClick={() => setEditingOrg(church)} className="font-bold"><Pencil className="mr-2 h-4 w-4" /> Edit Details</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setManagingSmsId(church.id)} className="font-bold text-primary"><Zap className="mr-2 h-4 w-4" /> Top-up Wallet</DropdownMenuItem>
                           <DropdownMenuSeparator />
