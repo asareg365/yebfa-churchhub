@@ -203,45 +203,53 @@ export default function SystemAdminPortal() {
    * HARDENED TOPUP IMPLEMENTATION
    */
   const handleTopUp = async () => {
-    if (!auth.currentUser) {
-      console.error("NO AUTH USER");
-      toast({ title: "Session Expired", description: "Please log in again.", variant: "destructive" });
-      return;
-    }
-
-    if (!managingSmsId || !topUpAmount) return;
-
-    setIsProcessing(true);
     try {
+      if (!auth.currentUser) {
+        throw new Error("User session missing");
+      }
+  
+      if (!functions) {
+        throw new Error("Firebase Functions not initialized");
+      }
+  
+      if (!managingSmsId) {
+        throw new Error("Missing church ID");
+      }
+  
+      setIsProcessing(true);
+  
+      // FORCE AUTH TOKEN REFRESH
+      await auth.currentUser.getIdToken(true);
+  
       console.log("AUTH USER:", auth.currentUser.email);
-
-      // FORCE TOKEN REFRESH
-      const token = await auth.currentUser.getIdToken(true);
-      console.log("TOKEN EXISTS:", !!token);
-
-      const topUpFn = httpsCallable(functions, "adminTopUpWallet");
-
-      const result: any = await topUpFn({
+  
+      const callable = httpsCallable(functions, "adminTopUpWallet");
+  
+      const response: any = await callable({
         churchId: managingSmsId,
         amount: Number(topUpAmount),
       });
-
-      console.log("TOPUP SUCCESS:", result);
-
+  
+      console.log("TOPUP RESPONSE:", response);
+  
       toast({
-        title: "Credits Allocated",
+        title: "Credits Added",
         description: `${topUpAmount} SMS credits added successfully.`,
       });
-
+  
       setManagingSmsId(null);
+  
       await loadStats();
-
-    } catch (e: any) {
-      console.error("TOPUP FAILURE:", e);
-
+  
+    } catch (error: any) {
+      console.error("TOPUP ERROR:", error);
+  
       toast({
         title: "Top-up Failed",
-        description: e.message || "Internal error.",
+        description:
+          error?.message ||
+          error?.details ||
+          "Authentication or server error",
         variant: "destructive",
       });
     } finally {
