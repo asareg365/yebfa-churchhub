@@ -1,9 +1,9 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { FirebaseProvider } from './provider';
 import { firebaseApp } from './index';
-import { AlertCircle, Terminal } from "lucide-react";
+import { AlertCircle, Terminal, Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export function FirebaseClientProvider({
@@ -11,7 +11,18 @@ export function FirebaseClientProvider({
 }: {
   children: ReactNode;
 }) {
-  // Check if singleton initialized correctly
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Hydration guard: ensures server and client HTML match
+  if (!mounted) {
+    return null;
+  }
+
+  // Check if singleton initialized correctly on the client
   if (!firebaseApp) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-6">
