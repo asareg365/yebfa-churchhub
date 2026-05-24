@@ -200,7 +200,7 @@ export default function SystemAdminPortal() {
   };
 
   /**
-   * EXACT IMPLEMENTATION AS REQUESTED
+   * HARDENED TOPUP IMPLEMENTATION
    */
   const handleTopUp = async () => {
     if (!auth.currentUser) {
