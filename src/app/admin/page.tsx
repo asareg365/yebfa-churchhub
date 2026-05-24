@@ -80,7 +80,7 @@ export default function SystemAdminPortal() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const loadStats = async () => {
-    if (!auth.currentUser) return;
+    if (!auth?.currentUser) return;
     
     setIsRefreshing(true);
     setStatsError(false);
@@ -109,7 +109,7 @@ export default function SystemAdminPortal() {
   }, [user, userLoading, router]);
 
   useEffect(() => {
-    if (user && auth.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
+    if (user && auth?.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
   }, [user]);
@@ -194,25 +194,17 @@ export default function SystemAdminPortal() {
   const handleTopUp = async () => {
     if (!managingSmsId || !topUpAmount) return;
   
+    setIsProcessing(true);
+  
     try {
-      setIsProcessing(true);
-  
-      // HARD AUTH SESSION HANDSHAKE
-      const currentUser = auth.currentUser;
-  
-      if (!currentUser) {
-        throw new Error("Administrative session expired. Please login again.");
-      }
-  
-      // FORCE TOKEN REFRESH BEFORE FINANCIAL ADJUSTMENT
-      await currentUser.getIdToken(true);
-  
       const topUpFn = httpsCallable(functions, "adminTopUpWallet");
   
       const result: any = await topUpFn({
         churchId: managingSmsId,
         amount: Number(topUpAmount),
       });
+  
+      console.log("TOPUP RESULT:", result);
   
       toast({
         title: "Credits Allocated",
@@ -224,6 +216,7 @@ export default function SystemAdminPortal() {
   
     } catch (e: any) {
       console.error("TOPUP ERROR:", e);
+  
       toast({
         title: "Top-up Failed",
         description: e.message || "Internal error.",
@@ -234,7 +227,7 @@ export default function SystemAdminPortal() {
     }
   };
 
-  if (userLoading || !auth.currentUser) {
+  if (userLoading || !auth?.currentUser) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
