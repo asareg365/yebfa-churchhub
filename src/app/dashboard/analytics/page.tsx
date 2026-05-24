@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { 
   Users, 
   TrendingUp, 
@@ -12,29 +12,35 @@ import {
   AlertTriangle,
   ArrowUpRight,
   TrendingDown,
-  MessageSquare
+  MessageSquare,
+  Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, query, where, limit, orderBy } from 'firebase/firestore';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, LineChart, Line } from 'recharts';
-import { format, subDays, startOfMonth, subMonths } from 'date-fns';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar } from 'recharts';
+import { format, subMonths } from 'date-fns';
 
 export default function AnalyticsPage() {
   const db = useFirestore();
   const { user } = useUser();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
+    if (!user?.email || !db) return null;
     return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
   }, [db, user?.email]);
   
   const { data: churches } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
-  const membersRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'members') : null, [db, currentChurch?.id]);
-  const attendanceRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'attendance') : null, [db, currentChurch?.id]);
-  const smsLogsRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'smsLogs') : null, [db, currentChurch?.id]);
+  const membersRef = useMemo(() => (currentChurch?.id && db) ? collection(db, 'churches', currentChurch.id, 'members') : null, [db, currentChurch?.id]);
+  const attendanceRef = useMemo(() => (currentChurch?.id && db) ? collection(db, 'churches', currentChurch.id, 'attendance') : null, [db, currentChurch?.id]);
+  const smsLogsRef = useMemo(() => (currentChurch?.id && db) ? collection(db, 'churches', currentChurch.id, 'smsLogs') : null, [db, currentChurch?.id]);
 
   const { data: members } = useCollection(membersRef ? query(membersRef) : null);
   const { data: attendance } = useCollection(attendanceRef ? query(attendanceRef, orderBy('date', 'desc'), limit(50)) : null);
@@ -48,7 +54,6 @@ export default function AnalyticsPage() {
     }).reverse();
 
     return last6Months.map(month => {
-      // Simulate cumulative growth based on join date
       const count = members.filter(m => m.joined && format(new Date(m.joined), 'MMM') === month).length;
       return { name: month, members: count };
     });
@@ -60,12 +65,14 @@ export default function AnalyticsPage() {
     return Math.round((sent / logs.length) * 100);
   }, [logs]);
 
+  if (!mounted) return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold tracking-tight mb-1">Insights & Analytics</h2>
-          <p className="text-muted-foreground">Comprehensive system-wide metrics for {currentChurch?.name}.</p>
+          <p className="text-muted-foreground">Comprehensive system-wide metrics for {currentChurch?.name || 'your ministry'}.</p>
         </div>
         <div className="bg-primary/10 px-4 py-2 rounded-xl border border-primary/20 text-[10px] font-bold text-primary uppercase tracking-widest">
           Enterprise Access

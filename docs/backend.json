@@ -17,18 +17,6 @@
         }
       }
     },
-    "SMSWallet": {
-      "title": "SMS Wallet",
-      "type": "object",
-      "properties": {
-        "churchId": { "type": "string" },
-        "balance": { "type": "number" },
-        "reserved": { "type": "number" },
-        "totalTopups": { "type": "number" },
-        "totalSpent": { "type": "number" },
-        "updatedAt": { "type": "string", "format": "date-time" }
-      }
-    },
     "SMSLedger": {
       "title": "SMS Ledger",
       "type": "object",
@@ -44,11 +32,7 @@
   },
   "firestore": {
     "/churches/{churchId}": {
-      "description": "Tenant organization settings and configuration."
-    },
-    "/smsWallets/{churchId}": {
-      "schema": "SMSWallet",
-      "description": "Transactional source of truth for organization credit balance."
+      "description": "Tenant organization settings and configuration. Now includes integrated SMS credit wallet."
     },
     "/smsLedger/{ledgerId}": {
       "schema": "SMSLedger",
@@ -59,9 +43,6 @@
     },
     "/smsQueue/{messageId}": {
       "description": "Global queue for all outgoing messages."
-    },
-    "/smsTransactions/{txId}": {
-      "description": "Legacy transaction log for top-ups and adjustments."
     }
   }
 }

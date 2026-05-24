@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Users,
   TrendingUp,
-  CreditCard,
   Cake,
   Activity,
   DollarSign,
@@ -13,6 +12,7 @@ import {
   Search,
   Send,
   MessageSquare,
+  CreditCard
 } from 'lucide-react';
 import {
   Card,
@@ -65,9 +65,14 @@ export default function DashboardPage() {
   const [selectedMember, setSelectedMember] = useState<any>(null);
   const [customMessage, setCustomMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
+    if (!user?.email || !db) return null;
     const normalizedEmail = user.email.toLowerCase().trim();
     return query(
       collection(db, 'churches'),
@@ -80,17 +85,17 @@ export default function DashboardPage() {
   const currentChurch = churches?.[0];
 
   const membersRef = useMemo(() => {
-    if (!currentChurch?.id) return null;
+    if (!currentChurch?.id || !db) return null;
     return collection(db, 'churches', currentChurch.id, 'members');
   }, [db, currentChurch?.id]);
 
   const attendanceRef = useMemo(() => {
-    if (!currentChurch?.id) return null;
+    if (!currentChurch?.id || !db) return null;
     return collection(db, 'churches', currentChurch.id, 'attendance');
   }, [db, currentChurch?.id]);
 
   const financesRef = useMemo(() => {
-    if (!currentChurch?.id) return null;
+    if (!currentChurch?.id || !db) return null;
     return collection(db, 'churches', currentChurch.id, 'finances');
   }, [db, currentChurch?.id]);
 
@@ -177,7 +182,7 @@ export default function DashboardPage() {
   };
 
   const handleSendGreeting = async () => {
-    if (!selectedMember || !currentChurch?.id) return;
+    if (!selectedMember || !currentChurch?.id || !db) return;
     setIsSending(true);
     try {
       const outcome = await sendAndLogSMS(db, currentChurch.id, {
@@ -200,6 +205,8 @@ export default function DashboardPage() {
       setIsSending(false);
     }
   };
+
+  if (!mounted) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">

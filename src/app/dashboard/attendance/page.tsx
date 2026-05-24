@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { CheckCircle2, Clock, Users, Plus, Loader2, Calendar as CalendarIcon, History, BarChart3, Fingerprint, ShieldCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,7 +13,7 @@ import {
   DialogTitle, 
   DialogTrigger,
   DialogFooter
-} from "@/components/ui/dialog";
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -30,9 +29,14 @@ export default function AttendancePage() {
   const { user } = useUser();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
+    if (!user?.email || !db) return null;
     return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
   }, [db, user?.email]);
   
@@ -40,7 +44,7 @@ export default function AttendancePage() {
   const currentChurch = churches?.[0];
 
   const attendanceRef = useMemo(() => {
-    if (!currentChurch?.id) return null;
+    if (!currentChurch?.id || !db) return null;
     return collection(db, "churches", currentChurch.id, "attendance");
   }, [db, currentChurch?.id]);
 
@@ -89,12 +93,14 @@ export default function AttendancePage() {
   const chartData = useMemo(() => [...(attendance || [])].reverse(), [attendance]);
   const lastSunday = attendance?.[0]?.count || 0;
 
+  if (!mounted) return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold tracking-tight mb-1">Attendance</h2>
-          <p className="text-muted-foreground">Monitor service trends for {currentChurch?.name}.</p>
+          <p className="text-muted-foreground">Monitor service trends for {currentChurch?.name || 'your ministry'}.</p>
         </div>
         <div className="flex gap-2">
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

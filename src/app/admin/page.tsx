@@ -78,9 +78,14 @@ export default function SystemAdminPortal() {
   const [platformStats, setPlatformStats] = useState<any>(null);
   const [statsError, setStatsError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const loadStats = async () => {
-    if (!auth?.currentUser) return;
+    if (!auth?.currentUser || !functions) return;
     
     setIsRefreshing(true);
     setStatsError(false);
@@ -103,13 +108,13 @@ export default function SystemAdminPortal() {
   };
 
   useEffect(() => {
-    if (!userLoading && (!user || !SUPER_ADMINS.includes(user.email?.toLowerCase() || ''))) {
+    if (mounted && !userLoading && (!user || !SUPER_ADMINS.includes(user.email?.toLowerCase() || ''))) {
       router.push('/admin/login');
     }
-  }, [user, userLoading, router]);
+  }, [user, userLoading, router, mounted]);
 
   useEffect(() => {
-    if (user && auth?.currentUser && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
+    if (user && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
   }, [user]);
@@ -129,6 +134,7 @@ export default function SystemAdminPortal() {
   }, [platformStats, managingSmsId]);
 
   const handleUpdateStatus = async (churchId: string, status: string) => {
+    if (!functions) return;
     setIsProcessing(true);
     const updateFn = httpsCallable(functions, 'updateChurchStatus');
     try {
@@ -143,21 +149,22 @@ export default function SystemAdminPortal() {
   };
 
   const handleInitializeWallets = async () => {
+    if (!functions) return;
     setIsProcessing(true);
     const initFn = httpsCallable(functions, 'initializeWallets');
     try {
       const res: any = await initFn();
-      toast({ title: "Migration Complete", description: `${res.data.walletsCreated} wallets were initialized.` });
+      toast({ title: "System Validated", description: res.data.message || "Integrity sync complete." });
       await loadStats();
     } catch (e: any) {
-      toast({ title: "Migration Failed", description: e.message, variant: "destructive" });
+      toast({ title: "Validation Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleSaveOrg = async () => {
-    if (!editingOrg) return;
+    if (!editingOrg || !functions) return;
     setIsProcessing(true);
     const updateFn = httpsCallable(functions, 'updateOrganization');
     try {
@@ -178,6 +185,7 @@ export default function SystemAdminPortal() {
   };
 
   const handleResetBalance = async (churchId: string) => {
+    if (!functions) return;
     setIsProcessing(true);
     const resetFn = httpsCallable(functions, 'adminResetWallet');
     try {
@@ -192,7 +200,7 @@ export default function SystemAdminPortal() {
   };
 
   const handleTopUp = async () => {
-    if (!managingSmsId || !topUpAmount) return;
+    if (!managingSmsId || !topUpAmount || !functions) return;
   
     setIsProcessing(true);
   
@@ -203,8 +211,6 @@ export default function SystemAdminPortal() {
         churchId: managingSmsId,
         amount: Number(topUpAmount),
       });
-  
-      console.log("TOPUP RESULT:", result);
   
       toast({
         title: "Credits Allocated",
@@ -227,7 +233,7 @@ export default function SystemAdminPortal() {
     }
   };
 
-  if (userLoading || !auth?.currentUser) {
+  if (!mounted || userLoading || !auth?.currentUser) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -277,7 +283,7 @@ export default function SystemAdminPortal() {
       <div className="grid gap-6 md:grid-cols-3">
         <Card className="glass md:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-7">
-            <div><CardTitle>Organization Directory</CardTitle><CardDescription>Source of truth: <span className="text-primary font-bold">smsWallets ledger</span>.</CardDescription></div>
+            <div><CardTitle>Organization Directory</CardTitle><CardDescription>Source of truth: <span className="text-primary font-bold">churches collection</span>.</CardDescription></div>
             <div className="relative w-72"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search ministries..." className="pl-10 h-11" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
           </CardHeader>
           <CardContent>
@@ -297,9 +303,6 @@ export default function SystemAdminPortal() {
                           <CreditCard className="h-3 w-3 text-muted-foreground" />
                           <span className="font-mono font-bold text-foreground">{(church.sms?.credits || 0).toLocaleString()}</span>
                         </div>
-                        {!church.sms?.hasWallet && (
-                          <Badge variant="destructive" className="w-fit text-[7px] px-1 py-0 leading-none">LEDGER MISSING</Badge>
-                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-right">

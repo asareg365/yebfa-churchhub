@@ -14,7 +14,7 @@ const { processSMSQueueItem, queueSMS, creditWallet, resetWallet } = require("./
 
 /**
  * ADMIN: System Stats Aggregation (v2 Callable)
- * PRODUCTION GRADE: Reads balance from smsWallets ledger.
+ * PRODUCTION GRADE: Reads balance from church docs directly.
  */
 exports.getSystemStats = onCall(
   {
@@ -29,23 +29,12 @@ exports.getSystemStats = onCall(
 
     try {
       const db = admin.firestore();
-      const [churchesSnap, walletsSnap] = await Promise.all([
-        db.collection("churches").get(),
-        db.collection("smsWallets").get()
-      ]);
-
-      const walletsMap = {};
-      walletsSnap.forEach(doc => {
-        walletsMap[doc.id] = doc.data();
-      });
+      const churchesSnap = await db.collection("churches").get();
 
       const churches = churchesSnap.docs.map(doc => {
         const d = doc.data();
-        const wallet = walletsMap[doc.id] || {};
+        const sms = d.sms || {};
         
-        // Ledger Truth (smsWallets) is the primary source
-        const ledgerBalance = wallet.balance !== undefined ? Number(wallet.balance) : Number(d.sms?.credits || 0);
-
         return {
           id: doc.id,
           name: d.name || "Unnamed Ministry",
@@ -54,12 +43,12 @@ exports.getSystemStats = onCall(
           status: d.status || "Pending",
           registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : (d.registeredAt ? String(d.registeredAt) : null),
           sms: {
-            credits: ledgerBalance,
-            sent: Number(d.sms?.stats?.sent || 0),
-            failed: Number(d.sms?.stats?.failed || 0),
-            totalTopups: Number(wallet.totalTopups || d.sms?.totalTopups || 0),
-            subscriptionStatus: d.sms?.subscriptionStatus || "inactive",
-            hasWallet: wallet.balance !== undefined
+            credits: Number(sms.credits || 0),
+            sent: Number(sms.stats?.sent || 0),
+            failed: Number(sms.stats?.failed || 0),
+            totalTopups: Number(sms.totalTopups || 0),
+            subscriptionStatus: sms.subscriptionStatus || "inactive",
+            hasWallet: true
           }
         };
       });
@@ -105,49 +94,12 @@ exports.getSystemStats = onCall(
 );
 
 /**
- * ADMIN: Initialize Missing Wallets (Emergency Migration)
+ * ADMIN: Decommission Missing Wallets (Obsolete - System integrated)
  */
 exports.initializeWallets = onCall(
   { region: "us-central1", cors: true },
   async (request) => {
-    const email = request.auth?.token?.email?.toLowerCase().trim();
-    if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized access");
-    }
-
-    const db = admin.firestore();
-    const churchesSnap = await db.collection("churches").get();
-    let created = 0;
-
-    for (const doc of churchesSnap.docs) {
-      try {
-        const church = doc.data();
-        const churchId = doc.id;
-        const walletRef = db.collection("smsWallets").doc(churchId);
-        const walletSnap = await walletRef.get();
-
-        if (!walletSnap.exists) {
-          const credits = Number(church.sms?.credits || 0);
-          await walletRef.set({
-            balance: credits,
-            totalSpent: Number(church.sms?.stats?.sent || 0),
-            totalTopups: credits,
-            currency: "SMS_CREDIT",
-            status: "active",
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-          created++;
-        }
-      } catch (err) {
-        console.error(`Migration failed for ${doc.id}:`, err.message);
-      }
-    }
-
-    return {
-      success: true,
-      walletsCreated: created
-    };
+    return { success: true, message: "System fully integrated into church documents." };
   }
 );
 
@@ -190,7 +142,6 @@ exports.updateChurchStatus = onCall(
 
 /**
  * ADMIN: Update Organization Details
- * Hardened: Synchronizes root plan and subscription object.
  */
 exports.updateOrganization = onCall(
   { region: "us-central1", cors: true }, 

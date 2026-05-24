@@ -1,9 +1,9 @@
 'use client';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
-import { getFunctions } from 'firebase/functions';
+import { getFirestore, Firestore } from 'firebase/firestore';
+import { getAuth, Auth } from 'firebase/auth';
+import { getFunctions, Functions } from 'firebase/functions';
 import { firebaseConfig } from './config';
 
 /**
@@ -12,20 +12,21 @@ import { firebaseConfig } from './config';
  * Regional binding for Functions is enforced here (us-central1).
  */
 
-const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined';
+const isConfigValid = typeof window !== 'undefined' && !!firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined';
 
-export const firebaseApp = isConfigValid 
+const app = isConfigValid 
   ? (getApps().length > 0 ? getApp() : initializeApp(firebaseConfig))
-  : null as any;
+  : null;
 
-export const firestore = firebaseApp ? getFirestore(firebaseApp) : null as any;
-export const auth = firebaseApp ? getAuth(firebaseApp) : null as any;
+export const firebaseApp = app;
+export const firestore: Firestore = app ? getFirestore(app) : null as any;
+export const auth: Auth = app ? getAuth(app) : null as any;
 
 /**
  * PRODUCTION REGION: us-central1
  * All administrative callable handshakes are routed here.
  */
-export const functions = firebaseApp ? getFunctions(firebaseApp, "us-central1") : null as any;
+export const functions: Functions = app ? getFunctions(app, "us-central1") : null as any;
 
 // Export supporting hooks and providers
 export * from './provider';

@@ -64,17 +64,16 @@ async function releaseLock(db, churchId) {
 }
 
 /**
- * Transactional Wallet Debit with SAFETY AUTO-HEAL
+ * Transactional Wallet Debit - Integrated into Church Doc
  */
 async function debitWalletTx(t, db, churchId, cost, messageId, type) {
   const ledgerId = `${churchId}_${messageId}`;
   const ledgerRef = db.collection("smsLedger").doc(ledgerId);
-  const walletRef = db.collection("smsWallets").doc(churchId);
   const churchRef = db.collection("churches").doc(churchId);
 
-  const [ledgerSnap, walletSnap] = await Promise.all([
+  const [ledgerSnap, churchSnap] = await Promise.all([
     t.get(ledgerRef),
-    t.get(walletRef)
+    t.get(churchRef)
   ]);
 
   if (ledgerSnap.exists) {
@@ -82,42 +81,22 @@ async function debitWalletTx(t, db, churchId, cost, messageId, type) {
     if (["COMMITTED", "SENT", "SUBMITTED"].includes(existing.status)) return;
   }
 
-  let walletData;
-  if (!walletSnap.exists) {
-    const churchSnap = await t.get(churchRef);
-    const fallbackCredits = Number(churchSnap.data()?.sms?.credits || 0);
-
-    walletData = {
-      balance: fallbackCredits,
-      totalSpent: 0,
-      totalTopups: fallbackCredits,
-      currency: "SMS_CREDIT",
-      status: "active",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    };
-
-    t.set(walletRef, walletData);
-    console.warn(`AUTO-RECOVERY: Wallet recreated for ${churchId} with ${fallbackCredits} credits.`);
-  } else {
-    walletData = walletSnap.data();
+  if (!churchSnap.exists) {
+    throw new Error("Church not found");
   }
 
-  const balance = Number(walletData.balance || 0);
+  const churchData = churchSnap.data() || {};
+  const balance = Number(churchData.sms?.credits || 0);
+
   if (balance < cost) throw new Error("Insufficient SMS credits");
 
   const newBalance = balance - cost;
   const smsType = type || "general";
 
-  t.set(walletRef, {
-    balance: newBalance,
-    totalSpent: admin.firestore.FieldValue.increment(cost),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp()
-  }, { merge: true });
-
   t.set(churchRef, {
     sms: {
       credits: newBalance,
+      totalSpent: admin.firestore.FieldValue.increment(cost),
       lastSentAt: admin.firestore.FieldValue.serverTimestamp(),
       stats: {
         sent: admin.firestore.FieldValue.increment(1),
@@ -261,28 +240,23 @@ async function processSMSQueueItem(apiKey, messageId, data) {
 
 async function refundWallet(churchId, amount, reason, messageId) {
   const db = admin.firestore();
-  const walletRef = db.collection("smsWallets").doc(churchId);
   const churchRef = db.collection("churches").doc(churchId);
   const ledgerId = `${churchId}_${messageId}`;
 
   await db.runTransaction(async (t) => {
     const ledgerRef = db.collection("smsLedger").doc(ledgerId);
-    const [ledgerSnap, walletSnap] = await Promise.all([
+    const [ledgerSnap, churchSnap] = await Promise.all([
       t.get(ledgerRef),
-      t.get(walletRef)
+      t.get(churchRef)
     ]);
 
     if (ledgerSnap.exists && ledgerSnap.data().status === "REFUNDED") return;
 
-    const balance = walletSnap.exists ? Number(walletSnap.data().balance || 0) : 0;
+    const balance = Number(churchSnap.data()?.sms?.credits || 0);
     const newBalance = balance + amount;
 
     t.update(ledgerRef, { status: "REFUNDED", refundReason: reason });
-    t.set(walletRef, {
-      balance: newBalance,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
-
+    
     t.set(churchRef, {
       sms: {
         credits: newBalance,
@@ -296,18 +270,9 @@ async function refundWallet(churchId, amount, reason, messageId) {
 
 async function resetWallet(churchId, processedBy) {
   const db = admin.firestore();
-  const walletRef = db.collection("smsWallets").doc(churchId);
   const churchRef = db.collection("churches").doc(churchId);
 
   await db.runTransaction(async (t) => {
-    t.set(walletRef, {
-      balance: 0,
-      totalSpent: 0,
-      totalTopups: 0,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      lastResetBy: processedBy
-    }, { merge: true });
-
     t.set(churchRef, {
       sms: {
         credits: 0,
@@ -315,7 +280,8 @@ async function resetWallet(churchId, processedBy) {
           sent: 0,
           failed: 0
         },
-        lastResetAt: admin.firestore.FieldValue.serverTimestamp()
+        lastResetAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastResetBy: processedBy
       }
     }, { merge: true });
   });
@@ -360,7 +326,6 @@ async function queueSMS(churchId, payload) {
 
 async function creditWallet(churchId, amount, reason, processedBy) {
   const db = admin.firestore();
-  const walletRef = db.collection("smsWallets").doc(churchId);
   const churchRef = db.collection("churches").doc(churchId);
 
   const PLAN_LIMITS = {
@@ -371,15 +336,12 @@ async function creditWallet(churchId, amount, reason, processedBy) {
   };
 
   return await db.runTransaction(async (t) => {
-    const [walletSnap, churchSnap] = await Promise.all([
-      t.get(walletRef),
-      t.get(churchRef)
-    ]);
+    const churchSnap = await t.get(churchRef);
 
     if (!churchSnap.exists) throw new Error("Organization not found");
     const churchData = churchSnap.data() || {};
     
-    const currentBalance = walletSnap.exists ? Number(walletSnap.data().balance || 0) : 0;
+    const currentBalance = Number(churchData.sms?.credits || 0);
     const newBalance = currentBalance + Number(amount);
 
     const limit = PLAN_LIMITS[churchData.plan || "Starter"] || 100;
@@ -388,21 +350,15 @@ async function creditWallet(churchId, amount, reason, processedBy) {
       throw new Error(`Plan limit exceeded. Max allowed credits for ${churchData.plan || "Starter"} is ${limit}. Current balance: ${currentBalance}.`);
     }
 
-    t.set(walletRef, {
-      balance: newBalance,
-      totalTopups: admin.firestore.FieldValue.increment(Number(amount)),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      lastTopupBy: processedBy,
-      lastTopupReason: reason
-    }, { merge: true });
-
     t.set(churchRef, {
       sms: {
         credits: newBalance,
         totalTopups: admin.firestore.FieldValue.increment(Number(amount)),
         lastTopupAt: admin.firestore.FieldValue.serverTimestamp(),
         lowBalance: newBalance <= 10,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastTopupBy: processedBy,
+        lastTopupReason: reason
       }
     }, { merge: true });
 
