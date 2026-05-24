@@ -201,6 +201,9 @@ exports.adminResetWallet = onCall(
 exports.adminTopUpWallet = onCall(
   { region: "us-central1", cors: true }, 
   async (request) => {
+
+    console.log("AUTH:", request.auth);
+    
     const email = request.auth?.token?.email?.toLowerCase().trim();
     if (!email || !SUPER_ADMINS.includes(email)) {
       throw new HttpsError("permission-denied", "Unauthorized access");
