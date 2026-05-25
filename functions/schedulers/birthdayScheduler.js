@@ -8,7 +8,7 @@ const { parseTemplate } = require("../utils/templateEngine");
  * Global Birthday Dispatcher (Enterprise Scale)
  * Uses indexed birthdayKey (MMDD) for fast retrieval.
  */
-async function dispatchAllBirthdays(apiKey) {
+async function dispatchAllBirthdays() {
   const db = admin.firestore();
   
   const churchesSnap = await db.collection("churches")

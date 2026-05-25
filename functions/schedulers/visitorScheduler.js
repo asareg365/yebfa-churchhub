@@ -7,7 +7,7 @@ const { parseTemplate } = require("../utils/templateEngine");
 /**
  * Processes automated follow-ups for visitors who came yesterday.
  */
-async function processVisitorFollowups(apiKey) {
+async function processVisitorFollowups() {
   const db = admin.firestore();
   const churchesSnap = await db.collection("churches").get();
 

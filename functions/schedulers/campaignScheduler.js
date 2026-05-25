@@ -5,7 +5,7 @@ const { queueSMS } = require("../services/smsService");
 /**
  * Processes scheduled announcements and campaigns.
  */
-async function processScheduledCampaigns(apiKey) {
+async function processScheduledCampaigns() {
   const db = admin.firestore();
   const now = admin.firestore.Timestamp.now();
   const churchesSnap = await db.collection("churches").get();

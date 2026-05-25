@@ -5,7 +5,7 @@ const admin = require("firebase-admin");
  * Advanced Retry Processor
  * Finds messages marked for retry whose backoff time has elapsed.
  */
-async function retryFailedSMS(apiKey) {
+async function retryFailedSMS() {
   const db = admin.firestore();
   const now = admin.firestore.Timestamp.now();
   

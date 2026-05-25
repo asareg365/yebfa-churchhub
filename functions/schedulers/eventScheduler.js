@@ -6,7 +6,7 @@ const { queueSMS } = require("../services/smsService");
 /**
  * Checks for events happening tomorrow and sends reminders via Queue.
  */
-async function processEventReminders(apiKey) {
+async function processEventReminders() {
   const db = admin.firestore();
   const churchesSnap = await db.collection("churches").get();
 
