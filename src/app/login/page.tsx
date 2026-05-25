@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
@@ -14,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Church, Mail, Lock, ShieldCheck, Hash } from "lucide-react";
+import { Loader2, Church, Mail, Lock, ShieldCheck, Hash, UserCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -68,7 +69,7 @@ function LoginContent() {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (tenantSlug) {
+    if (tenantSlug && db) {
       const q = query(collection(db, "churches"), where("slug", "==", tenantSlug.toLowerCase().trim()), limit(1));
       getDocs(q).then(snap => {
         if (!snap.empty) {
@@ -95,6 +96,20 @@ function LoginContent() {
         description: error.message, 
         variant: "destructive" 
       });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleIndividualSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      await createUserWithEmailAndPassword(auth, email.toLowerCase().trim(), password);
+      toast({ title: "Account Created", description: "You can now log in to authorized ministries." });
+      router.push("/dashboard");
+    } catch (error: any) {
+      toast({ title: "Signup Failed", description: error.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -229,9 +244,10 @@ function LoginContent() {
       <Card className="w-full max-w-md bg-white border-border shadow-2xl animate-in zoom-in-95 duration-500">
         <Tabs defaultValue={defaultTab} className="w-full">
           {!activeChurch && (
-            <TabsList className="grid w-full grid-cols-2 bg-muted p-1 rounded-t-xl rounded-b-none">
-              <TabsTrigger value="login">Login</TabsTrigger>
-              <TabsTrigger value="signup">Register Ministry</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-3 bg-muted p-1 rounded-t-xl rounded-b-none h-auto">
+              <TabsTrigger value="login" className="py-2">Login</TabsTrigger>
+              <TabsTrigger value="join" className="py-2">Account</TabsTrigger>
+              <TabsTrigger value="signup" className="py-2">Register</TabsTrigger>
             </TabsList>
           )}
           
@@ -281,6 +297,47 @@ function LoginContent() {
                     Sign in to a different ministry
                   </Button>
                 )}
+              </CardFooter>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="join">
+            <form onSubmit={handleIndividualSignup}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-accent" />
+                  Account Access
+                </CardTitle>
+                <CardDescription>Create your individual account to join an existing authorized ministry.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Your Email</Label>
+                  <Input 
+                    type="email" 
+                    placeholder="authorized-email@example.com" 
+                    className="bg-white"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                  <p className="text-[10px] text-muted-foreground">Use the exact email authorized by your ministry administrator.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Create Password</Label>
+                  <Input 
+                    type="password" 
+                    className="bg-white"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button className="w-full bg-accent text-accent-foreground h-11 rounded-xl" type="submit" disabled={isLoading}>
+                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Account"}
+                </Button>
               </CardFooter>
             </form>
           </TabsContent>
@@ -369,7 +426,7 @@ function LoginContent() {
                 </div>
               </CardContent>
               <CardFooter className="pt-6">
-                <Button className="w-full bg-accent text-accent-foreground h-11 rounded-xl" type="submit" disabled={isLoading}>
+                <Button className="w-full bg-primary text-primary-foreground h-11 rounded-xl" type="submit" disabled={isLoading}>
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Register Ministry"}
                 </Button>
               </CardFooter>

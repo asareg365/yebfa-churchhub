@@ -17,7 +17,11 @@ import {
   Bell,
   Smartphone,
   Globe,
-  Clock
+  Users,
+  UserPlus,
+  Trash2,
+  ShieldCheck,
+  Mail
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,8 +34,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { useUser, useFirestore, useCollection, useAuth } from "@/firebase";
-import { doc, updateDoc, query, collection, where, limit } from "firebase/firestore";
+import { useUser, useFirestore, useCollection, useAuth, functions } from "@/firebase";
+import { doc, updateDoc, query, collection, where, limit, arrayUnion, arrayRemove } from "firebase/firestore";
 import { updatePassword } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -47,6 +51,8 @@ const TIMEZONES = [
   "UTC"
 ];
 
+const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+
 export default function SettingsPage() {
   const { user } = useUser();
   const auth = useAuth();
@@ -58,9 +64,10 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [activeTab, setActiveTab] = useState(isForced ? "security" : "general");
+  const [newAdminEmail, setNewAdminEmail] = useState("");
 
   const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
+    if (!user?.email || !db) return null;
     return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
   }, [db, user?.email]);
 
@@ -102,7 +109,6 @@ export default function SettingsPage() {
     }
   }, [currentChurch]);
 
-  // Preview theme effect
   useEffect(() => {
     const root = window.document.documentElement;
     root.classList.remove('light', 'dark');
@@ -116,7 +122,7 @@ export default function SettingsPage() {
   }, [settings.theme]);
 
   const handleSave = () => {
-    if (!currentChurch) return;
+    if (!currentChurch || !db) return;
     setIsSaving(true);
 
     const docRef = doc(db, "churches", currentChurch.id);
@@ -152,6 +158,51 @@ export default function SettingsPage() {
         errorEmitter.emit('permission-error', permissionError);
       })
       .finally(() => setIsSaving(false));
+  };
+
+  const handleAddAdminEmail = async () => {
+    if (!newAdminEmail || !currentChurch || !db) return;
+    const email = newAdminEmail.toLowerCase().trim();
+    
+    if (currentChurch.adminEmails?.includes(email)) {
+      toast({ title: "User already authorized", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const docRef = doc(db, "churches", currentChurch.id);
+      await updateDoc(docRef, {
+        adminEmails: arrayUnion(email)
+      });
+      setNewAdminEmail("");
+      toast({ title: "User Authorized", description: `${email} can now access this ministry.` });
+    } catch (e) {
+      toast({ title: "Authorization Failed", variant: "destructive" });
+    }
+  };
+
+  const handleRemoveAdminEmail = async (email: string) => {
+    if (!currentChurch || !db) return;
+    
+    if (SUPER_ADMINS.includes(email)) {
+      toast({ title: "Action Forbidden", description: "Cannot remove system-wide administrators.", variant: "destructive" });
+      return;
+    }
+
+    if (email === user?.email?.toLowerCase().trim()) {
+      toast({ title: "Action Forbidden", description: "You cannot remove your own access from this portal.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const docRef = doc(db, "churches", currentChurch.id);
+      await updateDoc(docRef, {
+        adminEmails: arrayRemove(email)
+      });
+      toast({ title: "Access Revoked", description: `${email} has been removed from the team.` });
+    } catch (e) {
+      toast({ title: "Revocation Failed", variant: "destructive" });
+    }
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -199,6 +250,7 @@ export default function SettingsPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="glass border-white/10 p-1 rounded-2xl w-full md:w-auto">
           <TabsTrigger value="general" className="rounded-xl px-6" disabled={isForced}>General</TabsTrigger>
+          <TabsTrigger value="team" className="rounded-xl px-6" disabled={isForced}>Team</TabsTrigger>
           <TabsTrigger value="automation" className="rounded-xl px-6" disabled={isForced}>Automation</TabsTrigger>
           <TabsTrigger value="display" className="rounded-xl px-6" disabled={isForced}>Display</TabsTrigger>
           <TabsTrigger value="security" className="rounded-xl px-6">Security</TabsTrigger>
@@ -261,6 +313,82 @@ export default function SettingsPage() {
                 </div>
                 <Badge variant="outline">Verified SaaS ID</Badge>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="team" className="animate-in fade-in-50 duration-500 space-y-6">
+          <Card className="glass border-border shadow-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" />
+                Team Management
+              </CardTitle>
+              <CardDescription>Authorize additional users to access this ministry dashboard.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex gap-2">
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="new-admin-email">Add Team Member Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="new-admin-email"
+                      type="email"
+                      placeholder="pastor@church.org" 
+                      className="pl-10 bg-muted/20"
+                      value={newAdminEmail}
+                      onChange={(e) => setNewAdminEmail(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <Button className="mt-8 bg-accent text-white h-10 px-6 rounded-xl" onClick={handleAddAdminEmail}>
+                  <UserPlus className="w-4 h-4 mr-2" /> Authorize
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Authorized Personnel</Label>
+                <div className="grid gap-2">
+                  {currentChurch?.adminEmails?.map((email: string) => (
+                    <div key={email} className="flex items-center justify-between p-4 rounded-xl bg-muted/20 border border-border group hover:border-primary/20 transition-all">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                          <Users className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold">{email}</p>
+                          {SUPER_ADMINS.includes(email) ? (
+                            <Badge variant="secondary" className="text-[8px] h-4">System Super Admin</Badge>
+                          ) : email === currentChurch.adminEmail ? (
+                            <Badge variant="outline" className="text-[8px] h-4 text-accent border-accent/20">Owner</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[8px] h-4">Dashboard Admin</Badge>
+                          )}
+                        </div>
+                      </div>
+                      {!SUPER_ADMINS.includes(email) && email !== user?.email?.toLowerCase().trim() && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => handleRemoveAdminEmail(email)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Alert className="bg-primary/5 border-primary/10">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                <AlertTitle className="text-xs font-bold uppercase">Multi-User Access</AlertTitle>
+                <AlertDescription className="text-xs">
+                  Authorized team members must create an account via the "Account Access" tab on the Login page using their authorized email.
+                </AlertDescription>
+              </Alert>
             </CardContent>
           </Card>
         </TabsContent>
