@@ -1,5 +1,6 @@
 const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 
@@ -12,9 +13,15 @@ const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 
 const { processSMSQueueItem, queueSMS, creditWallet, resetWallet } = require("./services/smsService");
 
+// Schedulers
+const { dispatchAllBirthdays } = require("./schedulers/birthdayScheduler");
+const { processScheduledCampaigns } = require("./schedulers/campaignScheduler");
+const { processEventReminders } = require("./schedulers/eventScheduler");
+const { processVisitorFollowups } = require("./schedulers/visitorScheduler");
+const { retryFailedSMS } = require("./schedulers/retryScheduler");
+
 /**
  * ADMIN: System Stats Aggregation (v2 Callable)
- * PRODUCTION GRADE: Reads balance from church docs directly.
  */
 exports.getSystemStats = onCall(
   {
@@ -201,9 +208,6 @@ exports.adminResetWallet = onCall(
 exports.adminTopUpWallet = onCall(
   { region: "us-central1", cors: true }, 
   async (request) => {
-
-    console.log("AUTH:", request.auth);
-    
     const email = request.auth?.token?.email?.toLowerCase().trim();
     if (!email || !SUPER_ADMINS.includes(email)) {
       throw new HttpsError("permission-denied", "Unauthorized access");
@@ -298,5 +302,81 @@ exports.onSmsRetryTriggered = onDocumentUpdated(
       return processSMSQueueItem(key, event.params.messageId, data);
     }
     return null;
+  }
+);
+
+/**
+ * Birthday Scheduler (6AM)
+ */
+exports.scheduledBirthdayProcessor = onSchedule(
+  {
+    schedule: "0 6 * * *",
+    timeZone: "Africa/Accra",
+    region: "us-central1",
+    memory: "512MiB"
+  },
+  async () => {
+    console.log("RUNNING BIRTHDAY SCHEDULER");
+    await dispatchAllBirthdays();
+  }
+);
+
+/**
+ * Campaign Scheduler (every 1 minute)
+ */
+exports.scheduledCampaignProcessor = onSchedule(
+  {
+    schedule: "* * * * *",
+    timeZone: "Africa/Accra",
+    region: "us-central1",
+  },
+  async () => {
+    console.log("RUNNING CAMPAIGN SCHEDULER");
+    await processScheduledCampaigns();
+  }
+);
+
+/**
+ * Event Reminder Scheduler (8AM daily)
+ */
+exports.scheduledEventReminderProcessor = onSchedule(
+  {
+    schedule: "0 8 * * *",
+    timeZone: "Africa/Accra",
+    region: "us-central1",
+  },
+  async () => {
+    console.log("RUNNING EVENT REMINDER SCHEDULER");
+    await processEventReminders();
+  }
+);
+
+/**
+ * Visitor Follow-up Scheduler (9AM daily)
+ */
+exports.scheduledVisitorProcessor = onSchedule(
+  {
+    schedule: "0 9 * * *",
+    timeZone: "Africa/Accra",
+    region: "us-central1",
+  },
+  async () => {
+    console.log("RUNNING VISITOR FOLLOWUP SCHEDULER");
+    await processVisitorFollowups();
+  }
+);
+
+/**
+ * Retry Scheduler (every 5 mins)
+ */
+exports.scheduledRetryProcessor = onSchedule(
+  {
+    schedule: "*/5 * * * *",
+    timeZone: "Africa/Accra",
+    region: "us-central1",
+  },
+  async () => {
+    console.log("RUNNING RETRY SCHEDULER");
+    await retryFailedSMS();
   }
 );
