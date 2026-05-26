@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -53,6 +54,7 @@ const ALL_MENU_ITEMS = [
     { id: "bill-reports", label: "Usage Reports", href: "/dashboard/billing/reports", icon: FileText },
   ]},
   { id: "analytics", icon: BarChart3, label: "Insights", href: "/dashboard/insights" },
+  { id: "reports", icon: FileText, label: "Reports", href: "/dashboard/reports" },
   { id: "settings", icon: Settings, label: "Settings", href: "/dashboard/settings" },
 ];
 

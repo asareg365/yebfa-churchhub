@@ -15,12 +15,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Church, Mail, Lock, ShieldCheck, Hash, UserCheck } from "lucide-react";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { Loader2, Church, Mail, Lock, ShieldCheck, Hash, UserCheck, Sparkles, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 import { Checkbox } from "@/components/ui/checkbox";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 
@@ -30,9 +38,15 @@ const AVAILABLE_MODULES = [
   { id: "events", label: "Event Planning" },
   { id: "finances", label: "Financial Records" },
   { id: "communication", label: "AI Communications" },
-  { id: "insights", label: "Pastoral Insights" },
+  { id: "analytics", label: "Pastoral Insights" },
   { id: "reports", label: "Detailed Reports" },
 ];
+
+const PLAN_DEFAULTS: Record<string, string[]> = {
+  Basic: ["members", "attendance"],
+  Standard: ["members", "attendance", "events", "finances", "communication"],
+  Premium: ["members", "attendance", "events", "finances", "communication", "analytics", "reports"],
+};
 
 const CrossIcon = ({ className }: { className?: string }) => (
   <svg 
@@ -58,7 +72,8 @@ function LoginContent() {
   const [password, setPassword] = useState("");
   const [churchName, setChurchName] = useState("");
   const [slug, setSlug] = useState("");
-  const [selectedModules, setSelectedModules] = useState<string[]>(["members", "attendance"]);
+  const [selectedPlan, setSelectedPlan] = useState("Basic");
+  const [selectedModules, setSelectedModules] = useState<string[]>(PLAN_DEFAULTS.Basic);
   const [isLoading, setIsLoading] = useState(false);
   const [activeChurch, setActiveChurch] = useState<any>(null);
   const [isFetchingChurch, setIsFetchingChurch] = useState(!!tenantSlug);
@@ -82,6 +97,11 @@ function LoginContent() {
       });
     }
   }, [tenantSlug, db, toast]);
+
+  const handlePlanChange = (plan: string) => {
+    setSelectedPlan(plan);
+    setSelectedModules(PLAN_DEFAULTS[plan] || PLAN_DEFAULTS.Basic);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,7 +174,7 @@ function LoginContent() {
         adminEmails: authorizedEmails,
         enabledModules: selectedModules,
         status: "Pending",
-        plan: "Basic",
+        plan: selectedPlan,
         denomination: "Pentecostal",
         sms: {
           enabled: false,
@@ -172,7 +192,7 @@ function LoginContent() {
           }
         },
         subscription: {
-          plan: 'Basic',
+          plan: selectedPlan,
           status: 'pending',
           renewalDate: '1st of Month',
           smsCredits: 0,
@@ -350,7 +370,7 @@ function LoginContent() {
               </CardHeader>
               <CardContent className="space-y-6 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 <div className="space-y-4">
-                   <div className="space-y-2">
+                  <div className="space-y-2">
                     <Label htmlFor="churchName">Church / Ministry Name</Label>
                     <div className="relative">
                       <Church className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -382,6 +402,21 @@ function LoginContent() {
                       />
                     </div>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label>Subscription Tier</Label>
+                    <Select value={selectedPlan} onValueChange={handlePlanChange}>
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Select a plan" />
+                      </SelectTrigger>
+                      <SelectContent className="glass">
+                        <SelectItem value="Basic">Starter / Basic (100 SMS)</SelectItem>
+                        <SelectItem value="Standard">Ministry Growth (1,000 SMS)</SelectItem>
+                        <SelectItem value="Premium">Enterprise (10,000 SMS)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="signup-email">Admin Email</Label>
                     <Input 
@@ -408,20 +443,34 @@ function LoginContent() {
                 </div>
 
                 <div className="space-y-3 pt-4 border-t border-border">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Features to Enable</Label>
+                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                    Modules Included in {selectedPlan}
+                    <ShieldCheck className="w-3 h-3 text-accent" />
+                  </Label>
                   <div className="grid gap-2">
-                    {AVAILABLE_MODULES.map((module) => (
-                      <div key={module.id} className="flex items-center space-x-3 p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors">
-                        <Checkbox 
-                          id={module.id} 
-                          checked={selectedModules.includes(module.id)}
-                          onCheckedChange={() => handleModuleToggle(module.id)}
-                        />
-                        <label htmlFor={module.id} className="text-sm font-medium leading-none cursor-pointer flex-1">
-                          {module.label}
-                        </label>
-                      </div>
-                    ))}
+                    {AVAILABLE_MODULES.map((module) => {
+                      const isRecommended = PLAN_DEFAULTS[selectedPlan].includes(module.id);
+                      return (
+                        <div 
+                          key={module.id} 
+                          className={cn(
+                            "flex items-center space-x-3 p-3 rounded-xl transition-colors",
+                            isRecommended ? "bg-accent/5 border border-accent/20" : "bg-muted/50 opacity-50 grayscale"
+                          )}
+                        >
+                          <Checkbox 
+                            id={module.id} 
+                            checked={selectedModules.includes(module.id)}
+                            onCheckedChange={() => handleModuleToggle(module.id)}
+                            disabled={!isRecommended && selectedPlan !== "Premium"}
+                          />
+                          <label htmlFor={module.id} className="text-sm font-medium leading-none cursor-pointer flex-1">
+                            {module.label}
+                          </label>
+                          {isRecommended && <CheckCircle2 className="w-3 h-3 text-accent" />}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </CardContent>
