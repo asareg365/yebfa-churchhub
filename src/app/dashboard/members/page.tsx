@@ -103,7 +103,7 @@ export default function MembersPage() {
   const { toast } = useToast();
   
   const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
+    if (!user?.email || !db) return null;
     return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
   }, [db, user?.email]);
   
@@ -249,7 +249,7 @@ export default function MembersPage() {
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild><Button className="flex-1 md:flex-none bg-primary" disabled={!currentChurch}><Plus className="mr-2 h-4 w-4" /> Add Member</Button></DialogTrigger>
             <DialogContent className="glass max-w-2xl">
-              <DialogHeader><DialogTitle>Add New Member</DialogTitle><DialogDescription>Enter member details. Upload a photo from your device or use initials.</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>Add New Member</DialogTitle><DialogDescription>Enter member details. Take a photo of the member or upload from gallery.</DialogDescription></DialogHeader>
               <div className="space-y-6 py-4">
                 <div className="flex items-center gap-6">
                   <Avatar className="h-24 w-24 border-2 border-primary/20 shadow-xl">
@@ -257,7 +257,7 @@ export default function MembersPage() {
                     <AvatarFallback className="bg-primary/10 text-primary font-bold text-3xl">{getInitials(newMember.name)}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 space-y-3">
-                    <Label className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground"><Camera className="w-3 h-3" /> Profile Image</Label>
+                    <Label className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground"><Camera className="w-3 h-3" /> Member Photo</Label>
                     <div className="flex gap-2">
                        <Button 
                          type="button" 
@@ -265,7 +265,7 @@ export default function MembersPage() {
                          className="flex-1 h-10 gap-2 rounded-xl"
                          onClick={() => addCaptureInputRef.current?.click()}
                        >
-                         <Camera className="w-4 h-4" /> Capture
+                         <Camera className="w-4 h-4 text-primary" /> Take Photo
                        </Button>
                        <Button 
                          type="button" 
@@ -273,21 +273,22 @@ export default function MembersPage() {
                          className="flex-1 h-10 gap-2 rounded-xl"
                          onClick={() => addFileInputRef.current?.click()}
                        >
-                         <Upload className="w-4 h-4" /> Gallery
+                         <Upload className="w-4 h-4 text-accent" /> Gallery
                        </Button>
                     </div>
+                    {/* Capture input explicitly requests environment camera */}
                     <input 
                       type="file" 
-                      ref={addFileInputRef} 
+                      ref={addCaptureInputRef} 
                       accept="image/*" 
+                      capture="environment" 
                       className="hidden" 
                       onChange={(e) => handleFileChange(e, false)} 
                     />
                     <input 
                       type="file" 
-                      ref={addCaptureInputRef} 
+                      ref={addFileInputRef} 
                       accept="image/*" 
-                      capture="user" 
                       className="hidden" 
                       onChange={(e) => handleFileChange(e, false)} 
                     />
@@ -410,7 +411,7 @@ export default function MembersPage() {
         <DialogContent className="glass max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Member Profile</DialogTitle>
-            <DialogDescription>Update record for {editingMember?.name}. Choose a new photo from your device.</DialogDescription>
+            <DialogDescription>Update record for {editingMember?.name}. Take a new photo or select from gallery.</DialogDescription>
           </DialogHeader>
           {editingMember && (
             <div className="space-y-6 py-4">
@@ -428,7 +429,7 @@ export default function MembersPage() {
                        className="flex-1 h-10 gap-2 rounded-xl"
                        onClick={() => editCaptureInputRef.current?.click()}
                      >
-                       <Camera className="w-4 h-4" /> Capture
+                       <Camera className="w-4 h-4 text-primary" /> Take Photo
                      </Button>
                      <Button 
                        type="button" 
@@ -436,21 +437,21 @@ export default function MembersPage() {
                        className="flex-1 h-10 gap-2 rounded-xl"
                        onClick={() => editFileInputRef.current?.click()}
                      >
-                       <Upload className="w-4 h-4" /> Gallery
+                       <Upload className="w-4 h-4 text-accent" /> Gallery
                      </Button>
                   </div>
                   <input 
                     type="file" 
-                    ref={editFileInputRef} 
+                    ref={editCaptureInputRef} 
                     accept="image/*" 
+                    capture="environment" 
                     className="hidden" 
                     onChange={(e) => handleFileChange(e, true)} 
                   />
                   <input 
                     type="file" 
-                    ref={editCaptureInputRef} 
+                    ref={editFileInputRef} 
                     accept="image/*" 
-                    capture="user" 
                     className="hidden" 
                     onChange={(e) => handleFileChange(e, true)} 
                   />
