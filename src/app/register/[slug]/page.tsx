@@ -246,7 +246,7 @@ export default function PublicRegistrationPage() {
                          <Upload className="w-4 h-4 text-accent" /> Gallery
                        </Button>
                     </div>
-                    {/* Capture input explicitly requests camera capture */}
+                    {/* Native Inputs */}
                     <input 
                       type="file" 
                       ref={captureInputRef} 
@@ -382,7 +382,7 @@ export default function PublicRegistrationPage() {
                                    onClick={() => toggleSociety(society)}
                                  >
                                    <div className="w-4 h-4 border rounded border-primary bg-primary flex items-center justify-center shrink-0">
-                                     Check className="h-3 w-3 text-primary-foreground" />
+                                      <Check className="h-3 w-3 text-primary-foreground" />
                                    </div>
                                    <span className="text-sm">{society}</span>
                                  </button>

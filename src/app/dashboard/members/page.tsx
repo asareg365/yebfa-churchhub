@@ -276,7 +276,7 @@ export default function MembersPage() {
                          <Upload className="w-4 h-4 text-accent" /> Gallery
                        </Button>
                     </div>
-                    {/* Capture input explicitly requests environment camera */}
+                    {/* Native Inputs */}
                     <input 
                       type="file" 
                       ref={addCaptureInputRef} 
