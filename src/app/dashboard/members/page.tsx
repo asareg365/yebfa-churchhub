@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { 
   Plus, 
   Search, 
@@ -92,6 +92,11 @@ export default function MembersPage() {
   const [memberToDelete, setMemberToDelete] = useState<any>(null);
   const [editingMember, setEditingMember] = useState<any>(null);
   const [customSocietyInput, setCustomSocietyInput] = useState("");
+
+  const addFileInputRef = useRef<HTMLInputElement>(null);
+  const addCaptureInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+  const editCaptureInputRef = useRef<HTMLInputElement>(null);
 
   const db = useFirestore();
   const { user } = useUser();
@@ -246,18 +251,45 @@ export default function MembersPage() {
             <DialogContent className="glass max-w-2xl">
               <DialogHeader><DialogTitle>Add New Member</DialogTitle><DialogDescription>Enter member details. Upload a photo from your device or use initials.</DialogDescription></DialogHeader>
               <div className="space-y-6 py-4">
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-16 w-16 border-2 border-primary/20">
+                <div className="flex items-center gap-6">
+                  <Avatar className="h-24 w-24 border-2 border-primary/20 shadow-xl">
                     <AvatarImage src={newMember.photo} />
-                    <AvatarFallback className="bg-primary/10 text-primary font-bold text-xl">{getInitials(newMember.name)}</AvatarFallback>
+                    <AvatarFallback className="bg-primary/10 text-primary font-bold text-3xl">{getInitials(newMember.name)}</AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 space-y-2">
-                    <Label className="flex items-center gap-2"><Upload className="w-3 h-3" /> Profile Image</Label>
-                    <Input 
+                  <div className="flex-1 space-y-3">
+                    <Label className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground"><Camera className="w-3 h-3" /> Profile Image</Label>
+                    <div className="flex gap-2">
+                       <Button 
+                         type="button" 
+                         variant="outline" 
+                         className="flex-1 h-10 gap-2 rounded-xl"
+                         onClick={() => addCaptureInputRef.current?.click()}
+                       >
+                         <Camera className="w-4 h-4" /> Capture
+                       </Button>
+                       <Button 
+                         type="button" 
+                         variant="outline" 
+                         className="flex-1 h-10 gap-2 rounded-xl"
+                         onClick={() => addFileInputRef.current?.click()}
+                       >
+                         <Upload className="w-4 h-4" /> Gallery
+                       </Button>
+                    </div>
+                    <input 
                       type="file" 
+                      ref={addFileInputRef} 
                       accept="image/*" 
+                      className="hidden" 
                       onChange={(e) => handleFileChange(e, false)} 
-                      className="bg-muted/20 cursor-pointer" 
+                    />
+                    <input 
+                      type="file" 
+                      ref={addCaptureInputRef} 
+                      accept="image/*" 
+                      capture="user" 
+                      className="hidden" 
+                      onChange={(e) => handleFileChange(e, false)} 
                     />
                   </div>
                 </div>
@@ -382,18 +414,45 @@ export default function MembersPage() {
           </DialogHeader>
           {editingMember && (
             <div className="space-y-6 py-4">
-              <div className="flex items-center gap-4">
-                <Avatar className="h-16 w-16 border-2 border-primary/20">
+              <div className="flex items-center gap-6">
+                <Avatar className="h-24 w-24 border-2 border-primary/20 shadow-xl">
                   <AvatarImage src={editingMember.photo} />
-                  <AvatarFallback className="bg-primary/10 text-primary font-bold text-xl">{getInitials(editingMember.name)}</AvatarFallback>
+                  <AvatarFallback className="bg-primary/10 text-primary font-bold text-3xl">{getInitials(editingMember.name)}</AvatarFallback>
                 </Avatar>
-                <div className="flex-1 space-y-2">
-                  <Label className="flex items-center gap-2"><Upload className="w-3 h-3" /> Change Profile Image</Label>
-                  <Input 
+                <div className="flex-1 space-y-3">
+                  <Label className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground"><Camera className="w-3 h-3" /> Change Profile Image</Label>
+                  <div className="flex gap-2">
+                     <Button 
+                       type="button" 
+                       variant="outline" 
+                       className="flex-1 h-10 gap-2 rounded-xl"
+                       onClick={() => editCaptureInputRef.current?.click()}
+                     >
+                       <Camera className="w-4 h-4" /> Capture
+                     </Button>
+                     <Button 
+                       type="button" 
+                       variant="outline" 
+                       className="flex-1 h-10 gap-2 rounded-xl"
+                       onClick={() => editFileInputRef.current?.click()}
+                     >
+                       <Upload className="w-4 h-4" /> Gallery
+                     </Button>
+                  </div>
+                  <input 
                     type="file" 
+                    ref={editFileInputRef} 
                     accept="image/*" 
+                    className="hidden" 
                     onChange={(e) => handleFileChange(e, true)} 
-                    className="bg-muted/20 cursor-pointer" 
+                  />
+                  <input 
+                    type="file" 
+                    ref={editCaptureInputRef} 
+                    accept="image/*" 
+                    capture="user" 
+                    className="hidden" 
+                    onChange={(e) => handleFileChange(e, true)} 
                   />
                 </div>
               </div>

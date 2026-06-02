@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import { 
   CheckCircle2, 
@@ -64,6 +64,9 @@ export default function PublicRegistrationPage() {
   const slug = params.slug as string;
   const db = useFirestore();
   const { toast } = useToast();
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const captureInputRef = useRef<HTMLInputElement>(null);
 
   const [church, setChurch] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -218,18 +221,45 @@ export default function PublicRegistrationPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-6">
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-20 w-20 border-2 border-primary/20 shadow-lg">
+                <div className="flex items-center gap-6">
+                  <Avatar className="h-24 w-24 border-2 border-primary/20 shadow-xl">
                     <AvatarImage src={formData.photo} />
-                    <AvatarFallback className="bg-primary/10 text-primary font-bold text-2xl">{getInitials(formData.name)}</AvatarFallback>
+                    <AvatarFallback className="bg-primary/10 text-primary font-bold text-3xl">{getInitials(formData.name)}</AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 space-y-2">
-                    <Label className="flex items-center gap-2 font-bold"><Upload className="w-3 h-3" /> Profile Photo (Pick from Device)</Label>
-                    <Input 
+                  <div className="flex-1 space-y-3">
+                    <Label className="flex items-center gap-2 font-bold uppercase tracking-wider text-xs text-muted-foreground"><Camera className="w-3 h-3" /> Profile Photo</Label>
+                    <div className="flex gap-2">
+                       <Button 
+                         type="button" 
+                         variant="outline" 
+                         className="flex-1 h-12 gap-2 rounded-2xl border-white/10 hover:bg-white/5"
+                         onClick={() => captureInputRef.current?.click()}
+                       >
+                         <Camera className="w-4 h-4 text-primary" /> Take Photo
+                       </Button>
+                       <Button 
+                         type="button" 
+                         variant="outline" 
+                         className="flex-1 h-12 gap-2 rounded-2xl border-white/10 hover:bg-white/5"
+                         onClick={() => fileInputRef.current?.click()}
+                       >
+                         <Upload className="w-4 h-4 text-accent" /> Gallery
+                       </Button>
+                    </div>
+                    <input 
                       type="file" 
+                      ref={fileInputRef} 
                       accept="image/*" 
+                      className="hidden" 
                       onChange={handleFileChange} 
-                      className="bg-white/10 border-white/10 cursor-pointer" 
+                    />
+                    <input 
+                      type="file" 
+                      ref={captureInputRef} 
+                      accept="image/*" 
+                      capture="user" 
+                      className="hidden" 
+                      onChange={handleFileChange} 
                     />
                   </div>
                 </div>
