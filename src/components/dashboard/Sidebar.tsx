@@ -12,7 +12,6 @@ import {
   BarChart3, 
   Settings, 
   LogOut,
-  Sparkles,
   UserCheck,
   Loader2,
   History,
@@ -22,7 +21,6 @@ import {
   TrendingUp,
   Wallet,
   FileText,
-  ShieldCheck,
   Package,
   Heart
 } from "lucide-react";
@@ -73,7 +71,7 @@ const CrossIcon = () => (
   </svg>
 );
 
-export function Sidebar() {
+export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const auth = useAuth();
@@ -124,7 +122,7 @@ export function Sidebar() {
   };
 
   return (
-    <div className="fixed left-4 top-4 bottom-4 w-72 bg-white rounded-3xl z-50 flex flex-col p-6 border border-border shadow-xl overflow-hidden">
+    <div className="flex flex-col h-full">
       <div className="mb-8 px-2">
         <h1 className="font-headline text-lg font-bold text-primary flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-white border border-border shadow-sm flex items-center justify-center">
@@ -174,6 +172,7 @@ export function Sidebar() {
                         <Link
                           key={sub.id}
                           href={sub.href}
+                          onClick={onNavItemClick}
                           className={cn(
                             "flex items-center gap-3 px-4 py-2 rounded-lg transition-all text-sm",
                             isSubActive
@@ -196,6 +195,7 @@ export function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={onNavItemClick}
                 className={cn(
                   "group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300",
                   isActive 
@@ -211,7 +211,7 @@ export function Sidebar() {
         )}
       </nav>
 
-      <div className="pt-6 border-t border-border">
+      <div className="pt-6 border-t border-border mt-auto">
         <button 
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-300"
@@ -220,6 +220,14 @@ export function Sidebar() {
           <span className="text-sm font-medium">Logout</span>
         </button>
       </div>
+    </div>
+  );
+}
+
+export function Sidebar() {
+  return (
+    <div className="fixed left-4 top-4 bottom-4 w-72 bg-white rounded-3xl z-50 hidden lg:flex flex-col p-6 border border-border shadow-xl overflow-hidden">
+      <SidebarContent />
     </div>
   );
 }

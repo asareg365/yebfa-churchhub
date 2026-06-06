@@ -1,19 +1,21 @@
 
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Search, User, Loader2, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
+import { Bell, Search, User, Loader2, CheckCircle2, AlertCircle, Trash2, Menu } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { useUser, useCollection, useFirestore } from "@/firebase";
 import { collection, query, where, limit, orderBy, writeBatch, doc } from "firebase/firestore";
 import { useSearch } from "@/context/search-context";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { SidebarContent } from "./Sidebar";
 
 export function Header() {
   const { user } = useUser();
@@ -21,6 +23,7 @@ export function Header() {
   const router = useRouter();
   const { toast } = useToast();
   const { searchTerm, setSearchTerm } = useSearch();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
@@ -66,8 +69,19 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-white border-b border-border py-3 px-8 mb-6 rounded-2xl flex items-center justify-between shadow-sm">
+    <header className="sticky top-0 z-40 w-full bg-white border-b border-border py-3 px-4 lg:px-8 mb-6 lg:rounded-2xl flex items-center justify-between shadow-sm">
       <div className="flex items-center gap-4 flex-1 max-w-xl">
+        <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="lg:hidden rounded-xl">
+              <Menu className="w-6 h-6 text-primary" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-80 p-6 glass">
+            <SidebarContent onNavItemClick={() => setIsMobileMenuOpen(false)} />
+          </SheetContent>
+        </Sheet>
+        
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input 
@@ -79,7 +93,7 @@ export function Header() {
         </div>
       </div>
 
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-3 lg:gap-6">
         <Popover>
           <PopoverTrigger asChild>
             <button className="relative p-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground group">
@@ -148,7 +162,7 @@ export function Header() {
         </Popover>
 
         <div className="flex items-center gap-3 pl-4 border-l border-border">
-          <div className="text-right hidden sm:block">
+          <div className="text-right hidden lg:block">
             {churchLoading ? (
               <Loader2 className="w-4 h-4 animate-spin text-primary ml-auto" />
             ) : (
@@ -162,7 +176,7 @@ export function Header() {
               </>
             )}
           </div>
-          <Avatar className="h-10 w-10 border-2 border-primary/20 p-0.5">
+          <Avatar className="h-9 w-9 lg:h-10 lg:w-10 border-2 border-primary/20 p-0.5">
             <AvatarImage src={currentChurch?.logo} />
             <AvatarFallback><User className="w-5 h-5" /></AvatarFallback>
           </Avatar>
