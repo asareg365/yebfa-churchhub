@@ -2,8 +2,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { CreditCard, ArrowUpRight, DollarSign, FileText, Loader2, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CreditCard, ArrowUpRight, DollarSign, FileText, Loader2, Plus, MoreVertical, Pencil, Trash2, BarChart3, Info } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
@@ -12,7 +12,8 @@ import {
   DialogHeader, 
   DialogTitle, 
   DialogTrigger,
-  DialogFooter
+  DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -47,6 +48,8 @@ export default function FinancesPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   
   // Resolve current church context
   const churchQuery = useMemo(() => {
@@ -154,6 +157,16 @@ export default function FinancesPage() {
       });
   };
 
+  const handleGenerateReport = async () => {
+    setIsGenerating(true);
+    // Mocking report generation delay
+    setTimeout(() => {
+      setIsGenerating(false);
+      setIsReportDialogOpen(false);
+      toast({ title: "Report Ready", description: "Your financial statement has been generated." });
+    }, 2000);
+  };
+
   const totalBalance = (finances || []).reduce((acc, curr) => 
     curr.type === 'Expenditure' ? acc - curr.amount : acc + curr.amount, 0
   );
@@ -166,9 +179,57 @@ export default function FinancesPage() {
           <p className="text-muted-foreground">Manage tithes and offerings for {currentChurch?.name || "your ministry"}.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="glass border-border">
-            <FileText className="mr-2 h-4 w-4" /> Reports
-          </Button>
+          <Dialog open={isReportDialogOpen} onOpenChange={setIsReportDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="glass border-border">
+                <FileText className="mr-2 h-4 w-4" /> Reports
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="glass">
+               <DialogHeader>
+                 <DialogTitle>Financial Reporting Hub</DialogTitle>
+                 <DialogDescription>Generate statements for audit and transparency.</DialogDescription>
+               </DialogHeader>
+               <div className="py-6 space-y-4">
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                       <Label>Start Date</Label>
+                       <Input type="date" defaultValue={new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]} />
+                    </div>
+                    <div className="space-y-2">
+                       <Label>End Date</Label>
+                       <Input type="date" defaultValue={new Date().toISOString().split('T')[0]} />
+                    </div>
+                 </div>
+                 <div className="space-y-2">
+                    <Label>Statement Type</Label>
+                    <Select defaultValue="summary">
+                       <SelectTrigger className="bg-muted/20">
+                          <SelectValue />
+                       </SelectTrigger>
+                       <SelectContent>
+                          <SelectItem value="summary">Consolidated Summary</SelectItem>
+                          <SelectItem value="tithes">Tithes Detailed</SelectItem>
+                          <SelectItem value="offerings">Offerings Detailed</SelectItem>
+                          <SelectItem value="expenditure">Expenditure Log</SelectItem>
+                       </SelectContent>
+                    </Select>
+                 </div>
+                 <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 flex gap-3 items-start">
+                    <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">Generated reports will be available for download in PDF and Excel formats. Ensure all transactions are categorized correctly for accurate auditing.</p>
+                 </div>
+               </div>
+               <DialogFooter>
+                 <Button variant="outline" onClick={() => setIsReportDialogOpen(false)}>Cancel</Button>
+                 <Button onClick={handleGenerateReport} disabled={isGenerating}>
+                    {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarChart3 className="mr-2 h-4 w-4" />}
+                    Generate Statement
+                 </Button>
+               </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button className="bg-accent text-accent-foreground hover:bg-accent/80" disabled={!currentChurch}>

@@ -22,7 +22,8 @@ import {
   Wallet,
   FileText,
   Package,
-  Heart
+  Heart,
+  HandHelping
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth, useUser, useCollection, useFirestore } from "@/firebase";
@@ -34,6 +35,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 const ALL_MENU_ITEMS = [
   { id: "dashboard", icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
   { id: "members", icon: Users, label: "Members", href: "/dashboard/members" },
+  { id: "welfare", icon: HandHelping, label: "Welfare", href: "/dashboard/welfare" },
   { id: "visitors", icon: Heart, label: "Visitors", href: "/dashboard/visitors" },
   { id: "attendance", icon: UserCheck, label: "Attendance", href: "/dashboard/attendance" },
   { id: "events", icon: Calendar, label: "Events", href: "/dashboard/events" },
@@ -101,7 +103,7 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
     if (isSuperAdmin) return ALL_MENU_ITEMS;
     if (churchLoading) return [];
 
-    const baseModules = ["dashboard", "settings", "billing-group", "visitors"];
+    const baseModules = ["dashboard", "settings", "billing-group", "visitors", "welfare"];
     const enabledModules = currentChurch?.enabledModules || [];
     
     const activeModules = [...enabledModules, ...baseModules];

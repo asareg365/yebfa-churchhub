@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useRef } from "react";
@@ -16,7 +17,8 @@ import {
   ChevronDown,
   Layers,
   Camera,
-  Upload
+  Upload,
+  Info
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -204,6 +206,56 @@ export default function MembersPage() {
     }
   };
 
+  const handleBulkImport = async () => {
+    if (!bulkData.trim() || !membersRef || !db) return;
+    setIsImporting(true);
+
+    try {
+      const lines = bulkData.split('\n').filter(l => l.trim().length > 0);
+      const batch = writeBatch(db);
+      let count = 0;
+
+      for (const line of lines) {
+        const parts = line.split(/[,\t]/).map(p => p.trim());
+        if (parts.length < 2) continue; // Minimum: Name, Phone
+
+        const name = parts[0];
+        const phone = parts[1];
+        const dob = parts[2] || "";
+        const gender = (parts[3] as any) || "Male";
+        const dept = parts[4] || "Music";
+
+        const memberData = {
+          name,
+          phone,
+          dateOfBirth: dob,
+          gender,
+          department: dept,
+          status: "Active",
+          birthdayKey: calculateBirthdayKey(dob),
+          joined: new Date().toISOString().split('T')[0],
+          createdAt: serverTimestamp(),
+          societies: []
+        };
+
+        const newDocRef = doc(membersRef);
+        batch.set(newDocRef, memberData);
+        count++;
+
+        if (count >= 500) break; // Firestore batch limit
+      }
+
+      await batch.commit();
+      toast({ title: "Import Successful", description: `${count} members added to directory.` });
+      setBulkData("");
+      setIsBulkImportOpen(false);
+    } catch (error: any) {
+      toast({ title: "Import Failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const toggleSociety = (society: string, isEdit: boolean) => {
     if (isEdit) {
       const current = editingMember.societies || [];
@@ -243,9 +295,38 @@ export default function MembersPage() {
           <p className="text-muted-foreground">Managing directory for {currentChurch?.name || "your ministry"}.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
-          <Button variant="outline" className="flex-1 md:flex-none glass border-white/10" onClick={() => setIsBulkImportOpen(true)}>
-            <FileUp className="mr-2 h-4 w-4" /> Bulk Import
-          </Button>
+          <Dialog open={isBulkImportOpen} onOpenChange={setIsBulkImportOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="flex-1 md:flex-none glass border-white/10">
+                <FileUp className="mr-2 h-4 w-4" /> Bulk Import
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="glass max-w-xl">
+              <DialogHeader>
+                <DialogTitle>Bulk Directory Import</DialogTitle>
+                <DialogDescription>Paste comma or tab-separated data below. Format: Name, Phone, DOB(YYYY-MM-DD), Gender, Dept</DialogDescription>
+              </DialogHeader>
+              <div className="py-4 space-y-4">
+                <Textarea 
+                  placeholder="John Doe, 0240000000, 1990-05-15, Male, Music" 
+                  className="min-h-[250px] font-mono text-xs bg-muted/20"
+                  value={bulkData}
+                  onChange={e => setBulkData(e.target.value)}
+                />
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-primary/5 border border-primary/20 text-[10px] text-muted-foreground">
+                   <Info className="w-3 h-3 text-primary" />
+                   Max 500 records per batch. Use CSV or copy/paste from Excel.
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsBulkImportOpen(false)}>Cancel</Button>
+                <Button onClick={handleBulkImport} disabled={isImporting || !bulkData.trim()}>
+                  {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Process Import"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild><Button className="flex-1 md:flex-none bg-primary" disabled={!currentChurch}><Plus className="mr-2 h-4 w-4" /> Add Member</Button></DialogTrigger>
             <DialogContent className="glass max-w-2xl">
@@ -325,7 +406,7 @@ export default function MembersPage() {
             <TabsTrigger value="all" className="rounded-xl px-6">All Members</TabsTrigger>
             <TabsTrigger value="active" className="rounded-xl px-6">Active</TabsTrigger>
           </TabsList>
-          <div className="relative w-full md:max-w-sm">
+          <div className="relative w-full md:max-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Search directory..." className="pl-10 rounded-xl" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>

@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Member": {
@@ -33,6 +34,9 @@
   "firestore": {
     "/churches/{churchId}": {
       "description": "Tenant organization settings and configuration. Now includes integrated SMS credit wallet."
+    },
+    "/churches/{churchId}/welfare/{memberId}": {
+      "description": "Dedicated subcollection for welfare support tracking."
     },
     "/smsLedger/{ledgerId}": {
       "schema": "SMSLedger",
