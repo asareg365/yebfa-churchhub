@@ -78,7 +78,6 @@ export default function WelfarePage() {
   const [memberToDelete, setMemberToDelete] = useState<any>(null);
   const [editingMember, setEditingMember] = useState<any>(null);
 
-  const addFileInputRef = useRef<HTMLInputElement>(null);
   const addCaptureInputRef = useRef<HTMLInputElement>(null);
 
   const db = useFirestore();
@@ -152,24 +151,36 @@ export default function WelfarePage() {
     setIsImporting(true);
 
     try {
-      const lines = bulkData.split('\n').filter(l => l.trim().length > 0);
+      const lines = bulkData.split(/\r?\n/).filter(l => l.trim().length > 0);
       const batch = writeBatch(db);
       let count = 0;
+      let skipped = 0;
 
-      for (const line of lines) {
-        const parts = line.split(/[,\t]/).map(p => p.trim());
-        if (parts.length < 2) continue;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        // Tab (Excel) or Comma (CSV) support
+        const parts = line.split(/\t|,/).map(p => p.trim().replace(/^["'](.+)["']$/, '$1'));
+        
+        if (parts.length < 2) {
+          skipped++;
+          continue;
+        }
 
-        const name = parts[0];
-        const phone = parts[1];
-        const status = parts[2] === "Inactive" ? "Inactive" : "Active";
-        const needs = parts[3] || "";
+        const [name, phone, status, needs] = parts;
+
+        // Skip header
+        if (i === 0 && name.toLowerCase().includes("name")) continue;
+
+        if (!name) {
+          skipped++;
+          continue;
+        }
 
         batch.set(doc(welfareRef), {
           name,
-          phone,
-          status,
-          needs,
+          phone: phone || "",
+          status: (status?.toLowerCase() === "inactive" ? "Inactive" : "Active"),
+          needs: needs || "",
           createdAt: serverTimestamp()
         });
         count++;
@@ -200,23 +211,23 @@ export default function WelfarePage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight mb-1">Welfare Directory</h2>
-          <p className="text-muted-foreground">Managing community support for {currentChurch?.name}.</p>
+          <p className="text-muted-foreground">Community support for {currentChurch?.name}.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
           <Dialog open={isBulkImportOpen} onOpenChange={setIsBulkImportOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="flex-1 md:flex-none glass border-white/10">
-                <FileUp className="mr-2 h-4 w-4" /> Bulk Upload
+                <FileUp className="mr-2 h-4 w-4" /> Bulk Excel Import
               </Button>
             </DialogTrigger>
             <DialogContent className="glass max-w-xl">
               <DialogHeader>
-                <DialogTitle>Bulk Welfare Import</DialogTitle>
-                <DialogDescription>Format: Name, Phone, Status (Active/Inactive), Needs</DialogDescription>
+                <DialogTitle>Spreadsheet Bulk Import</DialogTitle>
+                <DialogDescription>Paste rows from Excel. Columns: Name, Phone, Status (Active/Inactive), Needs</DialogDescription>
               </DialogHeader>
               <div className="py-4 space-y-4">
                 <Textarea 
-                  placeholder="John Mensah, 0240000000, Active, Financial Assistance" 
+                  placeholder="John Mensah	0240000000	Active	Financial Aid" 
                   className="min-h-[250px] font-mono text-xs bg-muted/20"
                   value={bulkData}
                   onChange={e => setBulkData(e.target.value)}
@@ -225,7 +236,7 @@ export default function WelfarePage() {
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsBulkImportOpen(false)}>Cancel</Button>
                 <Button onClick={handleBulkImport} disabled={isImporting || !bulkData.trim()}>
-                  {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Start Upload"}
+                  {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Process Excel Data"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -322,57 +333,11 @@ export default function WelfarePage() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {filteredMembers.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-20 text-muted-foreground italic">
-                       No welfare records found.
-                    </TableCell>
-                  </TableRow>
-                )}
               </TableBody>
             </Table>
           )}
         </div>
       </Tabs>
-
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="glass">
-          <DialogHeader><DialogTitle>Edit Welfare Record</DialogTitle></DialogHeader>
-          {editingMember && (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2"><Label>Full Name</Label><Input value={editingMember.name} onChange={e => setEditingMember({...editingMember, name: e.target.value})} /></div>
-              <div className="space-y-2"><Label>Phone</Label><Input value={editingMember.phone} onChange={e => setEditingMember({...editingMember, phone: e.target.value})} /></div>
-              <div className="space-y-2"><Label>Status</Label><Select value={editingMember.status} onValueChange={(v: any) => setEditingMember({...editingMember, status: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Active">Active</SelectItem><SelectItem value="Inactive">Inactive</SelectItem></SelectContent></Select></div>
-              <div className="space-y-2"><Label>Needs / Description</Label><Textarea value={editingMember.needs} onChange={e => setEditingMember({...editingMember, needs: e.target.value})} /></div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleUpdateMember}>Save Changes</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation */}
-      <AlertDialog open={!!memberToDelete} onOpenChange={(o) => !o && setMemberToDelete(null)}>
-        <AlertDialogContent className="glass">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>This will remove <strong>{memberToDelete?.name}</strong> from the welfare directory.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive" onClick={async () => {
-               if (welfareRef && memberToDelete) {
-                  await deleteDoc(doc(welfareRef, memberToDelete.id));
-                  setMemberToDelete(null);
-                  toast({ title: "Record deleted" });
-               }
-            }}>Delete Record</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
