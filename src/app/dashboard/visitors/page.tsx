@@ -13,7 +13,8 @@ import {
   Clock,
   Heart,
   MoreVertical,
-  Pencil
+  Pencil,
+  Send
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ import { collection, addDoc, serverTimestamp, query, orderBy, limit, where, dele
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { sendAndLogSMS } from "@/services/sms-service";
 
 export default function VisitorsPage() {
   const db = useFirestore();
@@ -51,7 +53,11 @@ export default function VisitorsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isSmsOpen, setIsSmsOpen] = useState(false);
   const [editingVisitor, setEditingVisitor] = useState<any>(null);
+  const [selectedVisitorForSms, setSelectedVisitorForSms] = useState<any>(null);
+  const [manualMessage, setManualMessage] = useState("");
+  const [isSendingSms, setIsSendingSms] = useState(false);
 
   const churchQuery = useMemo(() => {
     if (!user?.email) return null;
@@ -106,6 +112,51 @@ export default function VisitorsPage() {
       toast({ title: "Visitor updated" });
     } catch (e: any) {
       toast({ title: "Failed to update", variant: "destructive" });
+    }
+  };
+
+  const handleOpenSmsDialog = (visitor: any) => {
+    setSelectedVisitorForSms(visitor);
+    const churchDisplayName = currentChurch?.sms?.displayName || currentChurch?.name || "Our Church";
+    const template = currentChurch?.smsTemplates?.visitorFollowup || "Hi {{name}}, thank you for worshipping with us at {{churchName}}! We were blessed to have you and hope to see you again soon.";
+    
+    const personalized = template
+      .replace(/{{name}}/g, visitor.name)
+      .replace(/{{churchName}}/g, churchDisplayName);
+
+    setManualMessage(personalized);
+    setIsSmsOpen(true);
+  };
+
+  const handleSendManualSms = async () => {
+    if (!selectedVisitorForSms || !currentChurch?.id || !db || !manualMessage) return;
+    setIsSendingSms(true);
+    try {
+      const outcome = await sendAndLogSMS(db, currentChurch.id, {
+        phone: selectedVisitorForSms.phone,
+        message: manualMessage,
+        type: 'followup',
+        memberName: selectedVisitorForSms.name
+      });
+
+      if (outcome.success) {
+        // Mark as sent in visitor record
+        if (visitorsRef) {
+          await updateDoc(doc(visitorsRef, selectedVisitorForSms.id), {
+            followupSent: true,
+            manualFollowupSentAt: serverTimestamp()
+          });
+        }
+        toast({ title: "Welcome SMS Sent", description: `Message delivered to ${selectedVisitorForSms.name}.` });
+        setIsSmsOpen(false);
+        setSelectedVisitorForSms(null);
+      } else {
+        toast({ title: "Send Failed", description: outcome.error, variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSendingSms(false);
     }
   };
 
@@ -223,6 +274,10 @@ export default function VisitorsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="glass">
+                        <DropdownMenuItem onClick={() => handleOpenSmsDialog(v)} className="text-primary font-bold">
+                          <MessageSquare className="mr-2 h-4 w-4" /> Send Welcome SMS
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator className="border-white/5" />
                         <DropdownMenuItem onClick={() => {
                           setEditingVisitor(v);
                           setIsEditOpen(true);
@@ -281,6 +336,41 @@ export default function VisitorsPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
             <Button onClick={handleUpdateVisitor}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual SMS Dialog */}
+      <Dialog open={isSmsOpen} onOpenChange={setIsSmsOpen}>
+        <DialogContent className="glass">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-primary" />
+              Send Welcome SMS
+            </DialogTitle>
+            <DialogDescription>
+              Sending to <strong>{selectedVisitorForSms?.name}</strong> ({selectedVisitorForSms?.phone}).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-muted-foreground uppercase">Message Content</Label>
+              <Textarea 
+                value={manualMessage} 
+                onChange={(e) => setManualMessage(e.target.value)} 
+                className="min-h-[120px] bg-muted/30 rounded-xl resize-none"
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground italic">
+              Estimated Cost: 1 Credit
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsSmsOpen(false)}>Cancel</Button>
+            <Button onClick={handleSendManualSms} disabled={isSendingSms || !manualMessage} className="bg-primary px-8">
+              {isSendingSms ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+              Send Message
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
