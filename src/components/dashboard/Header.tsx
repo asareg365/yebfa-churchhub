@@ -10,7 +10,7 @@ import { useUser, useCollection, useFirestore } from "@/firebase";
 import { collection, query, where, limit, orderBy, writeBatch, doc } from "firebase/firestore";
 import { useSearch } from "@/context/search-context";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,7 @@ export function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
+    if (!user?.email || !db) return null;
     const normalizedEmail = user.email.toLowerCase().trim();
     return query(
       collection(db, "churches"),
@@ -39,7 +39,7 @@ export function Header() {
   const currentChurch = churches?.[0];
 
   const notificationsQuery = useMemo(() => {
-    if (!currentChurch?.id) return null;
+    if (!currentChurch?.id || !db) return null;
     return query(
       collection(db, "churches", currentChurch.id, "smsLogs"),
       orderBy("createdAt", "desc"),
@@ -78,6 +78,9 @@ export function Header() {
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="w-80 p-6 glass">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Navigation Menu</SheetTitle>
+            </SheetHeader>
             <SidebarContent onNavItemClick={() => setIsMobileMenuOpen(false)} />
           </SheetContent>
         </Sheet>
