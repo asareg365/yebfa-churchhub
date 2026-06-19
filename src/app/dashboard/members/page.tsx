@@ -177,13 +177,13 @@ export default function MembersPage() {
       const docRef = doc(membersRef, editingMember.id);
       await updateDoc(docRef, {
         name: editingMember.name,
-        phone: editingMember.phone,
+        phone: editingMember.phone || "",
         gender: editingMember.gender,
         department: editingMember.department,
         status: editingMember.status,
-        dateOfBirth: editingMember.dateOfBirth,
+        dateOfBirth: editingMember.dateOfBirth || "",
         photo: editingMember.photo || "",
-        birthdayKey: calculateBirthdayKey(editingMember.dateOfBirth),
+        birthdayKey: calculateBirthdayKey(editingMember.dateOfBirth || ""),
         societies: editingMember.societies || [],
         updatedAt: serverTimestamp()
       });
@@ -218,7 +218,6 @@ export default function MembersPage() {
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        // Supports CSV (comma) and Excel/Google Sheets (tab)
         const parts = line.split(/\t|,/).map(p => p.trim().replace(/^["'](.+)["']$/, '$1'));
         
         if (parts.length < 2) {
@@ -228,7 +227,6 @@ export default function MembersPage() {
 
         const [name, phone, dob, gender, dept] = parts;
 
-        // Skip header if detected
         if (i === 0 && name.toLowerCase().includes("name")) continue;
 
         if (!name) {
@@ -283,13 +281,6 @@ export default function MembersPage() {
     }
   };
 
-  const addCustomSociety = (isEdit: boolean) => {
-    const val = customSocietyInput.trim();
-    if (!val) return;
-    toggleSociety(val, isEdit);
-    setCustomSocietyInput("");
-  };
-
   const filteredMembers = useMemo(() => {
     return (Array.isArray(members) ? members : []).filter(m => {
       const matchesSearch = (m.name?.toLowerCase().includes(searchTerm.toLowerCase()) || m.department?.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -324,10 +315,6 @@ export default function MembersPage() {
                   value={bulkData}
                   onChange={e => setBulkData(e.target.value)}
                 />
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-primary/5 border border-primary/20 text-[10px] text-muted-foreground">
-                   <Info className="w-3 h-3 text-primary" />
-                   Detection active: We'll skip the header row if you copy it.
-                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsBulkImportOpen(false)}>Cancel</Button>
@@ -351,22 +338,8 @@ export default function MembersPage() {
                   <div className="flex-1 space-y-3">
                     <Label className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground"><Camera className="w-3 h-3" /> Member Photo</Label>
                     <div className="flex gap-2">
-                       <Button 
-                         type="button" 
-                         variant="outline" 
-                         className="flex-1 h-10 gap-2 rounded-xl"
-                         onClick={() => addCaptureInputRef.current?.click()}
-                       >
-                         <Camera className="w-4 h-4 text-primary" /> Camera
-                       </Button>
-                       <Button 
-                         type="button" 
-                         variant="outline" 
-                         className="flex-1 h-10 gap-2 rounded-xl"
-                         onClick={() => addFileInputRef.current?.click()}
-                       >
-                         <Upload className="w-4 h-4 text-accent" /> Gallery
-                       </Button>
+                       <Button type="button" variant="outline" className="flex-1 h-10 gap-2 rounded-xl" onClick={() => addCaptureInputRef.current?.click()}><Camera className="w-4 h-4 text-primary" /> Camera</Button>
+                       <Button type="button" variant="outline" className="flex-1 h-10 gap-2 rounded-xl" onClick={() => addFileInputRef.current?.click()}><Upload className="w-4 h-4 text-accent" /> Gallery</Button>
                     </div>
                     <input type="file" ref={addCaptureInputRef} accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileChange(e, false)} />
                     <input type="file" ref={addFileInputRef} accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, false)} />
@@ -446,19 +419,47 @@ export default function MembersPage() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {filteredMembers.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
-                       <UsersIcon className="w-12 h-12 mx-auto mb-4 opacity-10" />
-                       No members found matching your criteria.
-                    </TableCell>
-                  </TableRow>
-                )}
               </TableBody>
             </Table>
           )}
         </div>
       </Tabs>
+
+      {/* Edit Member Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="glass max-w-2xl">
+          <DialogHeader><DialogTitle>Edit Member Profile</DialogTitle><DialogDescription>Update details for {editingMember?.name}.</DialogDescription></DialogHeader>
+          {editingMember && (
+            <div className="space-y-6 py-4">
+              <div className="flex items-center gap-6">
+                <Avatar className="h-24 w-24 border-2 border-primary/20 shadow-xl">
+                  <AvatarImage src={editingMember.photo} />
+                  <AvatarFallback className="bg-primary/10 text-primary font-bold text-3xl">{getInitials(editingMember.name)}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 space-y-3">
+                  <Label className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground"><Camera className="w-3 h-3" /> Member Photo</Label>
+                  <div className="flex gap-2">
+                     <Button type="button" variant="outline" className="flex-1 h-10 gap-2 rounded-xl" onClick={() => editCaptureInputRef.current?.click()}><Camera className="w-4 h-4 text-primary" /> Camera</Button>
+                     <Button type="button" variant="outline" className="flex-1 h-10 gap-2 rounded-xl" onClick={() => editFileInputRef.current?.click()}><Upload className="w-4 h-4 text-accent" /> Gallery</Button>
+                  </div>
+                  <input type="file" ref={editCaptureInputRef} accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileChange(e, true)} />
+                  <input type="file" ref={editFileInputRef} accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, true)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Full Name</Label><Input value={editingMember.name} onChange={(e) => setEditingMember({...editingMember, name: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Status</Label><Select value={editingMember.status} onValueChange={(v: any) => setEditingMember({...editingMember, status: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Active">Active</SelectItem><SelectItem value="Inactive">Inactive</SelectItem><SelectItem value="Probation">Probation</SelectItem></SelectContent></Select></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Phone</Label><Input value={editingMember.phone} onChange={(e) => setEditingMember({...editingMember, phone: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Date of Birth</Label><Input type="date" value={editingMember.dateOfBirth} onChange={(e) => setEditingMember({...editingMember, dateOfBirth: e.target.value})} /></div>
+              </div>
+              <div className="space-y-2"><Label>Department</Label><Select value={editingMember.department} onValueChange={(v: any) => setEditingMember({...editingMember, department: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent></Select></div>
+            </div>
+          )}
+          <DialogFooter><Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button><Button onClick={handleUpdateMember}>Save Changes</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!memberToDelete} onOpenChange={(o) => !o && setMemberToDelete(null)}>
         <AlertDialogContent className="glass">

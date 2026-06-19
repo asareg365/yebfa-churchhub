@@ -18,7 +18,9 @@ import {
   Info,
   CheckCircle2,
   Clock,
-  Ban
+  Ban,
+  Wallet,
+  Heart
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,6 +81,7 @@ export default function WelfarePage() {
   const [editingMember, setEditingMember] = useState<any>(null);
 
   const addCaptureInputRef = useRef<HTMLInputElement>(null);
+  const editCaptureInputRef = useRef<HTMLInputElement>(null);
 
   const db = useFirestore();
   const { user } = useUser();
@@ -99,15 +102,22 @@ export default function WelfarePage() {
     status: "Active" as const,
     phone: "",
     needs: "",
-    photo: ""
+    photo: "",
+    contributions: 0,
+    benefits: 0
   });
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setNewMember({ ...newMember, photo: reader.result as string });
+        const base64String = reader.result as string;
+        if (isEdit) {
+          setEditingMember({ ...editingMember, photo: base64String });
+        } else {
+          setNewMember({ ...newMember, photo: base64String });
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -124,7 +134,7 @@ export default function WelfarePage() {
         createdAt: serverTimestamp()
       });
       setIsAddDialogOpen(false);
-      setNewMember({ name: "", status: "Active", phone: "", needs: "", photo: "" });
+      setNewMember({ name: "", status: "Active", phone: "", needs: "", photo: "", contributions: 0, benefits: 0 });
       toast({ title: "Welfare record saved" });
     } catch (e) {
       toast({ title: "Save failed", variant: "destructive" });
@@ -158,7 +168,6 @@ export default function WelfarePage() {
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        // Tab (Excel) or Comma (CSV) support
         const parts = line.split(/\t|,/).map(p => p.trim().replace(/^["'](.+)["']$/, '$1'));
         
         if (parts.length < 2) {
@@ -168,7 +177,6 @@ export default function WelfarePage() {
 
         const [name, phone, status, needs] = parts;
 
-        // Skip header
         if (i === 0 && name.toLowerCase().includes("name")) continue;
 
         if (!name) {
@@ -181,6 +189,8 @@ export default function WelfarePage() {
           phone: phone || "",
           status: (status?.toLowerCase() === "inactive" ? "Inactive" : "Active"),
           needs: needs || "",
+          contributions: 0,
+          benefits: 0,
           createdAt: serverTimestamp()
         });
         count++;
@@ -211,7 +221,7 @@ export default function WelfarePage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight mb-1">Welfare Directory</h2>
-          <p className="text-muted-foreground">Community support for {currentChurch?.name}.</p>
+          <p className="text-muted-foreground">Community support and member contributions for {currentChurch?.name}.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
           <Dialog open={isBulkImportOpen} onOpenChange={setIsBulkImportOpen}>
@@ -248,21 +258,27 @@ export default function WelfarePage() {
                 <HandHelping className="mr-2 h-4 w-4" /> Add Record
               </Button>
             </DialogTrigger>
-            <DialogContent className="glass">
+            <DialogContent className="glass max-w-2xl">
               <DialogHeader><DialogTitle>New Welfare Member</DialogTitle></DialogHeader>
               <div className="space-y-4 py-4">
                  <div className="flex items-center gap-4">
-                   <Avatar className="h-16 w-16 border-border">
+                   <Avatar className="h-20 w-20 border-border shadow-md">
                      <AvatarImage src={newMember.photo} />
                      <AvatarFallback>{getInitials(newMember.name)}</AvatarFallback>
                    </Avatar>
                    <div className="flex-1 flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => addCaptureInputRef.current?.click()}><Camera className="w-3 h-3 mr-1" /> Photo</Button>
-                      <input type="file" ref={addCaptureInputRef} capture="environment" accept="image/*" className="hidden" onChange={handleFileChange} />
+                      <Button variant="outline" size="sm" onClick={() => addCaptureInputRef.current?.click()} className="flex-1"><Camera className="w-3 h-3 mr-1" /> Photo</Button>
+                      <input type="file" ref={addCaptureInputRef} capture="environment" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, false)} />
                    </div>
                  </div>
-                 <div className="space-y-2"><Label>Full Name</Label><Input value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} /></div>
-                 <div className="space-y-2"><Label>Phone</Label><Input value={newMember.phone} onChange={e => setNewMember({...newMember, phone: e.target.value})} /></div>
+                 <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-2"><Label>Full Name</Label><Input value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} /></div>
+                   <div className="space-y-2"><Label>Phone</Label><Input value={newMember.phone} onChange={e => setNewMember({...newMember, phone: e.target.value})} /></div>
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-2"><Label>Initial Contributions (GH₵)</Label><Input type="number" value={newMember.contributions} onChange={e => setNewMember({...newMember, contributions: Number(e.target.value)})} /></div>
+                   <div className="space-y-2"><Label>Benefits Received (GH₵)</Label><Input type="number" value={newMember.benefits} onChange={e => setNewMember({...newMember, benefits: Number(e.target.value)})} /></div>
+                 </div>
                  <div className="space-y-2"><Label>Status</Label><Select value={newMember.status} onValueChange={(v: any) => setNewMember({...newMember, status: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Active">Active</SelectItem><SelectItem value="Inactive">Inactive</SelectItem></SelectContent></Select></div>
                  <div className="space-y-2"><Label>Needs / Description</Label><Textarea value={newMember.needs} onChange={e => setNewMember({...newMember, needs: e.target.value})} /></div>
               </div>
@@ -297,8 +313,7 @@ export default function WelfarePage() {
                 <TableRow>
                   <TableHead className="w-[80px]"></TableHead>
                   <TableHead>Member</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Needs</TableHead>
+                  <TableHead>Financial Stand</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -312,9 +327,24 @@ export default function WelfarePage() {
                         <AvatarFallback>{getInitials(member.name)}</AvatarFallback>
                       </Avatar>
                     </TableCell>
-                    <TableCell><div className="font-semibold">{member.name}</div></TableCell>
-                    <TableCell><code className="text-xs">{member.phone}</code></TableCell>
-                    <TableCell><div className="max-w-[200px] truncate text-xs text-muted-foreground">{member.needs || 'No notes'}</div></TableCell>
+                    <TableCell>
+                      <div className="font-semibold">{member.name}</div>
+                      <div className="text-[10px] text-muted-foreground">{member.phone}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2 text-xs">
+                          <Wallet className="w-3 h-3 text-accent" />
+                          <span className="font-bold text-accent">GH₵{(member.contributions || 0).toLocaleString()}</span>
+                          <span className="text-muted-foreground text-[10px] uppercase">Contrib.</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <Heart className="w-3 h-3 text-primary" />
+                          <span className="font-bold text-primary">GH₵{(member.benefits || 0).toLocaleString()}</span>
+                          <span className="text-muted-foreground text-[10px] uppercase">Benefits</span>
+                        </div>
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={cn("text-[10px] uppercase", member.status === 'Active' ? 'text-accent border-accent/20' : 'text-muted-foreground')}>
                         {member.status === 'Active' ? <CheckCircle2 className="w-3 h-3 mr-1" /> : <Ban className="w-3 h-3 mr-1" />}
@@ -338,6 +368,51 @@ export default function WelfarePage() {
           )}
         </div>
       </Tabs>
+
+      {/* Edit Welfare Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="glass max-w-2xl">
+          <DialogHeader><DialogTitle>Edit Welfare Record</DialogTitle><DialogDescription>Update info and financial standings for {editingMember?.name}.</DialogDescription></DialogHeader>
+          {editingMember && (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center gap-4">
+                <Avatar className="h-20 w-20 border-border shadow-md">
+                  <AvatarImage src={editingMember.photo} />
+                  <AvatarFallback>{getInitials(editingMember.name)}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 flex gap-2">
+                   <Button variant="outline" size="sm" onClick={() => editCaptureInputRef.current?.click()} className="flex-1"><Camera className="w-3 h-3 mr-1" /> Update Photo</Button>
+                   <input type="file" ref={editCaptureInputRef} capture="environment" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, true)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Full Name</Label><Input value={editingMember.name} onChange={e => setEditingMember({...editingMember, name: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Phone</Label><Input value={editingMember.phone} onChange={e => setEditingMember({...editingMember, phone: e.target.value})} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-accent flex items-center gap-1"><Wallet className="w-3 h-3"/> Total Contributions (GH₵)</Label>
+                  <Input type="number" value={editingMember.contributions} onChange={e => setEditingMember({...editingMember, contributions: Number(e.target.value)})} className="border-accent/20" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-primary flex items-center gap-1"><Heart className="w-3 h-3"/> Total Benefits (GH₵)</Label>
+                  <Input type="number" value={editingMember.benefits} onChange={e => setEditingMember({...editingMember, benefits: Number(e.target.value)})} className="border-primary/20" />
+                </div>
+              </div>
+              <div className="space-y-2"><Label>Status</Label><Select value={editingMember.status} onValueChange={(v: any) => setEditingMember({...editingMember, status: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Active">Active</SelectItem><SelectItem value="Inactive">Inactive</SelectItem></SelectContent></Select></div>
+              <div className="space-y-2"><Label>Needs / Notes</Label><Textarea value={editingMember.needs} onChange={e => setEditingMember({...editingMember, needs: e.target.value})} /></div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleUpdateMember}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!memberToDelete} onOpenChange={(o) => !o && setMemberToDelete(null)}>
+        <AlertDialogContent className="glass"><AlertDialogHeader><AlertDialogTitle>Delete Record?</AlertDialogTitle><AlertDialogDescription>Permanently remove welfare record for {memberToDelete?.name}.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction className="bg-destructive" onClick={async () => { if (welfareRef && memberToDelete) { await deleteDoc(doc(welfareRef, memberToDelete.id)); setMemberToDelete(null); toast({ title: "Deleted" }); } }}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
