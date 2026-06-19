@@ -7,7 +7,7 @@
 ### 🏢 Multi-Tenant Architecture
 - **Isolated Environments**: Every ministry operates within its own secure tenant (slug-based), ensuring 100% data privacy and isolation.
 - **Role-Based Access**: Specialized portals for Church Administrators and System Super-Admins.
-- **Team Management**: Authorize multiple staff members to manage a single ministry dashboard.
+- **Team Management**: Authorize multiple staff members to manage a single ministry dashboard via the "Team" settings.
 
 ### 👥 Congregation Management
 - **Unified Directory**: Manage members, welfare recipients, and first-time visitors in a single interface.
@@ -20,8 +20,8 @@
 - **Background Schedulers**: 
     - Automated Birthday greetings (6:00 AM daily).
     - Event reminders (24 hours before).
-    - Visitor follow-up sequences.
-    - Intelligent SMS retry logic.
+    - Visitor follow-up sequences (24 hours post-visit).
+    - Intelligent SMS retry logic for failed dispatches.
 
 ### 💰 Financial & Resource Management
 - **Audit Trails**: Real-time logging of tithes, offerings, and expenditures.
