@@ -32,7 +32,8 @@ service cloud.firestore {
       allow get, list: if true;
       
       // Writing restricted to authorized admins or super admins
-      allow update, delete: if isAuthenticated() && (request.auth.token.email.lower() in resource.data.adminEmails || isSuperAdmin());
+      allow update: if isAuthenticated() && (request.auth.token.email.lower() in resource.data.adminEmails || isSuperAdmin());
+      allow delete: if isSuperAdmin();
       
       // Allow creation for new ministry onboarding
       allow create: if isAuthenticated();

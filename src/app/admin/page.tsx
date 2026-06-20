@@ -20,7 +20,8 @@ import {
   RefreshCcw,
   CreditCard,
   Database,
-  Trash2
+  Trash2,
+  Clock
 } from 'lucide-react';
 import {
   Card,
@@ -164,21 +165,6 @@ export default function SystemAdminPortal() {
     }
   };
 
-  const handleInitializeWallets = async () => {
-    if (!functions) return;
-    setIsProcessing(true);
-    const initFn = httpsCallable(functions, 'initializeWallets');
-    try {
-      const res: any = await initFn();
-      toast({ title: "System Validated", description: res.data.message || "Integrity sync complete." });
-      await loadStats();
-    } catch (e: any) {
-      toast({ title: "Validation Failed", description: e.message, variant: "destructive" });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   const handleSaveOrg = async () => {
     if (!editingOrg || !functions) return;
     setIsProcessing(true);
@@ -200,21 +186,6 @@ export default function SystemAdminPortal() {
     }
   };
 
-  const handleResetBalance = async (churchId: string) => {
-    if (!functions) return;
-    setIsProcessing(true);
-    const resetFn = httpsCallable(functions, 'adminResetWallet');
-    try {
-      await resetFn({ churchId });
-      toast({ title: "Wallet Reset", description: "Balance has been cleared to 0." });
-      await loadStats();
-    } catch (e: any) {
-      toast({ title: "Reset Failed", description: e.message, variant: "destructive" });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   const handleDeleteMinistry = async () => {
     if (!ministryToDelete || !functions) return;
     setIsProcessing(true);
@@ -224,24 +195,24 @@ export default function SystemAdminPortal() {
         await auth.currentUser.getIdToken(true);
       }
       
-      const deleteFn = httpsCallable(functions, 'deleteMinistry', { timeout: 540000 });
+      const deleteFn = httpsCallable(functions, 'deleteMinistry');
       const res: any = await deleteFn({ churchId: ministryToDelete.id });
       
       if (res.data?.success) {
-        toast({ title: "Ministry Deleted", description: "All organization records have been permanently scrubbed." });
+        toast({ 
+          title: "Deletion Queued", 
+          description: "Organization marked for purge. Background deep-scrub initiated." 
+        });
         setMinistryToDelete(null);
-        await loadStats();
+        // Refresh directory to show PENDING state
+        setTimeout(loadStats, 2000);
       } else {
         throw new Error(res.data?.message || "Delete engine failed.");
       }
     } catch (e: any) {
       console.error("Delete Error:", e);
-      const errorMsg = e?.message || e?.details?.message || "Internal server failure during deletion.";
-      toast({ 
-        title: "Deletion Failed", 
-        description: errorMsg, 
-        variant: "destructive" 
-      });
+      const errorMsg = e?.message || "Internal server failure during deletion.";
+      toast({ title: "Deletion Failed", description: errorMsg, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
@@ -290,15 +261,6 @@ export default function SystemAdminPortal() {
           <p className="text-muted-foreground text-lg">Global multi-tenant infrastructure management.</p>
         </div>
         <div className="flex gap-4">
-          <Button 
-            variant="outline" 
-            onClick={handleInitializeWallets} 
-            disabled={isProcessing}
-            className="rounded-xl border-accent/20 text-accent font-bold hover:bg-accent/5"
-          >
-            {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
-            Integrity Sync
-          </Button>
           <Button variant="outline" size="icon" onClick={loadStats} className={cn("rounded-xl transition-all", isRefreshing && "animate-spin")} disabled={isRefreshing}><RefreshCcw className="h-4 w-4" /></Button>
           <Button variant="outline" onClick={() => signOut(auth)} className="rounded-xl"><LogOut className="mr-2 h-4 w-4" /> Logout</Button>
         </div>
@@ -332,16 +294,24 @@ export default function SystemAdminPortal() {
                 {isRefreshing && !platformStats ? (
                   <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" /></TableCell></TableRow>
                 ) : filteredChurches.map((church: any) => (
-                  <TableRow key={church.id}>
+                  <TableRow key={church.id} className={cn(church.deletionStatus === 'PENDING' && "opacity-40 grayscale pointer-events-none")}>
                     <TableCell><div className="font-bold text-foreground">{church.name}</div><code className="text-[10px] text-primary">{church.slug}</code></TableCell>
                     <TableCell><Badge variant="outline" className="text-foreground font-bold">{church.plan || 'Starter'}</Badge></TableCell>
-                    <TableCell><Badge className={cn("uppercase text-[9px] font-bold px-2 py-0.5", church.sms?.subscriptionStatus === 'active' ? "bg-accent text-white" : church.sms?.subscriptionStatus === 'suspended' ? "bg-destructive text-white" : "bg-amber-100 text-amber-700")}>{church.sms?.subscriptionStatus || 'Pending'}</Badge></TableCell>
                     <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <CreditCard className="h-3 w-3 text-muted-foreground" />
-                          <span className="font-mono font-bold text-foreground">{(church.sms?.credits || 0).toLocaleString()}</span>
-                        </div>
+                      {church.deletionStatus === 'PENDING' ? (
+                        <Badge className="bg-destructive text-white uppercase text-[9px] font-bold px-2 py-0.5 animate-pulse">
+                          <Clock className="w-2 h-2 mr-1" /> Deleting...
+                        </Badge>
+                      ) : (
+                        <Badge className={cn("uppercase text-[9px] font-bold px-2 py-0.5", church.sms?.subscriptionStatus === 'active' ? "bg-accent text-white" : church.sms?.subscriptionStatus === 'suspended' ? "bg-destructive text-white" : "bg-amber-100 text-amber-700")}>
+                          {church.sms?.subscriptionStatus || 'Pending'}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="h-3 w-3 text-muted-foreground" />
+                        <span className="font-mono font-bold text-foreground">{(church.sms?.credits || 0).toLocaleString()}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
@@ -351,7 +321,6 @@ export default function SystemAdminPortal() {
                           <DropdownMenuItem onClick={() => setEditingOrg(church)} className="font-bold"><Pencil className="mr-2 h-4 w-4" /> Edit Details</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setManagingSmsId(church.id)} className="font-bold text-primary"><Zap className="mr-2 h-4 w-4" /> Top-up Wallet</DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleResetBalance(church.id)} className="text-amber-600 font-bold"><RefreshCcw className="mr-2 h-4 w-4" /> Reset Balance</DropdownMenuItem>
                           {church.sms?.subscriptionStatus !== 'active' ? (
                             <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'active')}><CheckCircle className="mr-2 h-4 w-4 text-accent" /> Activate Org</DropdownMenuItem>
                           ) : (
@@ -413,7 +382,6 @@ export default function SystemAdminPortal() {
             <div className="space-y-2">
               <Label>SMS Credits to Add</Label>
               <div className="flex gap-2"><Input type="number" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="h-12 bg-white" /><Button className="bg-primary h-12 px-6" onClick={handleTopUp} disabled={isProcessing}>{isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}</Button></div>
-              <p className="text-[10px] text-muted-foreground italic">Use the "Reset Balance" feature in the directory if you need to clear the wallet first.</p>
             </div>
           </div>
         </DialogContent>
@@ -429,12 +397,11 @@ export default function SystemAdminPortal() {
               <div className="space-y-4 mt-2 text-foreground/80">
                 <p>You are about to permanently delete <strong>{ministryToDelete?.name}</strong>.</p>
                 <ul className="list-disc pl-6 text-sm space-y-1">
-                  <li>All member records and photos will be erased.</li>
-                  <li>Financial audit logs will be permanently wiped.</li>
-                  <li>Attendance history and analytics will be destroyed.</li>
-                  <li>SMS credit balance and logs will be deleted.</li>
+                  <li>Member records and photos will be erased.</li>
+                  <li>Financial ledgers will be permanently wiped.</li>
+                  <li>SMS logs and templates will be destroyed.</li>
                 </ul>
-                <p className="font-bold text-destructive">This action is irreversible and uses a recursive engine to purge all ministry data.</p>
+                <p className="font-bold text-destructive">This action is irreversible and uses a multi-layer background engine to scrub all data safely.</p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -446,7 +413,7 @@ export default function SystemAdminPortal() {
               disabled={isProcessing}
             >
               {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
-              Confirm & Delete
+              Confirm & Queue Deletion
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

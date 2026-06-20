@@ -21,16 +21,14 @@ const { processVisitorFollowups } = require("./schedulers/visitorScheduler");
 const { retryFailedSMS } = require("./schedulers/retryScheduler");
 
 /**
- * ADMIN: System Stats Aggregation (v2 Callable)
+ * ADMIN: System Stats Aggregation
  */
 exports.getSystemStats = onCall(
-  {
-    region: "us-central1"
-  },
+  { region: "us-central1" },
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
     if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized access. System Administrator privileges required.");
+      throw new HttpsError("permission-denied", "Unauthorized access.");
     }
 
     try {
@@ -47,6 +45,7 @@ exports.getSystemStats = onCall(
           slug: d.slug || "no-slug",
           plan: d.plan || d.subscription?.plan || "Starter",
           status: d.status || "Pending",
+          deletionStatus: d.deletionStatus || null,
           registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : (d.registeredAt ? String(d.registeredAt) : null),
           sms: {
             credits: Number(sms.credits || 0),
@@ -93,93 +92,25 @@ exports.getSystemStats = onCall(
       };
     } catch (err) {
       console.error("STATS_ENGINE_FAILURE:", err);
-      throw new HttpsError("internal", err.message || "Stats engine encountered an internal failure.");
+      throw new HttpsError("internal", "Stats engine encountered an internal failure.");
     }
   }
 );
 
 /**
- * ADMIN: Initialize Wallets / Integrity Sync
- */
-exports.initializeWallets = onCall(
-  { region: "us-central1" },
-  async (request) => {
-    const email = request.auth?.token?.email?.toLowerCase().trim();
-    if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized access");
-    }
-
-    try {
-      const db = admin.firestore();
-      const churchesSnap = await db.collection("churches").get();
-      
-      const chunks = [];
-      const CHUNK_SIZE = 450;
-      
-      for (let i = 0; i < churchesSnap.docs.length; i += CHUNK_SIZE) {
-        chunks.push(churchesSnap.docs.slice(i, i + CHUNK_SIZE));
-      }
-
-      let updatedTotal = 0;
-
-      for (const chunk of chunks) {
-        const batch = db.batch();
-        let chunkUpdates = 0;
-
-        chunk.forEach(churchDoc => {
-          const data = churchDoc.data();
-          if (!data.sms) {
-            batch.set(churchDoc.ref, {
-              sms: {
-                credits: 0,
-                totalSpent: 0,
-                totalTopups: 0,
-                enabled: false,
-                approved: false,
-                subscriptionStatus: 'pending',
-                status: 'Pending',
-                stats: { sent: 0, failed: 0 }
-              }
-            }, { merge: true });
-            chunkUpdates++;
-          }
-        });
-
-        if (chunkUpdates > 0) {
-          await batch.commit();
-          updatedTotal += chunkUpdates;
-        }
-      }
-
-      return { success: true, message: `Integrity sync complete. ${updatedTotal} organizations updated.` };
-    } catch (error) {
-      console.error("SYNC_ERROR:", error);
-      throw new HttpsError("internal", `Platform sync error: ${error.message}`);
-    }
-  }
-);
-
-/**
- * ADMIN: Delete Ministry (Total Data Purge)
- * Uses high-resiliency hybrid cleanup strategy with chunked batching.
+ * ADMIN: Delete Ministry (Layer 1 - Soft Delete / Queue)
+ * Marks ministry for deletion to trigger the background worker.
  */
 exports.deleteMinistry = onCall(
-  { 
-    region: "us-central1", 
-    timeoutSeconds: 540,
-    memory: "2GiB"
-  },
+  { region: "us-central1" },
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
     if (!email || !SUPER_ADMINS.includes(email)) {
       throw new HttpsError("permission-denied", "Unauthorized access.");
     }
 
-    if (!request.data || !request.data.churchId) {
-      throw new HttpsError("invalid-argument", "Missing organization ID.");
-    }
-
     const { churchId } = request.data;
+    if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID.");
 
     try {
       const db = admin.firestore();
@@ -190,52 +121,104 @@ exports.deleteMinistry = onCall(
         throw new HttpsError("not-found", "Organization not found.");
       }
 
-      console.log(`[DELETE_MINISTRY_START] Purging: ${churchId} by: ${email}`);
+      // Mark for deletion - this provides an instant UI response
+      await churchRef.update({
+        deletionStatus: "PENDING",
+        deletionRequestedAt: admin.firestore.FieldValue.serverTimestamp(),
+        deletionRequestedBy: email,
+        status: "Decommissioning"
+      });
 
-      // 1. Clear root-level technical documents (smsLocks)
-      await db.collection("smsLocks").doc(churchId).delete().catch(() => {});
-
-      // 2. Scalable ledger cleanup using chunked batching
-      let hasMoreLedger = true;
-      while (hasMoreLedger) {
-        const ledgerSnap = await db.collection("smsLedger")
-          .where("churchId", "==", churchId)
-          .limit(450)
-          .get();
-
-        if (ledgerSnap.empty) {
-          hasMoreLedger = false;
-        } else {
-          const batch = db.batch();
-          ledgerSnap.docs.forEach(doc => batch.delete(doc.ref));
-          await batch.commit();
-          console.log(`[DELETE_MINISTRY] Deleted batch of 450 ledger entries for ${churchId}`);
-        }
-      }
-
-      // 3. Native Recursive Delete (Subcollections: Members, Welfare, Attendance, Logs, etc.)
-      // churchRef points to /churches/{churchId}
-      await db.recursiveDelete(churchRef);
-      
       return { 
         success: true, 
-        message: "Organization and all associated records permanently scrubbed." 
+        message: "Organization deletion has been queued safely." 
       };
     } catch (error) {
-      console.error("DELETE_MINISTRY_FAILURE:", error);
-      
-      if (error instanceof HttpsError) throw error;
-
-      const msg = error.message || "Unknown purge engine error.";
-      
-      if (msg.toLowerCase().includes("deadline") || msg.toLowerCase().includes("timeout")) {
-        throw new HttpsError("deadline-exceeded", "The deletion is massive and exceeded the current window. A second attempt may be required.");
-      }
-      
-      throw new HttpsError("internal", msg);
+      console.error("DELETE_MINISTRY_QUEUE_FAILURE:", error);
+      throw new HttpsError("internal", error.message);
     }
   }
 );
+
+/**
+ * BACKGROUND WORKER: Delete Ministry (Layer 2 - Deep Purge)
+ * Triggered when a church is marked as PENDING.
+ */
+exports.onChurchDeletionRequested = onDocumentUpdated(
+  { region: "us-central1", document: "churches/{churchId}" },
+  async (event) => {
+    const data = event.data.after.data();
+    const previousData = event.data.before.data();
+
+    // Only run if status transitioned to PENDING
+    if (data.deletionStatus !== "PENDING" || previousData.deletionStatus === "PENDING") {
+      return null;
+    }
+
+    const { churchId } = event.params;
+    const db = admin.firestore();
+    const churchRef = event.data.after.ref;
+
+    console.log(`[DEEP_PURGE_START] Processing deletion for: ${churchId}`);
+
+    try {
+      // 1. Clear root-level technical documents (smsLocks)
+      await db.collection("smsLocks").doc(churchId).delete().catch(() => {});
+
+      // 2. Safe batch delete root-level ledger entries
+      await deleteCollectionByQuery(
+        db.collection("smsLedger").where("churchId", "==", churchId),
+        400
+      );
+
+      // 3. Delete all subcollections in chunks
+      const subcollections = [
+        "members", "attendance", "finances", "events", "visitors", 
+        "welfare", "smsLogs", "smsTemplates", "scheduledSms", 
+        "birthdayHistory", "transactions", "billingReports", 
+        "aiInsights", "reports", "smsWallets"
+      ];
+
+      for (const sub of subcollections) {
+        await deleteCollectionByQuery(churchRef.collection(sub), 400);
+      }
+
+      // 4. Final document delete
+      await churchRef.delete();
+
+      console.log(`[DEEP_PURGE_COMPLETE] Successfully scrubbed: ${churchId}`);
+      return { success: true };
+    } catch (error) {
+      console.error(`[DEEP_PURGE_FAILURE] ${churchId}:`, error);
+      // Log failure back to the doc if it still exists
+      try {
+        await churchRef.update({
+          deletionStatus: "FAILED",
+          deletionError: error.message,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (e) {}
+      return null;
+    }
+  }
+);
+
+/**
+ * SAFE BATCH DELETE HELPER
+ * Avoids timeout and internal Firestore limits by deleting in blocks.
+ */
+async function deleteCollectionByQuery(query, batchSize = 400) {
+  let snapshot;
+  do {
+    snapshot = await query.limit(batchSize).get();
+    if (snapshot.empty) break;
+
+    const batch = admin.firestore().batch();
+    snapshot.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    console.log(`Deleted batch of ${snapshot.size} records.`);
+  } while (snapshot.size >= batchSize);
+}
 
 /**
  * ADMIN: Update Church Status
@@ -304,30 +287,6 @@ exports.updateOrganization = onCall(
     } catch (error) { 
       console.error("ORG_UPDATE_ERROR:", error);
       throw new HttpsError("internal", error.message); 
-    }
-  }
-);
-
-/**
- * ADMIN: Reset Balance (Wipe to 0)
- */
-exports.adminResetWallet = onCall(
-  { region: "us-central1" }, 
-  async (request) => {
-    const email = request.auth?.token?.email?.toLowerCase().trim();
-    if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized access");
-    }
-
-    const { churchId } = request.data;
-    if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID");
-
-    try {
-      const result = await resetWallet(churchId, email);
-      return result;
-    } catch (error) {
-      console.error("RESET_WALLET_ERROR:", error);
-      throw new HttpsError("internal", error.message);
     }
   }
 );
@@ -418,20 +377,6 @@ exports.onSmsQueued = onDocumentCreated(
     let key;
     try { key = MNOTIFY_API_KEY.value(); } catch (e) { return null; }
     return processSMSQueueItem(key, event.params.messageId, data);
-  }
-);
-
-exports.onSmsRetryTriggered = onDocumentUpdated(
-  { region: "us-central1", document: "smsQueue/{messageId}", secrets: [MNOTIFY_API_KEY] },
-  async (event) => {
-    const data = event.data.after.data();
-    const previousData = event.data.before.data();
-    if (data.status === "queued" && previousData.status !== "queued") {
-      let key;
-      try { key = MNOTIFY_API_KEY.value(); } catch (e) { return null; }
-      return processSMSQueueItem(key, event.params.messageId, data);
-    }
-    return null;
   }
 );
 
