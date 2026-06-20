@@ -216,6 +216,7 @@ export default function SystemAdminPortal() {
     setIsProcessing(true);
     
     try {
+      // Force refresh token to ensure high-privilege access is current
       if (auth.currentUser) {
         await auth.currentUser.getIdToken(true);
       }
@@ -232,9 +233,11 @@ export default function SystemAdminPortal() {
       }
     } catch (e: any) {
       console.error("Purge Error:", e);
+      // Surface the actual error message from the backend (often a timeout or internal constraint)
+      const detail = e.message || "An unexpected error occurred during decommission.";
       toast({ 
         title: "Purge Failed", 
-        description: e.message || "An unexpected error occurred during decommission.", 
+        description: detail.includes('internal') ? "Operation timed out. The ministry may be too large to delete in one pass. Please contact engineering." : detail, 
         variant: "destructive" 
       });
     } finally {
@@ -418,27 +421,27 @@ export default function SystemAdminPortal() {
               <AlertTriangle className="h-6 w-6" /> Total Decommissioning
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-4 mt-2">
+              <div className="space-y-4 mt-2 text-foreground/80">
                 <p>You are about to permanently delete <strong>{ministryToDecommission?.name}</strong>.</p>
-                <ul className="list-disc pl-6 text-sm text-foreground/80 space-y-1">
+                <ul className="list-disc pl-6 text-sm space-y-1">
                   <li>All member records and photos will be erased.</li>
                   <li>Financial audit logs will be permanently wiped.</li>
                   <li>Attendance history and analytics will be destroyed.</li>
                   <li>SMS credit balance and logs will be deleted.</li>
                 </ul>
-                <p className="font-bold text-destructive">This action is irreversible and will purge all subcollections recursively.</p>
+                <p className="font-bold text-destructive">This action is irreversible and uses a recursive engine to purge all ministry data.</p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleDecommission}
               className="bg-destructive hover:bg-destructive/90 text-white font-bold"
               disabled={isProcessing}
             >
               {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
-              Purge Organization
+              Confirm & Purge
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

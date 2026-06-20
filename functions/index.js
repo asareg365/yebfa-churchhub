@@ -145,12 +145,13 @@ exports.initializeWallets = onCall(
 
 /**
  * ADMIN: Decommission Ministry (Total Data Purge)
+ * High-performance execution for recursive deletion of large ministries.
  */
 exports.decommissionMinistry = onCall(
   { 
     region: "us-central1", 
-    timeoutSeconds: 300,
-    memory: "1GiB"
+    timeoutSeconds: 540, // Max timeout for v2 functions
+    memory: "2GiB"      // Increased memory for heavy recursion
   },
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
@@ -170,17 +171,19 @@ exports.decommissionMinistry = onCall(
         throw new HttpsError("not-found", "Organization not found in system.");
       }
 
-      console.log(`[DECOMMISSION_START] Purging ${churchId} triggered by ${email}`);
+      console.log(`[DECOMMISSION_START] Purging ministry: ${churchId} triggered by: ${email}`);
 
       // Recursive delete all subcollections and the document itself
+      // This is an intensive operation that can take several minutes for large ministries
       await db.recursiveDelete(churchRef);
       
-      console.log(`[DECOMMISSION_COMPLETE] Ministry ${churchId} has been purged by ${email}`);
+      console.log(`[DECOMMISSION_COMPLETE] Ministry: ${churchId} purged successfully.`);
       
       return { success: true, message: "Organization and all associated data have been permanently removed." };
     } catch (error) {
-      console.error("DECOMMISSION_ERROR:", error);
-      throw new HttpsError("internal", error.message || "Total purge engine failure");
+      console.error("DECOMMISSION_FAILURE:", error);
+      // Surface specific Firestore errors back to the client instead of generic internal
+      throw new HttpsError("internal", `Purge Engine Error: ${error.message}`);
     }
   }
 );
