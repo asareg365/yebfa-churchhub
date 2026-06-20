@@ -20,9 +20,10 @@ import {
   RefreshCcw,
   CreditCard,
   Trash2,
-  Clock,
   RotateCcw,
-  Archive
+  Archive,
+  History,
+  Info
 } from 'lucide-react';
 import {
   Card,
@@ -232,7 +233,7 @@ export default function SystemAdminPortal() {
     if (!ministryToPurge || !functions) return;
     setIsProcessing(true);
     try {
-      const purgeFn = httpsCallable(functions, 'hardPurgeMinistry');
+      const purgeFn = httpsCallable(functions, 'hardPurgeMinistry', { timeout: 540000 });
       await purgeFn({ churchId: ministryToPurge.id });
       toast({ title: "Permanent Purge Complete", description: "All data has been wiped from the system." });
       setMinistryToPurge(null);
@@ -300,49 +301,91 @@ export default function SystemAdminPortal() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
-        <Card className="glass md:col-span-2">
+        <Card className="glass md:col-span-2 overflow-hidden">
           <Tabs defaultValue="active" className="w-full">
-            <CardHeader className="flex flex-row items-center justify-between pb-7">
+            <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-7 border-b border-border bg-muted/5">
               <div className="space-y-4">
-                <div><CardTitle>Organization Directory</CardTitle><CardDescription>Managing the ministry landscape.</CardDescription></div>
-                <TabsList className="bg-muted p-1 rounded-xl">
-                  <TabsTrigger value="active" className="rounded-lg px-6"><Users className="w-4 h-4 mr-2" /> Active</TabsTrigger>
-                  <TabsTrigger value="deleted" className="rounded-lg px-6"><Archive className="w-4 h-4 mr-2" /> Recycle Bin ({deletedMinistries.length})</TabsTrigger>
+                <div>
+                  <CardTitle className="text-xl">Organization Directory</CardTitle>
+                  <CardDescription>Managing the ministry landscape.</CardDescription>
+                </div>
+                <TabsList className="bg-muted p-1 rounded-xl w-fit">
+                  <TabsTrigger value="active" className="rounded-lg px-6 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                    <Users className="w-4 h-4 mr-2" /> Active
+                  </TabsTrigger>
+                  <TabsTrigger value="deleted" className="rounded-lg px-6 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                    <Archive className="w-4 h-4 mr-2" /> Recycle Bin ({deletedMinistries.length})
+                  </TabsTrigger>
                 </TabsList>
               </div>
-              <div className="relative w-72 pt-10"><Search className="absolute left-3 top-[calc(50%+20px)] -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search ministries..." className="pl-10 h-11" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+              <div className="relative w-full md:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Search ministries..." className="pl-10 h-11 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              </div>
             </CardHeader>
-            <CardContent>
-              <TabsContent value="active">
+            <CardContent className="p-0">
+              <TabsContent value="active" className="mt-0">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Ministry</TableHead><TableHead>Plan</TableHead><TableHead>Status</TableHead><TableHead>Balance</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+                  <TableHeader className="bg-muted/10">
+                    <TableRow>
+                      <TableHead className="font-bold text-[10px] uppercase">Ministry</TableHead>
+                      <TableHead className="font-bold text-[10px] uppercase">Plan</TableHead>
+                      <TableHead className="font-bold text-[10px] uppercase">Status</TableHead>
+                      <TableHead className="font-bold text-[10px] uppercase">Balance</TableHead>
+                      <TableHead className="text-right font-bold text-[10px] uppercase">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
                   <TableBody>
                     {isRefreshing && !platformStats ? (
                       <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" /></TableCell></TableRow>
                     ) : activeMinistries.map((church: any) => (
-                      <TableRow key={church.id}>
-                        <TableCell><div className="font-bold text-foreground">{church.name}</div><code className="text-[10px] text-primary">{church.slug}</code></TableCell>
-                        <TableCell><Badge variant="outline" className="text-foreground font-bold">{church.plan || 'Starter'}</Badge></TableCell>
+                      <TableRow key={church.id} className="group hover:bg-muted/5 transition-colors">
+                        <TableCell>
+                          <div className="font-bold text-foreground">{church.name}</div>
+                          <code className="text-[10px] text-primary">{church.slug}</code>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-foreground font-bold">{church.plan || 'Starter'}</Badge>
+                        </TableCell>
                         <TableCell>
                           <Badge className={cn("uppercase text-[9px] font-bold px-2 py-0.5", church.sms?.subscriptionStatus === 'active' ? "bg-accent text-white" : church.sms?.subscriptionStatus === 'suspended' ? "bg-destructive text-white" : "bg-amber-100 text-amber-700")}>
                             {church.sms?.subscriptionStatus || 'Pending'}
                           </Badge>
                         </TableCell>
-                        <TableCell><div className="flex items-center gap-2"><CreditCard className="h-3 w-3 text-muted-foreground" /><span className="font-mono font-bold">{(church.sms?.credits || 0).toLocaleString()}</span></div></TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <CreditCard className="h-3 w-3 text-muted-foreground" />
+                            <span className="font-mono font-bold">{(church.sms?.credits || 0).toLocaleString()}</span>
+                          </div>
+                        </TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-muted-foreground"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="text-muted-foreground group-hover:bg-white group-hover:shadow-sm">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="glass w-56">
-                              <DropdownMenuItem onClick={() => setEditingOrg(church)} className="font-bold"><Pencil className="mr-2 h-4 w-4" /> Edit Details</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setManagingSmsId(church.id)} className="font-bold text-primary"><Zap className="mr-2 h-4 w-4" /> Top-up Wallet</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setEditingOrg(church)} className="font-bold">
+                                <Pencil className="mr-2 h-4 w-4" /> Edit Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setManagingSmsId(church.id)} className="font-bold text-primary">
+                                <Zap className="mr-2 h-4 w-4" /> Top-up Wallet
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               {church.sms?.subscriptionStatus !== 'active' ? (
-                                <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'active')}><CheckCircle2 className="mr-2 h-4 w-4 text-accent" /> Activate Org</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'active')}>
+                                  <CheckCircle2 className="mr-2 h-4 w-4 text-accent" /> Activate Org
+                                </DropdownMenuItem>
                               ) : (
-                                <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'suspended')} className="text-destructive"><Ban className="mr-2 h-4 w-4" /> Suspend Service</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'suspended')} className="text-destructive">
+                                  <Ban className="mr-2 h-4 w-4" /> Suspend Service
+                                </DropdownMenuItem>
                               )}
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => setMinistryToDelete(church)} className="text-destructive font-bold focus:bg-destructive focus:text-white"><Trash2 className="mr-2 h-4 w-4" /> Delete Ministry</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setMinistryToDelete(church)} className="text-destructive font-bold focus:bg-destructive focus:text-white">
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete Ministry
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -355,23 +398,47 @@ export default function SystemAdminPortal() {
                 </Table>
               </TabsContent>
 
-              <TabsContent value="deleted">
+              <TabsContent value="deleted" className="mt-0">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Deleted Ministry</TableHead><TableHead>Date Deleted</TableHead><TableHead>Slug</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+                  <TableHeader className="bg-muted/10">
+                    <TableRow>
+                      <TableHead className="font-bold text-[10px] uppercase">Deleted Ministry</TableHead>
+                      <TableHead className="font-bold text-[10px] uppercase">Date Deleted</TableHead>
+                      <TableHead className="font-bold text-[10px] uppercase">Slug</TableHead>
+                      <TableHead className="text-right font-bold text-[10px] uppercase">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
                   <TableBody>
                     {deletedMinistries.map((church: any) => (
-                      <TableRow key={church.id} className="opacity-80">
-                        <TableCell><div className="font-bold text-foreground">{church.name}</div></TableCell>
+                      <TableRow key={church.id} className="opacity-90 bg-muted/5 group hover:bg-muted/10 transition-colors">
+                        <TableCell>
+                          <div className="font-bold text-foreground flex items-center gap-2">
+                            {church.name}
+                            <Badge variant="outline" className="text-[8px] uppercase font-bold text-muted-foreground">In Recycle Bin</Badge>
+                          </div>
+                        </TableCell>
                         <TableCell className="text-xs text-muted-foreground font-medium">
                           {church.deletedAt ? format(new Date(church.deletedAt), 'MMM d, yyyy HH:mm') : 'Unknown'}
                         </TableCell>
                         <TableCell><code className="text-[10px] text-muted-foreground">{church.slug}</code></TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm" className="h-8 rounded-lg" onClick={() => handleRestore(church.id)} disabled={isProcessing}>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-8 rounded-lg border-primary/20 text-primary hover:bg-primary/10 font-bold" 
+                              onClick={() => handleRestore(church.id)} 
+                              disabled={isProcessing}
+                            >
                               <RotateCcw className="w-3 h-3 mr-1" /> Restore
                             </Button>
-                            <Button variant="destructive" size="sm" className="h-8 rounded-lg" onClick={() => setMinistryToPurge(church)} disabled={isProcessing}>
+                            <Button 
+                              variant="destructive" 
+                              size="sm" 
+                              className="h-8 rounded-lg font-bold" 
+                              onClick={() => setMinistryToPurge(church)} 
+                              disabled={isProcessing}
+                            >
                               <Trash2 className="w-3 h-3 mr-1" /> Purge
                             </Button>
                           </div>
@@ -379,7 +446,15 @@ export default function SystemAdminPortal() {
                       </TableRow>
                     ))}
                     {deletedMinistries.length === 0 && (
-                      <TableRow><TableCell colSpan={4} className="text-center py-20 text-muted-foreground italic">Recycle bin is empty.</TableCell></TableRow>
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-24">
+                          <div className="flex flex-col items-center gap-2 text-muted-foreground opacity-50">
+                            <Archive className="w-12 h-12 mb-2" />
+                            <p className="text-sm font-medium">Recycle bin is empty.</p>
+                            <p className="text-xs">Deleted ministries will appear here for recovery.</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -432,19 +507,27 @@ export default function SystemAdminPortal() {
       <AlertDialog open={!!ministryToDelete} onOpenChange={(o) => !o && setMinistryToDelete(null)}>
         <AlertDialogContent className="glass border-destructive/30">
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-destructive"><AlertTriangle className="h-6 w-6" /> Delete Ministry</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive"><AlertTriangle className="h-6 w-6" /> Move to Recycle Bin</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-4 mt-2 text-foreground/80">
                 <p>Move <strong>{ministryToDelete?.name}</strong> to the Recycle Bin?</p>
-                <p className="text-sm">The organization will be suspended and hidden from the active directory, but data will be preserved for recovery.</p>
-                <p className="font-bold text-destructive">Safety Shield: The organization must be SUSPENDED before it can be deleted.</p>
+                <div className="p-4 bg-muted/20 rounded-xl border border-border space-y-2">
+                  <div className="flex items-start gap-2 text-xs">
+                    <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                    <p>The organization will be suspended and hidden from the active directory. Data is preserved for 30 days for potential recovery.</p>
+                  </div>
+                </div>
+                <p className="font-bold text-destructive flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4" />
+                  Safety Shield: Org must be SUSPENDED before it can be deleted.
+                </p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleSoftDelete} className="bg-destructive hover:bg-destructive/90 text-white font-bold" disabled={isProcessing}>
-              {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />} Confirm Deletion
+              {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />} Delete Ministry
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
