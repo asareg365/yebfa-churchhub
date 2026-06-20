@@ -10,7 +10,7 @@ import {
   LogOut,
   Plus,
   Zap,
-  CheckCircle,
+  CheckCircle2,
   Ban,
   TrendingUp,
   Coins,
@@ -19,7 +19,6 @@ import {
   Pencil,
   RefreshCcw,
   CreditCard,
-  Database,
   Trash2,
   Clock
 } from 'lucide-react';
@@ -322,7 +321,7 @@ export default function SystemAdminPortal() {
                           <DropdownMenuItem onClick={() => setManagingSmsId(church.id)} className="font-bold text-primary"><Zap className="mr-2 h-4 w-4" /> Top-up Wallet</DropdownMenuItem>
                           <DropdownMenuSeparator />
                           {church.sms?.subscriptionStatus !== 'active' ? (
-                            <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'active')}><CheckCircle className="mr-2 h-4 w-4 text-accent" /> Activate Org</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'active')}><CheckCircle2 className="mr-2 h-4 w-4 text-accent" /> Activate Org</DropdownMenuItem>
                           ) : (
                             <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'suspended')} className="text-destructive"><Ban className="mr-2 h-4 w-4" /> Suspend Service</DropdownMenuItem>
                           )}
@@ -401,7 +400,7 @@ export default function SystemAdminPortal() {
                   <li>Financial ledgers will be permanently wiped.</li>
                   <li>SMS logs and templates will be destroyed.</li>
                 </ul>
-                <p className="font-bold text-destructive">This action is irreversible and uses a multi-layer background engine to scrub all data safely.</p>
+                <p className="font-bold text-destructive">Safety Shield: The organization must be SUSPENDED before it can be deleted.</p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>

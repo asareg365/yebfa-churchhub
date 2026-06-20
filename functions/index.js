@@ -112,15 +112,25 @@ exports.deleteMinistry = onCall(
     const { churchId } = request.data;
     if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID.");
 
-    try {
-      const db = admin.firestore();
-      const churchRef = db.collection("churches").doc(churchId);
-      
-      const churchDoc = await churchRef.get();
-      if (!churchDoc.exists) {
-        throw new HttpsError("not-found", "Organization not found.");
-      }
+    const db = admin.firestore();
+    const churchRef = db.collection("churches").doc(churchId);
+    
+    const churchDoc = await churchRef.get();
+    if (!churchDoc.exists) {
+      throw new HttpsError("not-found", "Organization not found.");
+    }
 
+    const churchData = churchDoc.data();
+    
+    // SAFETY SHIELD: Prevent deleting active organizations
+    if (churchData.sms?.subscriptionStatus === "active" || churchData.status === "Approved") {
+      throw new HttpsError(
+        "failed-precondition", 
+        "Safety Shield Active: You must suspend the organization service first before it can be deleted."
+      );
+    }
+
+    try {
       // Mark for deletion - this provides an instant UI response
       await churchRef.update({
         deletionStatus: "PENDING",
