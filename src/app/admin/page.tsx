@@ -116,7 +116,7 @@ export default function SystemAdminPortal() {
     } catch (err: any) {
       console.error("System Stats Sync Error:", err);
       setStatsError(true);
-      const detail = err.code === 'functions/internal' ? "Backend service initialization error. Please check logs." : (err.message || "Could not fetch platform data.");
+      const detail = err.message || "Could not fetch platform data.";
       setErrorMessage(detail);
       toast({ title: "Stats Sync Failed", description: detail, variant: "destructive" });
     } finally {
@@ -174,8 +174,7 @@ export default function SystemAdminPortal() {
       toast({ title: "System Validated", description: res.data.message || "Integrity sync complete." });
       await loadStats();
     } catch (e: any) {
-      const detail = e.code === 'functions/internal' ? "Sync failed due to standard batch limits. Engineering notified." : e.message;
-      toast({ title: "Validation Failed", description: detail, variant: "destructive" });
+      toast({ title: "Validation Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
@@ -240,22 +239,9 @@ export default function SystemAdminPortal() {
       }
     } catch (e: any) {
       console.error("Purge Error:", e);
-      
-      // Detailed error classification for super-admin visibility
-      const isTimeout = e.code === 'deadline-exceeded' || e.code === 'functions/deadline-exceeded';
-      const isInternal = e.code === 'functions/internal';
-      
-      let detail = e.message || "An unexpected error occurred during decommission.";
-      
-      if (isTimeout) {
-        detail = "The recursive purge is taking longer than expected due to massive data volume. The backend will continue scrubbing records in the background. Please refresh in a few minutes.";
-      } else if (isInternal) {
-        detail = "Backend recursiive purge failed. The ministry might have protected documents or active locks.";
-      }
-
       toast({ 
-        title: "Purge Incomplete", 
-        description: detail, 
+        title: "Purge Failed", 
+        description: e.message || "An unexpected error occurred during decommissioning.", 
         variant: "destructive" 
       });
     } finally {

@@ -190,12 +190,21 @@ exports.decommissionMinistry = onCall(
 
       console.log(`[DECOMMISSION_START] Purging ministry: ${churchId} triggered by: ${email}`);
 
-      // 1. Clear SMS Locks (Root level) to prevent "protected document" errors during recursive purge
+      // 1. Clear root-level locks to prevent "protected document" errors
       const lockRef = db.collection("smsLocks").doc(churchId);
-      await lockRef.delete().catch(() => {});
+      await lockRef.delete().catch(err => console.log(`Lock deletion skipped: ${err.message}`));
 
-      // 2. Recursive delete all subcollections and the document itself.
-      // This is a native Firestore operation that handles large datasets efficiently.
+      // 2. Clear root-level ledger references
+      // Note: We use a simple query delete for root-level items tied to this slug
+      const ledgerQuery = await db.collection("smsLedger").where("churchId", "==", churchId).get();
+      if (!ledgerQuery.empty) {
+        const batch = db.batch();
+        ledgerQuery.docs.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+      }
+
+      // 3. Recursive delete all subcollections and the document itself.
+      // This handles Members, Finances, Attendance, logs, etc.
       await db.recursiveDelete(churchRef);
       
       console.log(`[DECOMMISSION_COMPLETE] Ministry: ${churchId} purged successfully.`);
@@ -207,13 +216,13 @@ exports.decommissionMinistry = onCall(
     } catch (error) {
       console.error("DECOMMISSION_FAILURE:", error);
       
-      const message = error.message || "Unknown error during data purge.";
+      const msg = error.message || "Unknown error during data purge.";
       
-      if (message.toLowerCase().includes("deadline") || message.toLowerCase().includes("timeout")) {
-        throw new HttpsError("deadline-exceeded", "The deletion process timed out due to the large volume of data. The server is still working in the background.");
+      if (msg.toLowerCase().includes("deadline") || msg.toLowerCase().includes("timeout")) {
+        throw new HttpsError("deadline-exceeded", "The process is taking longer than expected. The server will continue working in the background. Please refresh in a few minutes.");
       }
       
-      throw new HttpsError("internal", `Purge Engine Error: ${message}`);
+      throw new HttpsError("internal", `Purge Engine Failure: ${msg}`);
     }
   }
 );
