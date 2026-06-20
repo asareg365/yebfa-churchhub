@@ -162,22 +162,22 @@ exports.initializeWallets = onCall(
 
 /**
  * ADMIN: Decommission Ministry (Total Data Purge)
- * High-performance execution for recursive deletion of large ministries.
+ * High-performance execution with chunked deletion for massive root-level collections.
  */
 exports.decommissionMinistry = onCall(
   { 
     region: "us-central1", 
-    timeoutSeconds: 540, // Max timeout for v2 functions (9 minutes)
-    memory: "2GiB"      // 2GB Memory for heavy recursion
+    timeoutSeconds: 540, // 9 minutes
+    memory: "4GiB"       // Enhanced memory for massive graph traversal
   },
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
     if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized access. System Administrator privileges required.");
+      throw new HttpsError("permission-denied", "Unauthorized access.");
     }
 
     const { churchId } = request.data;
-    if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID for decommissioning.");
+    if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID.");
 
     try {
       const db = admin.firestore();
@@ -185,44 +185,50 @@ exports.decommissionMinistry = onCall(
       
       const churchDoc = await churchRef.get();
       if (!churchDoc.exists) {
-        throw new HttpsError("not-found", "Organization not found in system.");
+        throw new HttpsError("not-found", "Organization not found.");
       }
 
-      console.log(`[DECOMMISSION_START] Purging ministry: ${churchId} triggered by: ${email}`);
+      console.log(`[DECOMMISSION_START] Purging: ${churchId} by: ${email}`);
 
-      // 1. Clear root-level locks to prevent "protected document" errors
-      const lockRef = db.collection("smsLocks").doc(churchId);
-      await lockRef.delete().catch(err => console.log(`Lock deletion skipped: ${err.message}`));
+      // 1. Clear root-level locks
+      await db.collection("smsLocks").doc(churchId).delete().catch(() => {});
 
-      // 2. Clear root-level ledger references
-      // Note: We use a simple query delete for root-level items tied to this slug
-      const ledgerQuery = await db.collection("smsLedger").where("churchId", "==", churchId).get();
-      if (!ledgerQuery.empty) {
-        const batch = db.batch();
-        ledgerQuery.docs.forEach(doc => batch.delete(doc.ref));
-        await batch.commit();
+      // 2. Scalable ledger cleanup (handles > 500 records)
+      let hasMoreLedger = true;
+      while (hasMoreLedger) {
+        const ledgerSnap = await db.collection("smsLedger")
+          .where("churchId", "==", churchId)
+          .limit(450)
+          .get();
+
+        if (ledgerSnap.empty) {
+          hasMoreLedger = false;
+        } else {
+          const batch = db.batch();
+          ledgerSnap.docs.forEach(doc => batch.delete(doc.ref));
+          await batch.commit();
+          console.log(`[PURGE] Deleted ${ledgerSnap.size} ledger records...`);
+        }
       }
 
-      // 3. Recursive delete all subcollections and the document itself.
-      // This handles Members, Finances, Attendance, logs, etc.
+      // 3. Native Recursive Delete (Subcollections: Members, Welfare, Attendance, Logs, etc.)
       await db.recursiveDelete(churchRef);
       
-      console.log(`[DECOMMISSION_COMPLETE] Ministry: ${churchId} purged successfully.`);
+      console.log(`[DECOMMISSION_COMPLETE] Purge successful for ${churchId}`);
       
       return { 
         success: true, 
-        message: "Organization and all associated data have been permanently removed." 
+        message: "Organization and all nested data have been permanently scrubbed." 
       };
     } catch (error) {
-      console.error("DECOMMISSION_FAILURE:", error);
+      console.error("DECOMMISSION_CRITICAL_FAILURE:", error);
       
-      const msg = error.message || "Unknown error during data purge.";
-      
+      const msg = error.message || "Unknown error during purge.";
       if (msg.toLowerCase().includes("deadline") || msg.toLowerCase().includes("timeout")) {
-        throw new HttpsError("deadline-exceeded", "The process is taking longer than expected. The server will continue working in the background. Please refresh in a few minutes.");
+        throw new HttpsError("deadline-exceeded", "The purge is massive and taking longer than expected. The server is still working in the background.");
       }
       
-      throw new HttpsError("internal", `Purge Engine Failure: ${msg}`);
+      throw new HttpsError("internal", `Backend Purge Engine Error: ${msg}`);
     }
   }
 );

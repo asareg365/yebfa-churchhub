@@ -238,10 +238,12 @@ export default function SystemAdminPortal() {
         throw new Error(res.data?.message || "Purge engine failed without specific error.");
       }
     } catch (e: any) {
-      console.error("Purge Error:", e);
+      console.error("Purge Error Detail:", e);
+      // Surface the actual backend error code or message
+      const errorMsg = e?.message || e?.details?.message || "Internal server failure during deletion.";
       toast({ 
         title: "Purge Failed", 
-        description: e.message || "An unexpected error occurred during decommissioning.", 
+        description: errorMsg, 
         variant: "destructive" 
       });
     } finally {
