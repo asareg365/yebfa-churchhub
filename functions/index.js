@@ -100,6 +100,51 @@ exports.getSystemStats = onCall(
 );
 
 /**
+ * ADMIN: Initialize Wallets / Integrity Sync
+ */
+exports.initializeWallets = onCall(
+  { region: "us-central1", cors: true },
+  async (request) => {
+    const email = request.auth?.token?.email?.toLowerCase().trim();
+    if (!email || !SUPER_ADMINS.includes(email)) {
+      throw new HttpsError("permission-denied", "Unauthorized access");
+    }
+
+    try {
+      const db = admin.firestore();
+      const churchesSnap = await db.collection("churches").get();
+      const batch = db.batch();
+      let updatedCount = 0;
+
+      churchesSnap.docs.forEach(churchDoc => {
+        const data = churchDoc.data();
+        if (!data.sms) {
+          batch.set(churchDoc.ref, {
+            sms: {
+              credits: 0,
+              totalSpent: 0,
+              totalTopups: 0,
+              enabled: false,
+              approved: false,
+              subscriptionStatus: 'pending',
+              status: 'Pending',
+              stats: { sent: 0, failed: 0 }
+            }
+          }, { merge: true });
+          updatedCount++;
+        }
+      });
+
+      if (updatedCount > 0) await batch.commit();
+      return { success: true, message: `Integrity sync complete. ${updatedCount} organizations updated.` };
+    } catch (error) {
+      console.error("SYNC_ERROR:", error);
+      throw new HttpsError("internal", error.message);
+    }
+  }
+);
+
+/**
  * ADMIN: Decommission Ministry (Total Data Purge)
  * High-privilege operation with recursive deletion.
  */
@@ -128,11 +173,13 @@ exports.decommissionMinistry = onCall(
         throw new HttpsError("not-found", "Organization not found in system.");
       }
 
+      console.log(`[DECOMMISSION_START] Purging ${churchId} triggered by ${email}`);
+
       // Perform recursive deletion of the document and all subcollections
       // This is a heavy operation requiring the boosted execution settings
       await db.recursiveDelete(churchRef);
       
-      console.log(`[DECOMMISSION] Ministry ${churchId} has been purged by ${email}`);
+      console.log(`[DECOMMISSION_COMPLETE] Ministry ${churchId} has been purged by ${email}`);
       
       return { success: true, message: "Organization and all associated data have been permanently removed." };
     } catch (error) {

@@ -169,7 +169,7 @@ export default function SystemAdminPortal() {
       toast({ title: "System Validated", description: res.data.message || "Integrity sync complete." });
       await loadStats();
     } catch (e: any) {
-      toast({ title: "Validation Failed", description: e.message, variant: "destructive" });
+      toast({ title: "Validation Failed", description: e.message || "System sync error.", variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
@@ -292,7 +292,8 @@ export default function SystemAdminPortal() {
             disabled={isProcessing}
             className="rounded-xl border-accent/20 text-accent font-bold hover:bg-accent/5"
           >
-            <Database className="mr-2 h-4 w-4" /> Integrity Sync
+            {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
+            Integrity Sync
           </Button>
           <Button variant="outline" size="icon" onClick={loadStats} className={cn("rounded-xl transition-all", isRefreshing && "animate-spin")} disabled={isRefreshing}><RefreshCcw className="h-4 w-4" /></Button>
           <Button variant="outline" onClick={() => signOut(auth)} className="rounded-xl"><LogOut className="mr-2 h-4 w-4" /> Logout</Button>
@@ -417,8 +418,8 @@ export default function SystemAdminPortal() {
             <AlertDialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-6 w-6" /> Total Decommissioning
             </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-4" asChild>
-              <div className="space-y-4">
+            <AlertDialogDescription asChild>
+              <div className="space-y-4 mt-2">
                 <p>You are about to permanently delete <strong>{ministryToDecommission?.name}</strong>.</p>
                 <ul className="list-disc pl-6 text-sm text-foreground/80 space-y-1">
                   <li>All member records and photos will be erased.</li>
