@@ -216,7 +216,6 @@ export default function SystemAdminPortal() {
     setIsProcessing(true);
     
     try {
-      // Force refresh of ID token to ensure auth context is current for high-privilege action
       if (auth.currentUser) {
         await auth.currentUser.getIdToken(true);
       }

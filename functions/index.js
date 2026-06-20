@@ -25,8 +25,7 @@ const { retryFailedSMS } = require("./schedulers/retryScheduler");
  */
 exports.getSystemStats = onCall(
   {
-    region: "us-central1",
-    cors: true
+    region: "us-central1"
   },
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
@@ -103,7 +102,7 @@ exports.getSystemStats = onCall(
  * ADMIN: Initialize Wallets / Integrity Sync
  */
 exports.initializeWallets = onCall(
-  { region: "us-central1", cors: true },
+  { region: "us-central1" },
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
     if (!email || !SUPER_ADMINS.includes(email)) {
@@ -146,13 +145,11 @@ exports.initializeWallets = onCall(
 
 /**
  * ADMIN: Decommission Ministry (Total Data Purge)
- * High-privilege operation with recursive deletion.
  */
 exports.decommissionMinistry = onCall(
   { 
     region: "us-central1", 
-    cors: true,
-    timeoutSeconds: 300, // Boosted to 5 mins for recursive delete
+    timeoutSeconds: 300,
     memory: "1GiB"
   },
   async (request) => {
@@ -175,8 +172,7 @@ exports.decommissionMinistry = onCall(
 
       console.log(`[DECOMMISSION_START] Purging ${churchId} triggered by ${email}`);
 
-      // Perform recursive deletion of the document and all subcollections
-      // This is a heavy operation requiring the boosted execution settings
+      // Recursive delete all subcollections and the document itself
       await db.recursiveDelete(churchRef);
       
       console.log(`[DECOMMISSION_COMPLETE] Ministry ${churchId} has been purged by ${email}`);
@@ -184,7 +180,7 @@ exports.decommissionMinistry = onCall(
       return { success: true, message: "Organization and all associated data have been permanently removed." };
     } catch (error) {
       console.error("DECOMMISSION_ERROR:", error);
-      throw new HttpsError("internal", String(error.message || "Total purge engine failure"));
+      throw new HttpsError("internal", error.message || "Total purge engine failure");
     }
   }
 );
@@ -193,7 +189,7 @@ exports.decommissionMinistry = onCall(
  * ADMIN: Update Church Status
  */
 exports.updateChurchStatus = onCall(
-  { region: "us-central1", cors: true }, 
+  { region: "us-central1" }, 
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
     if (!email || !SUPER_ADMINS.includes(email)) {
@@ -230,7 +226,7 @@ exports.updateChurchStatus = onCall(
  * ADMIN: Update Organization Details
  */
 exports.updateOrganization = onCall(
-  { region: "us-central1", cors: true }, 
+  { region: "us-central1" }, 
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
     if (!email || !SUPER_ADMINS.includes(email)) {
@@ -262,7 +258,7 @@ exports.updateOrganization = onCall(
  * ADMIN: Reset Balance (Wipe to 0)
  */
 exports.adminResetWallet = onCall(
-  { region: "us-central1", cors: true }, 
+  { region: "us-central1" }, 
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
     if (!email || !SUPER_ADMINS.includes(email)) {
@@ -286,7 +282,7 @@ exports.adminResetWallet = onCall(
  * ADMIN: Top Up Wallet
  */
 exports.adminTopUpWallet = onCall(
-  { region: "us-central1", cors: true }, 
+  { region: "us-central1" }, 
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
     if (!email || !SUPER_ADMINS.includes(email)) {
@@ -386,7 +382,7 @@ exports.onSmsRetryTriggered = onDocumentUpdated(
 );
 
 /**
- * Birthday Scheduler (6AM)
+ * Schedulers
  */
 exports.scheduledBirthdayProcessor = onSchedule(
   {
@@ -401,9 +397,6 @@ exports.scheduledBirthdayProcessor = onSchedule(
   }
 );
 
-/**
- * Campaign Scheduler (every 1 minute)
- */
 exports.scheduledCampaignProcessor = onSchedule(
   {
     schedule: "* * * * *",
@@ -416,9 +409,6 @@ exports.scheduledCampaignProcessor = onSchedule(
   }
 );
 
-/**
- * Event Reminder Scheduler (8AM daily)
- */
 exports.scheduledEventReminderProcessor = onSchedule(
   {
     schedule: "0 8 * * *",
@@ -431,9 +421,6 @@ exports.scheduledEventReminderProcessor = onSchedule(
   }
 );
 
-/**
- * Visitor Follow-up Scheduler (9AM daily)
- */
 exports.scheduledVisitorProcessor = onSchedule(
   {
     schedule: "0 9 * * *",
@@ -446,9 +433,6 @@ exports.scheduledVisitorProcessor = onSchedule(
   }
 );
 
-/**
- * Retry Scheduler (every 5 mins)
- */
 exports.scheduledRetryProcessor = onSchedule(
   {
     schedule: "*/5 * * * *",
