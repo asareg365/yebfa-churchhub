@@ -1,14 +1,14 @@
 
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
 } from "firebase/auth";
 import { useAuth, useUser } from "@/firebase";
-import { collection, doc, setDoc, serverTimestamp, query, where, getDocs, limit } from "firebase/firestore";
+import { collection, doc, setDoc, serverTimestamp, query, where, getDocs, limit, orderBy } from "firebase/firestore";
 import { useFirestore } from "@/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
-import { Loader2, Church, Mail, Lock, ShieldCheck, Hash, UserCheck, Sparkles, CheckCircle2 } from "lucide-react";
+import { Loader2, Church, Mail, Lock, ShieldCheck, Hash, UserCheck, Sparkles, CheckCircle2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -77,6 +77,11 @@ function LoginContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [activeChurch, setActiveChurch] = useState<any>(null);
   const [isFetchingChurch, setIsFetchingChurch] = useState(!!tenantSlug);
+  
+  // States for "Join" tab
+  const [allChurches, setAllChurches] = useState<any[]>([]);
+  const [joiningChurchSlug, setJoiningChurchSlug] = useState("");
+  const [isFetchingChurches, setIsFetchingChurches] = useState(false);
 
   const auth = useAuth();
   const db = useFirestore();
@@ -88,7 +93,9 @@ function LoginContent() {
       const q = query(collection(db, "churches"), where("slug", "==", tenantSlug.toLowerCase().trim()), limit(1));
       getDocs(q).then(snap => {
         if (!snap.empty) {
-          setActiveChurch({ ...snap.docs[0].data(), id: snap.docs[0].id });
+          const data = snap.docs[0].data();
+          setActiveChurch({ ...data, id: snap.docs[0].id });
+          setJoiningChurchSlug(data.slug);
         } else {
           toast({ title: "Ministry not found", description: `Tenant ID '${tenantSlug}' is invalid.`, variant: "destructive" });
         }
@@ -97,6 +104,25 @@ function LoginContent() {
       });
     }
   }, [tenantSlug, db, toast]);
+
+  // Fetch all churches for the "Join" tab
+  useEffect(() => {
+    async function fetchChurches() {
+      if (!db) return;
+      setIsFetchingChurches(true);
+      try {
+        const q = query(collection(db, "churches"), orderBy("name", "asc"));
+        const snap = await getDocs(q);
+        const churches = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setAllChurches(churches);
+      } catch (e) {
+        console.error("Error fetching church list:", e);
+      } finally {
+        setIsFetchingChurches(false);
+      }
+    }
+    fetchChurches();
+  }, [db]);
 
   const handlePlanChange = (plan: string) => {
     setSelectedPlan(plan);
@@ -123,10 +149,19 @@ function LoginContent() {
 
   const handleIndividualSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!joiningChurchSlug) {
+      toast({ title: "Selection Required", description: "Please select the ministry you are joining.", variant: "destructive" });
+      return;
+    }
+    
     setIsLoading(true);
     try {
       await createUserWithEmailAndPassword(auth, email.toLowerCase().trim(), password);
-      toast({ title: "Account Created", description: "You can now log in to authorized ministries." });
+      const targetChurch = allChurches.find(c => c.slug === joiningChurchSlug);
+      toast({ 
+        title: "Account Created", 
+        description: `You can now access ${targetChurch?.name || 'your ministry'} if previously authorized.` 
+      });
       router.push("/dashboard");
     } catch (error: any) {
       toast({ title: "Signup Failed", description: error.message, variant: "destructive" });
@@ -328,30 +363,57 @@ function LoginContent() {
                   <UserCheck className="w-5 h-5 text-accent" />
                   Account Access
                 </CardTitle>
-                <CardDescription>Create your individual account to join an existing authorized ministry.</CardDescription>
+                <CardDescription>Create your account to join an authorized ministry.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
+                  <Label>Ministry to Join</Label>
+                  <Select value={joiningChurchSlug} onValueChange={setJoiningChurchSlug}>
+                    <SelectTrigger className="bg-white">
+                      <SelectValue placeholder={isFetchingChurches ? "Loading ministries..." : "Select your ministry"} />
+                    </SelectTrigger>
+                    <SelectContent className="glass">
+                      {allChurches.map((church) => (
+                        <SelectItem key={church.slug} value={church.slug}>
+                          {church.name}
+                        </SelectItem>
+                      ))}
+                      {allChurches.length === 0 && !isFetchingChurches && (
+                        <div className="p-2 text-xs text-muted-foreground text-center italic">No ministries found</div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground italic flex items-center gap-1">
+                    <Search className="w-3 h-3" /> Select the organization that invited you.
+                  </p>
+                </div>
+                <div className="space-y-2">
                   <Label>Your Email</Label>
-                  <Input 
-                    type="email" 
-                    placeholder="authorized-email@example.com" 
-                    className="bg-white"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                  <p className="text-[10px] text-muted-foreground">Use the exact email authorized by your ministry administrator.</p>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      type="email" 
+                      placeholder="authorized-email@example.com" 
+                      className="pl-10 bg-white"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Use the exact email authorized by your administrator.</p>
                 </div>
                 <div className="space-y-2">
                   <Label>Create Password</Label>
-                  <Input 
-                    type="password" 
-                    className="bg-white"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      type="password" 
+                      className="pl-10 bg-white"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
               </CardContent>
               <CardFooter>
