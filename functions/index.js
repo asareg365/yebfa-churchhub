@@ -160,10 +160,10 @@ exports.initializeWallets = onCall(
 );
 
 /**
- * ADMIN: Decommission Ministry (Total Data Purge)
+ * ADMIN: Delete Ministry (Total Data Purge)
  * Uses high-resiliency hybrid cleanup strategy.
  */
-exports.decommissionMinistry = onCall(
+exports.deleteMinistry = onCall(
   { 
     region: "us-central1", 
     timeoutSeconds: 540,
@@ -187,7 +187,7 @@ exports.decommissionMinistry = onCall(
         throw new HttpsError("not-found", "Organization not found.");
       }
 
-      console.log(`[DECOMMISSION_START] Purging: ${churchId} by: ${email}`);
+      console.log(`[DELETE_MINISTRY_START] Purging: ${churchId} by: ${email}`);
 
       // 1. Clear root-level technical locks
       await db.collection("smsLocks").doc(churchId).delete().catch(() => {});
@@ -214,10 +214,10 @@ exports.decommissionMinistry = onCall(
       
       return { 
         success: true, 
-        message: "Organization permanently scrubbed." 
+        message: "Organization and all associated records permanently scrubbed." 
       };
     } catch (error) {
-      console.error("DECOMMISSION_FAILURE:", error);
+      console.error("DELETE_MINISTRY_FAILURE:", error);
       const msg = error.message || "Unknown purge engine error.";
       
       if (msg.toLowerCase().includes("deadline") || msg.toLowerCase().includes("timeout")) {
@@ -372,20 +372,20 @@ exports.mnotifyDeliveryWebhook = onRequest(
     
     const db = admin.firestore();
     try {
-      const logQuery = await db.collectionGroup("smsLogs")
+      const logDoc = await db.collectionGroup("smsLogs")
         .where("providerId", "==", String(message_id))
         .limit(1)
         .get();
 
-      if (logQuery.empty) {
+      if (logDoc.empty) {
         return res.status(200).send("Log record not found (Ignored)");
       }
 
-      const logDoc = logQuery.docs[0];
+      const logRef = logDoc.docs[0].ref;
       const normalizedStatus = (status || "").toLowerCase();
       const finalStatus = normalizedStatus === "delivered" ? "delivered" : "sent";
 
-      await logDoc.ref.update({
+      await logRef.update({
         providerStatus: normalizedStatus,
         status: finalStatus,
         deliveredAt: finalStatus === "delivered" ? admin.firestore.FieldValue.serverTimestamp() : null,

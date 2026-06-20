@@ -65,7 +65,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser, auth, functions } from '@/firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -84,7 +84,7 @@ export default function SystemAdminPortal() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [managingSmsId, setManagingSmsId] = useState<string | null>(null);
-  const [ministryToDecommission, setMinistryToDecommission] = useState<any>(null);
+  const [ministryToDelete, setMinistryToDelete] = useState<any>(null);
   const [editingOrg, setEditingOrg] = useState<any>(null);
   const [topUpAmount, setTopUpAmount] = useState('500');
   const [platformStats, setPlatformStats] = useState<any>(null);
@@ -215,8 +215,8 @@ export default function SystemAdminPortal() {
     }
   };
 
-  const handleDecommission = async () => {
-    if (!ministryToDecommission || !functions) return;
+  const handleDeleteMinistry = async () => {
+    if (!ministryToDelete || !functions) return;
     setIsProcessing(true);
     
     try {
@@ -224,21 +224,21 @@ export default function SystemAdminPortal() {
         await auth.currentUser.getIdToken(true);
       }
       
-      const decommissionFn = httpsCallable(functions, 'decommissionMinistry', { timeout: 540000 });
-      const res: any = await decommissionFn({ churchId: ministryToDecommission.id });
+      const deleteFn = httpsCallable(functions, 'deleteMinistry', { timeout: 540000 });
+      const res: any = await deleteFn({ churchId: ministryToDelete.id });
       
       if (res.data?.success) {
-        toast({ title: "Organization Purged", description: "Ministry and all sub-data permanently deleted." });
-        setMinistryToDecommission(null);
+        toast({ title: "Ministry Deleted", description: "All organization records have been permanently scrubbed." });
+        setMinistryToDelete(null);
         await loadStats();
       } else {
-        throw new Error(res.data?.message || "Purge engine failed.");
+        throw new Error(res.data?.message || "Delete engine failed.");
       }
     } catch (e: any) {
-      console.error("Purge Error:", e);
+      console.error("Delete Error:", e);
       const errorMsg = e?.message || e?.details?.message || "Internal server failure during deletion.";
       toast({ 
-        title: "Purge Failed", 
+        title: "Deletion Failed", 
         description: errorMsg, 
         variant: "destructive" 
       });
@@ -358,8 +358,8 @@ export default function SystemAdminPortal() {
                             <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'suspended')} className="text-destructive"><Ban className="mr-2 h-4 w-4" /> Suspend Service</DropdownMenuItem>
                           )}
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => setMinistryToDecommission(church)} className="text-destructive font-bold focus:bg-destructive focus:text-white">
-                            <Trash2 className="mr-2 h-4 w-4" /> Decommission Org
+                          <DropdownMenuItem onClick={() => setMinistryToDelete(church)} className="text-destructive font-bold focus:bg-destructive focus:text-white">
+                            <Trash2 className="mr-2 h-4 w-4" /> Delete Ministry
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -419,15 +419,15 @@ export default function SystemAdminPortal() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!ministryToDecommission} onOpenChange={(o) => !o && setMinistryToDecommission(null)}>
+      <AlertDialog open={!!ministryToDelete} onOpenChange={(o) => !o && setMinistryToDelete(null)}>
         <AlertDialogContent className="glass border-destructive/30">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-6 w-6" /> Total Decommissioning
+              <AlertTriangle className="h-6 w-6" /> Delete Ministry
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-4 mt-2 text-foreground/80">
-                <p>You are about to permanently delete <strong>{ministryToDecommission?.name}</strong>.</p>
+                <p>You are about to permanently delete <strong>{ministryToDelete?.name}</strong>.</p>
                 <ul className="list-disc pl-6 text-sm space-y-1">
                   <li>All member records and photos will be erased.</li>
                   <li>Financial audit logs will be permanently wiped.</li>
@@ -441,12 +441,12 @@ export default function SystemAdminPortal() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
             <AlertDialogAction 
-              onClick={handleDecommission}
+              onClick={handleDeleteMinistry}
               className="bg-destructive hover:bg-destructive/90 text-white font-bold"
               disabled={isProcessing}
             >
               {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
-              Confirm & Purge
+              Confirm & Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
