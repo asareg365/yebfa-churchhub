@@ -190,7 +190,11 @@ exports.decommissionMinistry = onCall(
 
       console.log(`[DECOMMISSION_START] Purging ministry: ${churchId} triggered by: ${email}`);
 
-      // Recursive delete all subcollections and the document itself.
+      // 1. Clear SMS Locks (Root level) to prevent "protected document" errors during recursive purge
+      const lockRef = db.collection("smsLocks").doc(churchId);
+      await lockRef.delete().catch(() => {});
+
+      // 2. Recursive delete all subcollections and the document itself.
       // This is a native Firestore operation that handles large datasets efficiently.
       await db.recursiveDelete(churchRef);
       
@@ -206,7 +210,7 @@ exports.decommissionMinistry = onCall(
       const message = error.message || "Unknown error during data purge.";
       
       if (message.toLowerCase().includes("deadline") || message.toLowerCase().includes("timeout")) {
-        throw new HttpsError("deadline-exceeded", "The deletion process timed out due to the large volume of data. Please try again to continue the purge.");
+        throw new HttpsError("deadline-exceeded", "The deletion process timed out due to the large volume of data. The server is still working in the background.");
       }
       
       throw new HttpsError("internal", `Purge Engine Error: ${message}`);

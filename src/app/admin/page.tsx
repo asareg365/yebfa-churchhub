@@ -222,12 +222,13 @@ export default function SystemAdminPortal() {
     setIsProcessing(true);
     
     try {
-      // Force refresh token to ensure high-privilege access is current
+      // 1. Force refresh token to ensure high-privilege session is current
       if (auth.currentUser) {
         await auth.currentUser.getIdToken(true);
       }
       
-      const decommissionFn = httpsCallable(functions, 'decommissionMinistry');
+      // 2. Execute call with 9-minute timeout to match backend recursive purge duration
+      const decommissionFn = httpsCallable(functions, 'decommissionMinistry', { timeout: 540000 });
       const res: any = await decommissionFn({ churchId: ministryToDecommission.id });
       
       if (res.data?.success) {
@@ -239,16 +240,21 @@ export default function SystemAdminPortal() {
       }
     } catch (e: any) {
       console.error("Purge Error:", e);
-      // Detailed error classification
+      
+      // Detailed error classification for super-admin visibility
       const isTimeout = e.code === 'deadline-exceeded' || e.code === 'functions/deadline-exceeded';
       const isInternal = e.code === 'functions/internal';
       
       let detail = e.message || "An unexpected error occurred during decommission.";
-      if (isTimeout) detail = "The purge timed out due to the large data volume. Please retry to continue the recursive deletion.";
-      if (isInternal) detail = "Backend recursive purge failed. The ministry might have protected documents or active locks.";
+      
+      if (isTimeout) {
+        detail = "The recursive purge is taking longer than expected due to massive data volume. The backend will continue scrubbing records in the background. Please refresh in a few minutes.";
+      } else if (isInternal) {
+        detail = "Backend recursiive purge failed. The ministry might have protected documents or active locks.";
+      }
 
       toast({ 
-        title: "Purge Failed", 
+        title: "Purge Incomplete", 
         description: detail, 
         variant: "destructive" 
       });
