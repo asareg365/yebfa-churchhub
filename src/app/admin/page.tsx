@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -215,14 +214,30 @@ export default function SystemAdminPortal() {
   const handleDecommission = async () => {
     if (!ministryToDecommission || !functions) return;
     setIsProcessing(true);
-    const decommissionFn = httpsCallable(functions, 'decommissionMinistry');
+    
     try {
-      await decommissionFn({ churchId: ministryToDecommission.id });
-      toast({ title: "Organization Purged", description: "Ministry and all sub-data permanently deleted." });
-      setMinistryToDecommission(null);
-      await loadStats();
+      // Force refresh of ID token to ensure auth context is current for high-privilege action
+      if (auth.currentUser) {
+        await auth.currentUser.getIdToken(true);
+      }
+      
+      const decommissionFn = httpsCallable(functions, 'decommissionMinistry');
+      const res: any = await decommissionFn({ churchId: ministryToDecommission.id });
+      
+      if (res.data?.success) {
+        toast({ title: "Organization Purged", description: "Ministry and all sub-data permanently deleted." });
+        setMinistryToDecommission(null);
+        await loadStats();
+      } else {
+        throw new Error(res.data?.message || "Purge engine failed without specific error.");
+      }
     } catch (e: any) {
-      toast({ title: "Purge Failed", description: e.message, variant: "destructive" });
+      console.error("Purge Error:", e);
+      toast({ 
+        title: "Purge Failed", 
+        description: e.message || "An unexpected error occurred during decommission.", 
+        variant: "destructive" 
+      });
     } finally {
       setIsProcessing(false);
     }

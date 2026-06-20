@@ -101,9 +101,15 @@ exports.getSystemStats = onCall(
 
 /**
  * ADMIN: Decommission Ministry (Total Data Purge)
+ * High-privilege operation with recursive deletion.
  */
 exports.decommissionMinistry = onCall(
-  { region: "us-central1", cors: true },
+  { 
+    region: "us-central1", 
+    cors: true,
+    timeoutSeconds: 300, // Boosted to 5 mins for recursive delete
+    memory: "1GiB"
+  },
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
     if (!email || !SUPER_ADMINS.includes(email)) {
@@ -118,6 +124,7 @@ exports.decommissionMinistry = onCall(
       const churchRef = db.collection("churches").doc(churchId);
       
       // Perform recursive deletion of the document and all subcollections
+      // This is a heavy operation requiring the boosted execution settings
       await db.recursiveDelete(churchRef);
       
       console.log(`[DECOMMISSION] Ministry ${churchId} has been purged by ${email}`);
@@ -125,7 +132,7 @@ exports.decommissionMinistry = onCall(
       return { success: true, message: "Organization and all associated data have been permanently removed." };
     } catch (error) {
       console.error("DECOMMISSION_ERROR:", error);
-      throw new HttpsError("internal", error.message);
+      throw new HttpsError("internal", String(error.message || "Total purge engine failure"));
     }
   }
 );
