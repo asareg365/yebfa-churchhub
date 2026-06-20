@@ -1,8 +1,7 @@
-
 "use client";
 
 import { useState, useMemo } from "react";
-import { CreditCard, ArrowUpRight, DollarSign, FileText, Loader2, Plus, MoreVertical, Pencil, Trash2, BarChart3, Info } from "lucide-react";
+import { CreditCard, ArrowUpRight, DollarSign, FileText, Loader2, Plus, MoreVertical, Pencil, Trash2, BarChart3, Info, FileUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -34,8 +33,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useCollection, useFirestore, useUser } from "@/firebase";
-import { collection, addDoc, serverTimestamp, query, orderBy, doc, updateDoc, deleteDoc, where, limit } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, orderBy, doc, updateDoc, deleteDoc, where, limit, writeBatch } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -48,6 +48,9 @@ export default function FinancesPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [bulkData, setBulkData] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   
   const churchQuery = useMemo(() => {
@@ -83,6 +86,61 @@ export default function FinancesPage() {
       setNewTransaction({ date: new Date().toISOString().split('T')[0], amount: 0, type: "Tithe", method: "MoMo" });
       toast({ title: "Transaction recorded" });
     } catch (e) { toast({ title: "Save failed", variant: "destructive" }); }
+  };
+
+  const handleBulkImport = async () => {
+    if (!bulkData.trim() || !financesRef || !db) return;
+    setIsImporting(true);
+
+    try {
+      const lines = bulkData.split(/\r?\n/).filter(l => l.trim().length > 0);
+      const batch = writeBatch(db);
+      let count = 0;
+      let skipped = 0;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const parts = line.split(/\t|,/).map(p => p.trim().replace(/^["'](.+)["']$/, '$1'));
+        
+        if (parts.length < 3) {
+          skipped++;
+          continue;
+        }
+
+        const [date, type, amount, method] = parts;
+
+        // Skip header
+        if (i === 0 && date.toLowerCase().includes("date")) continue;
+
+        if (!date || !amount) {
+          skipped++;
+          continue;
+        }
+
+        const txData = {
+          date,
+          type: type || "Tithe",
+          amount: Number(amount.replace(/[^0-9.]/g, "")) || 0,
+          method: method || "Cash",
+          createdAt: serverTimestamp()
+        };
+
+        const newDocRef = doc(financesRef);
+        batch.set(newDocRef, txData);
+        count++;
+
+        if (count >= 500) break;
+      }
+
+      await batch.commit();
+      toast({ title: "Import Successful", description: `${count} transactions added. ${skipped > 0 ? skipped + ' rows skipped.' : ''}` });
+      setBulkData("");
+      setIsBulkImportOpen(false);
+    } catch (error: any) {
+      toast({ title: "Import Failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const handleUpdateTransaction = async () => {
@@ -131,6 +189,9 @@ export default function FinancesPage() {
           <p className="text-muted-foreground">Manage organizational funds for {currentChurch?.name}.</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setIsBulkImportOpen(true)} className="rounded-xl border-white/10 glass" disabled={!currentChurch}>
+            <FileUp className="mr-2 h-4 w-4" /> Bulk Import
+          </Button>
           <Button variant="outline" onClick={() => setIsReportDialogOpen(true)} className="rounded-xl"><FileText className="mr-2 h-4 w-4" /> Reports</Button>
           <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent text-accent-foreground rounded-xl"><Plus className="mr-2 h-4 w-4" /> Record Income</Button>
         </div>
@@ -164,6 +225,29 @@ export default function FinancesPage() {
           </TableBody>
         </Table>
       </Card>
+
+      <Dialog open={isBulkImportOpen} onOpenChange={setIsBulkImportOpen}>
+        <DialogContent className="glass max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Excel Financial Import</DialogTitle>
+            <DialogDescription>Paste rows from Excel (Date, Type, Amount, Method).</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea 
+              placeholder="2024-05-15	Tithe	1500	MoMo" 
+              className="min-h-[250px] font-mono text-xs bg-muted/20"
+              value={bulkData}
+              onChange={e => setBulkData(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsBulkImportOpen(false)}>Cancel</Button>
+            <Button onClick={handleBulkImport} disabled={isImporting || !bulkData.trim()}>
+              {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Process Transactions"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isReportDialogOpen} onOpenChange={setIsReportDialogOpen}>
         <DialogContent className="glass">

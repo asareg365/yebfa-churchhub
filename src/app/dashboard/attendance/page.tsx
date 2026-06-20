@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { CheckCircle2, Clock, Users, Plus, Loader2, Calendar as CalendarIcon, History, BarChart3, Fingerprint, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Clock, Users, Plus, Loader2, Calendar as CalendarIcon, History, BarChart3, Fingerprint, ShieldCheck, FileUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,13 +12,15 @@ import {
   DialogHeader, 
   DialogTitle, 
   DialogTrigger,
-  DialogFooter
+  DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useCollection, useFirestore, useUser } from "@/firebase";
-import { collection, addDoc, serverTimestamp, query, orderBy, limit, where } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, orderBy, limit, where, writeBatch, doc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -29,6 +31,9 @@ export default function AttendancePage() {
   const { user } = useUser();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [bulkData, setBulkData] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -90,6 +95,60 @@ export default function AttendancePage() {
       });
   };
 
+  const handleBulkImport = async () => {
+    if (!bulkData.trim() || !attendanceRef || !db) return;
+    setIsImporting(true);
+
+    try {
+      const lines = bulkData.split(/\r?\n/).filter(l => l.trim().length > 0);
+      const batch = writeBatch(db);
+      let count = 0;
+      let skipped = 0;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const parts = line.split(/\t|,/).map(p => p.trim().replace(/^["'](.+)["']$/, '$1'));
+        
+        if (parts.length < 2) {
+          skipped++;
+          continue;
+        }
+
+        const [date, serviceName, headcount] = parts;
+
+        // Skip header
+        if (i === 0 && (date.toLowerCase().includes("date") || serviceName.toLowerCase().includes("service"))) continue;
+
+        if (!date || !headcount) {
+          skipped++;
+          continue;
+        }
+
+        const recordData = {
+          date,
+          serviceName: serviceName || "Special Service",
+          count: parseInt(headcount) || 0,
+          createdAt: serverTimestamp()
+        };
+
+        const newDocRef = doc(attendanceRef);
+        batch.set(newDocRef, recordData);
+        count++;
+
+        if (count >= 500) break;
+      }
+
+      await batch.commit();
+      toast({ title: "Import Successful", description: `${count} records added. ${skipped > 0 ? skipped + ' rows skipped.' : ''}` });
+      setBulkData("");
+      setIsBulkImportOpen(false);
+    } catch (error: any) {
+      toast({ title: "Import Failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const chartData = useMemo(() => [...(attendance || [])].reverse(), [attendance]);
   const lastSunday = attendance?.[0]?.count || 0;
 
@@ -103,10 +162,38 @@ export default function AttendancePage() {
           <p className="text-muted-foreground">Monitor service trends for {currentChurch?.name || 'your ministry'}.</p>
         </div>
         <div className="flex gap-2">
+          <Dialog open={isBulkImportOpen} onOpenChange={setIsBulkImportOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="rounded-xl border-white/10 glass" disabled={!currentChurch}>
+                <FileUp className="mr-2 h-4 w-4" /> Bulk Import
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="glass max-w-xl">
+              <DialogHeader>
+                <DialogTitle>Excel Attendance Import</DialogTitle>
+                <DialogDescription>Paste rows from Excel (Date, Service Name, Headcount).</DialogDescription>
+              </DialogHeader>
+              <div className="py-4">
+                <Textarea 
+                  placeholder="2024-05-12	Sunday Service	450" 
+                  className="min-h-[250px] font-mono text-xs bg-muted/20"
+                  value={bulkData}
+                  onChange={e => setBulkData(e.target.value)}
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsBulkImportOpen(false)}>Cancel</Button>
+                <Button onClick={handleBulkImport} disabled={isImporting || !bulkData.trim()}>
+                  {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Process Rows"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-primary" disabled={!currentChurch}>
-                <Plus className="mr-2 h-4 w-4" /> Record Attendance
+              <Button className="bg-primary rounded-xl" disabled={!currentChurch}>
+                <Plus className="mr-2 h-4 w-4" /> Record Service
               </Button>
             </DialogTrigger>
             <DialogContent className="glass">

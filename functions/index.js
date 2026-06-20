@@ -17,7 +17,7 @@ const { processSMSQueueItem, queueSMS, creditWallet, resetWallet } = require("./
 const { dispatchAllBirthdays } = require("./schedulers/birthdayScheduler");
 const { processScheduledCampaigns } = require("./schedulers/campaignScheduler");
 const { processEventReminders } = require("./schedulers/eventScheduler");
-const { processVisitorFollowups } = require("./schedulers/visitorFollowups");
+const { processVisitorFollowups } = require("./schedulers/visitorScheduler");
 const { retryFailedSMS } = require("./schedulers/retryScheduler");
 
 /**
@@ -123,6 +123,11 @@ exports.decommissionMinistry = onCall(
       const db = admin.firestore();
       const churchRef = db.collection("churches").doc(churchId);
       
+      const churchDoc = await churchRef.get();
+      if (!churchDoc.exists) {
+        throw new HttpsError("not-found", "Organization not found in system.");
+      }
+
       // Perform recursive deletion of the document and all subcollections
       // This is a heavy operation requiring the boosted execution settings
       await db.recursiveDelete(churchRef);
