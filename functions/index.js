@@ -30,7 +30,7 @@ exports.getSystemStats = onCall(
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
     if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized access");
+      throw new HttpsError("permission-denied", "Unauthorized access. System Administrator privileges required.");
     }
 
     try {
@@ -92,8 +92,8 @@ exports.getSystemStats = onCall(
         topSpenders
       };
     } catch (err) {
-      console.error("STATS ENGINE FAILURE:", err);
-      throw new HttpsError("internal", err.message || "Stats engine failed");
+      console.error("STATS_ENGINE_FAILURE:", err);
+      throw new HttpsError("internal", err.message || "Stats engine encountered an internal failure.");
     }
   }
 );
@@ -155,7 +155,7 @@ exports.initializeWallets = onCall(
       return { success: true, message: `Integrity sync complete. ${updatedTotal} organizations updated.` };
     } catch (error) {
       console.error("SYNC_ERROR:", error);
-      throw new HttpsError("internal", error.message);
+      throw new HttpsError("internal", `Platform sync error: ${error.message}`);
     }
   }
 );
@@ -203,11 +203,10 @@ exports.decommissionMinistry = onCall(
     } catch (error) {
       console.error("DECOMMISSION_FAILURE:", error);
       
-      // Classify the error for better client handling
       const message = error.message || "Unknown error during data purge.";
       
-      if (message.includes("deadline") || message.includes("timeout")) {
-        throw new HttpsError("deadline-exceeded", "The deletion process timed out due to the large volume of data. Some data might remain; please try again to complete the purge.");
+      if (message.toLowerCase().includes("deadline") || message.toLowerCase().includes("timeout")) {
+        throw new HttpsError("deadline-exceeded", "The deletion process timed out due to the large volume of data. Please try again to continue the purge.");
       }
       
       throw new HttpsError("internal", `Purge Engine Error: ${message}`);
@@ -230,8 +229,9 @@ exports.updateChurchStatus = onCall(
     if (!churchId || !status) throw new HttpsError("invalid-argument", "Missing parameters");
 
     try {
+      const db = admin.firestore();
       const isApproved = status === 'active';
-      await admin.firestore().collection("churches").doc(churchId).set({
+      await db.collection("churches").doc(churchId).set({
         sms: {
           subscriptionStatus: status,
           approved: isApproved,
@@ -267,7 +267,8 @@ exports.updateOrganization = onCall(
     if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID");
     
     try {
-      await admin.firestore().collection("churches").doc(churchId).set({
+      const db = admin.firestore();
+      await db.collection("churches").doc(churchId).set({
         name: name || "Unnamed Ministry",
         slug: slug || "no-slug",
         plan: plan || "Starter",

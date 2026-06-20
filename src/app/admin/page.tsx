@@ -101,9 +101,13 @@ export default function SystemAdminPortal() {
     
     setIsRefreshing(true);
     setStatsError(false);
-    const fetchStats = httpsCallable(functions, 'getSystemStats');
+    
     try {
+      // Force token refresh for stats sync
+      await auth.currentUser.getIdToken(true);
+      const fetchStats = httpsCallable(functions, 'getSystemStats');
       const res: any = await fetchStats();
+      
       if (res.data && res.data.success) {
         setPlatformStats(res.data);
       } else {
@@ -112,8 +116,9 @@ export default function SystemAdminPortal() {
     } catch (err: any) {
       console.error("System Stats Sync Error:", err);
       setStatsError(true);
-      setErrorMessage(err.message || "Could not fetch platform data.");
-      toast({ title: "Stats Sync Failed", description: err.message, variant: "destructive" });
+      const detail = err.code === 'functions/internal' ? "Backend service initialization error. Please check logs." : (err.message || "Could not fetch platform data.");
+      setErrorMessage(detail);
+      toast({ title: "Stats Sync Failed", description: detail, variant: "destructive" });
     } finally {
       setIsRefreshing(false);
     }
@@ -169,7 +174,8 @@ export default function SystemAdminPortal() {
       toast({ title: "System Validated", description: res.data.message || "Integrity sync complete." });
       await loadStats();
     } catch (e: any) {
-      toast({ title: "Validation Failed", description: e.message || "System sync error.", variant: "destructive" });
+      const detail = e.code === 'functions/internal' ? "Sync failed due to standard batch limits. Engineering notified." : e.message;
+      toast({ title: "Validation Failed", description: detail, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
@@ -233,15 +239,17 @@ export default function SystemAdminPortal() {
       }
     } catch (e: any) {
       console.error("Purge Error:", e);
-      // HttpsError code check for specific client-side messaging
-      const isTimeout = e.code === 'deadline-exceeded' || (e.message && e.message.toLowerCase().includes('deadline'));
-      const detail = e.message || "An unexpected error occurred during decommission.";
+      // Detailed error classification
+      const isTimeout = e.code === 'deadline-exceeded' || e.code === 'functions/deadline-exceeded';
+      const isInternal = e.code === 'functions/internal';
       
+      let detail = e.message || "An unexpected error occurred during decommission.";
+      if (isTimeout) detail = "The purge timed out due to the large data volume. Please retry to continue the recursive deletion.";
+      if (isInternal) detail = "Backend recursive purge failed. The ministry might have protected documents or active locks.";
+
       toast({ 
         title: "Purge Failed", 
-        description: isTimeout 
-          ? "Operation timed out due to the large data volume. Please try again to continue the purge process." 
-          : detail, 
+        description: detail, 
         variant: "destructive" 
       });
     } finally {
@@ -392,7 +400,10 @@ export default function SystemAdminPortal() {
       {/* Edit Organization Dialog */}
       <Dialog open={!!editingOrg} onOpenChange={(o) => !o && setEditingOrg(null)}>
         <DialogContent className="glass">
-          <DialogHeader><DialogTitle>Edit Organization</DialogTitle><DialogDescription>Modify primary markers for {editingOrg?.name}.</DialogDescription></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Edit Organization</DialogTitle>
+            <DialogDescription>Modify primary markers for {editingOrg?.name}.</DialogDescription>
+          </DialogHeader>
           <div className="py-6 space-y-4">
             <div className="space-y-2"><Label>Ministry Name</Label><Input value={editingOrg?.name || ''} onChange={(e) => setEditingOrg({...editingOrg, name: e.target.value})} className="bg-white" /></div>
             <div className="space-y-2"><Label>Tenant Slug</Label><Input value={editingOrg?.slug || ''} onChange={(e) => setEditingOrg({...editingOrg, slug: e.target.value})} className="bg-white font-mono" /></div>
@@ -405,7 +416,10 @@ export default function SystemAdminPortal() {
       {/* Top-up Dialog */}
       <Dialog open={!!managingSmsId} onOpenChange={(o) => !o && setManagingSmsId(null)}>
         <DialogContent className="glass">
-          <DialogHeader><DialogTitle>Wallet Credit Allocation</DialogTitle><DialogDescription>Adding credits for <strong>{activeChurchSms?.name}</strong>.</DialogDescription></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Wallet Credit Allocation</DialogTitle>
+            <DialogDescription>Adding credits for <strong>{activeChurchSms?.name}</strong>.</DialogDescription>
+          </DialogHeader>
           <div className="py-6 space-y-4">
             <div className="p-4 rounded-xl bg-muted/20 border flex justify-between items-center"><span className="text-sm font-medium">Current Balance:</span><span className="text-xl font-bold text-foreground">{(activeChurchSms?.sms?.credits || 0).toLocaleString()} Credits</span></div>
             <div className="space-y-2">
