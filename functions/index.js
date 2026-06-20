@@ -46,6 +46,7 @@ exports.getSystemStats = onCall(
           plan: d.plan || d.subscription?.plan || "Starter",
           status: d.status || "Pending",
           deletionStatus: d.deletionStatus || null,
+          deletedAt: d.deletedAt?.toDate ? d.deletedAt.toDate().toISOString() : null,
           registeredAt: d.registeredAt?.toDate ? d.registeredAt.toDate().toISOString() : (d.registeredAt ? String(d.registeredAt) : null),
           sms: {
             credits: Number(sms.credits || 0),
@@ -63,15 +64,18 @@ exports.getSystemStats = onCall(
       let activeTenants = 0;
 
       churches.forEach(church => {
-        totalRevenue += Number(church.sms?.totalTopups || 0);
-        totalSent += Number(church.sms?.sent || 0);
-        totalFailed += Number(church.sms?.failed || 0);
-        if (church.sms?.subscriptionStatus === "active") {
-          activeTenants++;
+        if (church.deletionStatus !== 'DELETED') {
+          totalRevenue += Number(church.sms?.totalTopups || 0);
+          totalSent += Number(church.sms?.sent || 0);
+          totalFailed += Number(church.sms?.failed || 0);
+          if (church.sms?.subscriptionStatus === "active") {
+            activeTenants++;
+          }
         }
       });
 
       const topSpenders = churches
+        .filter(c => c.deletionStatus !== 'DELETED')
         .sort((a, b) => (Number(b.sms?.sent || 0)) - (Number(a.sms?.sent || 0)))
         .slice(0, 5)
         .map(c => ({
@@ -82,7 +86,7 @@ exports.getSystemStats = onCall(
 
       return {
         success: true,
-        totalTenants: churches.length,
+        totalTenants: churches.filter(c => c.deletionStatus !== 'DELETED').length,
         activeTenants,
         totalRevenue,
         totalSent,
@@ -98,55 +102,93 @@ exports.getSystemStats = onCall(
 );
 
 /**
- * ADMIN: Delete Ministry (DEBUG VERSION)
+ * ADMIN: Soft Delete Ministry
  */
 exports.deleteMinistry = onCall(
   { region: "us-central1" },
   async (request) => {
-    console.log("STEP 0: function entered");
+    const email = request.auth?.token?.email?.toLowerCase().trim();
+    if (!email || !SUPER_ADMINS.includes(email)) {
+      throw new HttpsError("permission-denied", "Unauthorized");
+    }
+
+    const { churchId } = request.data || {};
+    if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId");
+
+    const db = admin.firestore();
+    const churchRef = db.collection("churches").doc(churchId);
+    const churchDoc = await churchRef.get();
+
+    if (!churchDoc.exists) throw new HttpsError("not-found", "Organization not found.");
+
+    // Safety Shield
+    const churchData = churchDoc.data();
+    if (churchData.sms?.subscriptionStatus === "active" || churchData.status === "Approved") {
+      throw new HttpsError(
+        "failed-precondition", 
+        "Safety Shield Active: You must suspend the organization service first before it can be moved to the Recycle Bin."
+      );
+    }
+
+    await churchRef.update({
+      deletionStatus: "DELETED",
+      deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+      deletedBy: email
+    });
+
+    return { success: true };
+  }
+);
+
+/**
+ * ADMIN: Restore Ministry
+ */
+exports.restoreMinistry = onCall(
+  { region: "us-central1" },
+  async (request) => {
+    const email = request.auth?.token?.email?.toLowerCase().trim();
+    if (!email || !SUPER_ADMINS.includes(email)) {
+      throw new HttpsError("permission-denied", "Unauthorized");
+    }
+
+    const { churchId } = request.data || {};
+    if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId");
+
+    const db = admin.firestore();
+    const churchRef = db.collection("churches").doc(churchId);
+    
+    await churchRef.update({
+      deletionStatus: null,
+      deletedAt: null,
+      deletedBy: null,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { success: true };
+  }
+);
+
+/**
+ * ADMIN: Permanent Purge (Hard Delete)
+ */
+exports.hardPurgeMinistry = onCall(
+  { region: "us-central1", memory: "2GiB", timeoutSeconds: 540 },
+  async (request) => {
+    const email = request.auth?.token?.email?.toLowerCase().trim();
+    if (!email || !SUPER_ADMINS.includes(email)) {
+      throw new HttpsError("permission-denied", "Unauthorized");
+    }
+
+    const { churchId } = request.data || {};
+    if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId");
+
+    const db = admin.firestore();
+    const churchRef = db.collection("churches").doc(churchId);
 
     try {
-      const email = request.auth?.token?.email?.toLowerCase().trim();
-      console.log("STEP 1: auth ok", email);
-
-      if (!SUPER_ADMINS.includes(email)) {
-        throw new HttpsError("permission-denied", "Unauthorized");
-      }
-
-      const { churchId } = request.data || {};
-      console.log("STEP 2: churchId", churchId);
-
-      if (!churchId) {
-        throw new HttpsError("invalid-argument", "Missing churchId");
-      }
-
-      const db = admin.firestore();
-      const churchRef = db.collection("churches").doc(churchId);
-
-      const churchDoc = await churchRef.get();
-      console.log("STEP 3: church exists?", churchDoc.exists);
-
-      if (!churchDoc.exists) {
-        throw new HttpsError("not-found", "Organization not found.");
-      }
-
-      // Safety Shield
-      const churchData = churchDoc.data();
-      if (churchData.sms?.subscriptionStatus === "active" || churchData.status === "Approved") {
-        console.log("STEP 3.5: Safety Shield Triggered");
-        throw new HttpsError(
-          "failed-precondition", 
-          "Safety Shield Active: You must suspend the organization service first before it can be deleted."
-        );
-      }
-
-      console.log("STEP 4: deleting smsLocks");
-      await db.collection("smsLocks").doc(churchId).delete().catch(console.error);
-
-      console.log("STEP 5: deleting ledger");
+      // 1. Scrub Ledger
       let snap;
       let i = 0;
-
       do {
         i++;
         snap = await db.collection("smsLedger")
@@ -154,28 +196,23 @@ exports.deleteMinistry = onCall(
           .limit(200)
           .get();
 
-        console.log("ledger batch", i, snap.size);
-
         if (!snap.empty) {
           const batch = db.batch();
           snap.docs.forEach(d => batch.delete(d.ref));
           await batch.commit();
         }
-
       } while (!snap.empty && i < 100);
 
-      console.log("STEP 6: BEFORE recursive delete (DISABLED FOR DEBUG)");
-      // await db.recursiveDelete(churchRef);
+      // 2. Scrub Locks
+      await db.collection("smsLocks").doc(churchId).delete().catch(console.error);
 
-      console.log("STEP 7: deleting church doc");
-      await churchRef.delete();
-
-      console.log("STEP 8: DONE");
+      // 3. Recursive Delete
+      await db.recursiveDelete(churchRef);
 
       return { success: true };
     } catch (error) {
-      console.error("🔥 FULL DELETE ERROR:", error);
-      throw new HttpsError("internal", error.message);
+      console.error("PURGE_ERROR:", error);
+      throw new HttpsError("internal", "Deep purge failed: " + error.message);
     }
   }
 );
