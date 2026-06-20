@@ -100,6 +100,7 @@ exports.getSystemStats = onCall(
 
 /**
  * ADMIN: Initialize Wallets / Integrity Sync
+ * Handles chunked batching for large platform updates.
  */
 exports.initializeWallets = onCall(
   { region: "us-central1" },
@@ -112,30 +113,46 @@ exports.initializeWallets = onCall(
     try {
       const db = admin.firestore();
       const churchesSnap = await db.collection("churches").get();
-      const batch = db.batch();
-      let updatedCount = 0;
+      
+      const chunks = [];
+      const CHUNK_SIZE = 450;
+      
+      for (let i = 0; i < churchesSnap.docs.length; i += CHUNK_SIZE) {
+        chunks.push(churchesSnap.docs.slice(i, i + CHUNK_SIZE));
+      }
 
-      churchesSnap.docs.forEach(churchDoc => {
-        const data = churchDoc.data();
-        if (!data.sms) {
-          batch.set(churchDoc.ref, {
-            sms: {
-              credits: 0,
-              totalSpent: 0,
-              totalTopups: 0,
-              enabled: false,
-              approved: false,
-              subscriptionStatus: 'pending',
-              status: 'Pending',
-              stats: { sent: 0, failed: 0 }
-            }
-          }, { merge: true });
-          updatedCount++;
+      let updatedTotal = 0;
+
+      for (const chunk of chunks) {
+        const batch = db.batch();
+        let chunkUpdates = 0;
+
+        chunk.forEach(churchDoc => {
+          const data = churchDoc.data();
+          if (!data.sms) {
+            batch.set(churchDoc.ref, {
+              sms: {
+                credits: 0,
+                totalSpent: 0,
+                totalTopups: 0,
+                enabled: false,
+                approved: false,
+                subscriptionStatus: 'pending',
+                status: 'Pending',
+                stats: { sent: 0, failed: 0 }
+              }
+            }, { merge: true });
+            chunkUpdates++;
+          }
+        });
+
+        if (chunkUpdates > 0) {
+          await batch.commit();
+          updatedTotal += chunkUpdates;
         }
-      });
+      }
 
-      if (updatedCount > 0) await batch.commit();
-      return { success: true, message: `Integrity sync complete. ${updatedCount} organizations updated.` };
+      return { success: true, message: `Integrity sync complete. ${updatedTotal} organizations updated.` };
     } catch (error) {
       console.error("SYNC_ERROR:", error);
       throw new HttpsError("internal", error.message);
@@ -156,11 +173,11 @@ exports.decommissionMinistry = onCall(
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
     if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized access");
+      throw new HttpsError("permission-denied", "Unauthorized access. System Administrator privileges required.");
     }
 
     const { churchId } = request.data;
-    if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID");
+    if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID for decommissioning.");
 
     try {
       const db = admin.firestore();
