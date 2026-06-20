@@ -114,6 +114,8 @@ export default function MembersPage() {
   const membersRef = useMemo(() => currentChurch?.id ? collection(db, "churches", currentChurch.id, "members") : null, [db, currentChurch?.id]);
   const { data: members, loading } = useCollection(membersRef);
 
+  const isCatholic = currentChurch?.denomination === 'Catholic';
+
   const [newMember, setNewMember] = useState({
     name: "",
     department: "Music",
@@ -148,6 +150,29 @@ export default function MembersPage() {
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const toggleSociety = (society: string, isEdit: boolean) => {
+    if (isEdit) {
+      const current = editingMember.societies || [];
+      const updated = current.includes(society) 
+        ? current.filter((s: string) => s !== society) 
+        : [...current, society];
+      setEditingMember({ ...editingMember, societies: updated });
+    } else {
+      const current = newMember.societies || [];
+      const updated = current.includes(society) 
+        ? current.filter((s: string) => s !== society) 
+        : [...current, society];
+      setNewMember({ ...newMember, societies: updated });
+    }
+  };
+
+  const handleAddCustomSociety = (isEdit: boolean) => {
+    const val = customSocietyInput.trim();
+    if (!val) return;
+    toggleSociety(val, isEdit);
+    setCustomSocietyInput("");
   };
 
   const handleAddMember = async () => {
@@ -265,22 +290,6 @@ export default function MembersPage() {
     }
   };
 
-  const toggleSociety = (society: string, isEdit: boolean) => {
-    if (isEdit) {
-      const current = editingMember.societies || [];
-      const updated = current.includes(society) 
-        ? current.filter((s: string) => s !== society) 
-        : [...current, society];
-      setEditingMember({ ...editingMember, societies: updated });
-    } else {
-      const current = newMember.societies || [];
-      const updated = current.includes(society) 
-        ? current.filter((s: string) => s !== society) 
-        : [...current, society];
-      setNewMember({ ...newMember, societies: updated });
-    }
-  };
-
   const filteredMembers = useMemo(() => {
     return (Array.isArray(members) ? members : []).filter(m => {
       const matchesSearch = (m.name?.toLowerCase().includes(searchTerm.toLowerCase()) || m.department?.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -329,7 +338,7 @@ export default function MembersPage() {
             <DialogTrigger asChild><Button className="flex-1 md:flex-none bg-primary" disabled={!currentChurch}><Plus className="mr-2 h-4 w-4" /> Add Member</Button></DialogTrigger>
             <DialogContent className="glass max-w-2xl">
               <DialogHeader><DialogTitle>Add New Member</DialogTitle><DialogDescription>Enter member details or take a quick photo.</DialogDescription></DialogHeader>
-              <div className="space-y-6 py-4">
+              <div className="space-y-6 py-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                 <div className="flex items-center gap-6">
                   <Avatar className="h-24 w-24 border-2 border-primary/20 shadow-xl">
                     <AvatarImage src={newMember.photo} />
@@ -353,6 +362,69 @@ export default function MembersPage() {
                   <div className="space-y-2"><Label>Phone</Label><Input value={newMember.phone} onChange={(e) => setNewMember({...newMember, phone: e.target.value})} placeholder="0240000000" /></div>
                   <div className="space-y-2"><Label>Date of Birth</Label><Input type="date" value={newMember.dateOfBirth} onChange={(e) => setNewMember({...newMember, dateOfBirth: e.target.value})} /></div>
                 </div>
+                <div className="space-y-2">
+                  <Label>Department</Label>
+                  <Select value={newMember.department} onValueChange={(v) => setNewMember({...newMember, department: v})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {isCatholic && (
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-primary" />
+                      Societies & Groups
+                    </Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between bg-muted/20 border-border h-11 text-left font-normal">
+                          <span className="truncate">
+                            {newMember.societies.length > 0 ? `${newMember.societies.length} Selected` : "Select Societies"}
+                          </span>
+                          <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 glass overflow-hidden" align="start">
+                        <ScrollArea className="h-64">
+                          <div className="p-2 space-y-1">
+                            {STANDARD_SOCIETIES.map(society => {
+                              const isSelected = newMember.societies.includes(society);
+                              return (
+                                <button 
+                                  key={society} 
+                                  onClick={() => toggleSociety(society, false)}
+                                  className={cn("w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-colors", isSelected ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted/50")}
+                                >
+                                  <div className={cn("w-4 h-4 border rounded flex items-center justify-center", isSelected ? "bg-primary border-primary" : "border-muted-foreground/30")}>
+                                    {isSelected && <Check className="h-3 w-3 text-white" />}
+                                  </div>
+                                  <span className="text-sm">{society}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </ScrollArea>
+                        <div className="p-3 border-t border-border bg-muted/30 space-y-2">
+                          <Label className="text-[10px] uppercase font-bold text-muted-foreground">Add Other Society</Label>
+                          <div className="flex gap-2">
+                            <Input placeholder="Enter name" value={customSocietyInput} onChange={e => setCustomSocietyInput(e.target.value)} className="h-9 text-sm" />
+                            <Button size="icon" className="h-9 w-9 shrink-0" onClick={() => handleAddCustomSociety(false)}><Plus className="h-4 w-4" /></Button>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {newMember.societies.map(s => (
+                        <Badge key={s} variant="secondary" className="bg-primary/5 text-primary border-primary/20 flex items-center gap-1">
+                          {s} <Trash2 className="w-3 h-3 cursor-pointer opacity-50 hover:opacity-100" onClick={() => toggleSociety(s, false)} />
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               <DialogFooter><Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button><Button onClick={handleAddMember}>Save Member</Button></DialogFooter>
             </DialogContent>
@@ -425,12 +497,11 @@ export default function MembersPage() {
         </div>
       </Tabs>
 
-      {/* Edit Member Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="glass max-w-2xl">
           <DialogHeader><DialogTitle>Edit Member Profile</DialogTitle><DialogDescription>Update details for {editingMember?.name}.</DialogDescription></DialogHeader>
           {editingMember && (
-            <div className="space-y-6 py-4">
+            <div className="space-y-6 py-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
               <div className="flex items-center gap-6">
                 <Avatar className="h-24 w-24 border-2 border-primary/20 shadow-xl">
                   <AvatarImage src={editingMember.photo} />
@@ -455,6 +526,60 @@ export default function MembersPage() {
                 <div className="space-y-2"><Label>Date of Birth</Label><Input type="date" value={editingMember.dateOfBirth} onChange={(e) => setEditingMember({...editingMember, dateOfBirth: e.target.value})} /></div>
               </div>
               <div className="space-y-2"><Label>Department</Label><Select value={editingMember.department} onValueChange={(v: any) => setEditingMember({...editingMember, department: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent></Select></div>
+
+              {isCatholic && (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-primary" />
+                    Societies & Groups
+                  </Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between bg-muted/20 border-border h-11 text-left font-normal">
+                        <span className="truncate">
+                          {(editingMember.societies || []).length > 0 ? `${editingMember.societies.length} Selected` : "Select Societies"}
+                        </span>
+                        <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 glass overflow-hidden" align="start">
+                      <ScrollArea className="h-64">
+                        <div className="p-2 space-y-1">
+                          {STANDARD_SOCIETIES.map(society => {
+                            const isSelected = (editingMember.societies || []).includes(society);
+                            return (
+                              <button 
+                                key={society} 
+                                onClick={() => toggleSociety(society, true)}
+                                className={cn("w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-colors", isSelected ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted/50")}
+                              >
+                                <div className={cn("w-4 h-4 border rounded flex items-center justify-center", isSelected ? "bg-primary border-primary" : "border-muted-foreground/30")}>
+                                  {isSelected && <Check className="h-3 w-3 text-white" />}
+                                </div>
+                                <span className="text-sm">{society}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </ScrollArea>
+                      <div className="p-3 border-t border-border bg-muted/30 space-y-2">
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Add Other Society</Label>
+                        <div className="flex gap-2">
+                          <Input placeholder="Enter name" value={customSocietyInput} onChange={e => setCustomSocietyInput(e.target.value)} className="h-9 text-sm" />
+                          <Button size="icon" className="h-9 w-9 shrink-0" onClick={() => handleAddCustomSociety(true)}><Plus className="h-4 w-4" /></Button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {(editingMember.societies || []).map(s => (
+                      <Badge key={s} variant="secondary" className="bg-primary/5 text-primary border-primary/20 flex items-center gap-1">
+                        {s} <Trash2 className="w-3 h-3 cursor-pointer opacity-50 hover:opacity-100" onClick={() => toggleSociety(s, true)} />
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter><Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button><Button onClick={handleUpdateMember}>Save Changes</Button></DialogFooter>

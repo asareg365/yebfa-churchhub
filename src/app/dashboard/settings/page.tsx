@@ -21,7 +21,8 @@ import {
   UserPlus,
   Trash2,
   ShieldCheck,
-  Mail
+  Mail,
+  Church
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,16 @@ const TIMEZONES = [
   "UTC"
 ];
 
+const DENOMINATIONS = [
+  "Pentecostal",
+  "Catholic",
+  "Methodist",
+  "Presbyterian",
+  "Baptist",
+  "Charismatic",
+  "Other"
+];
+
 const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 
 export default function SettingsPage() {
@@ -77,6 +88,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState({
     name: "",
     phone: "",
+    denomination: "Pentecostal",
     birthdaySmsEnabled: true,
     timezone: "Africa/Accra",
     birthdayTemplate: "Happy Birthday {{name}}! May God bless your new age with favor and joy. — {{churchName}}",
@@ -97,6 +109,7 @@ export default function SettingsPage() {
       setSettings({
         name: currentChurch.name || "",
         phone: currentChurch.phone || "",
+        denomination: currentChurch.denomination || "Pentecostal",
         birthdaySmsEnabled: currentChurch.settings?.birthdaySmsEnabled ?? true,
         timezone: currentChurch.settings?.timezone || "Africa/Accra",
         birthdayTemplate: currentChurch.smsTemplates?.birthday || "Happy Birthday {{name}}! May God bless your new age with favor and joy. — {{churchName}}",
@@ -129,6 +142,7 @@ export default function SettingsPage() {
     const updateData = {
       name: settings.name,
       phone: settings.phone,
+      denomination: settings.denomination,
       settings: {
         birthdaySmsEnabled: settings.birthdaySmsEnabled,
         timezone: settings.timezone,
@@ -267,6 +281,18 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <Label>Church Name</Label>
                   <Input value={settings.name} onChange={(e) => setSettings({...settings, name: e.target.value})} className="bg-muted/20 border-border" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Primary Denomination</Label>
+                  <Select value={settings.denomination} onValueChange={(v) => setSettings({...settings, denomination: v})}>
+                    <SelectTrigger className="bg-muted/20 border-border">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="glass">
+                      {DENOMINATIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground italic flex items-center gap-1"><Church className="w-3 h-3" /> Unlocks specialized fields for specific denominations.</p>
                 </div>
                 <div className="space-y-2">
                   <Label>Local Timezone</Label>

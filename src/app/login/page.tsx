@@ -22,7 +22,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
-import { Loader2, Church, Mail, Lock, ShieldCheck, Hash, UserCheck, Sparkles, CheckCircle2, Search } from "lucide-react";
+import { Loader2, Church, Mail, Lock, ShieldCheck, Hash, UserCheck, Sparkles, CheckCircle2, Search, Globe } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -73,12 +73,12 @@ function LoginContent() {
   const [churchName, setChurchName] = useState("");
   const [slug, setSlug] = useState("");
   const [selectedPlan, setSelectedPlan] = useState("Basic");
+  const [denomination, setDenomination] = useState("Pentecostal");
   const [selectedModules, setSelectedModules] = useState<string[]>(PLAN_DEFAULTS.Basic);
   const [isLoading, setIsLoading] = useState(false);
   const [activeChurch, setActiveChurch] = useState<any>(null);
   const [isFetchingChurch, setIsFetchingChurch] = useState(!!tenantSlug);
   
-  // States for "Join" tab
   const [allChurches, setAllChurches] = useState<any[]>([]);
   const [joiningChurchSlug, setJoiningChurchSlug] = useState("");
   const [isFetchingChurches, setIsFetchingChurches] = useState(false);
@@ -105,7 +105,6 @@ function LoginContent() {
     }
   }, [tenantSlug, db, toast]);
 
-  // Fetch all churches for the "Join" tab
   useEffect(() => {
     async function fetchChurches() {
       if (!db) return;
@@ -210,7 +209,7 @@ function LoginContent() {
         enabledModules: selectedModules,
         status: "Pending",
         plan: selectedPlan,
-        denomination: "Pentecostal",
+        denomination: denomination,
         sms: {
           enabled: false,
           approved: false,
@@ -465,18 +464,37 @@ function LoginContent() {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Subscription Tier</Label>
-                    <Select value={selectedPlan} onValueChange={handlePlanChange}>
-                      <SelectTrigger className="bg-white">
-                        <SelectValue placeholder="Select a plan" />
-                      </SelectTrigger>
-                      <SelectContent className="glass">
-                        <SelectItem value="Basic">Starter / Basic (100 SMS)</SelectItem>
-                        <SelectItem value="Standard">Ministry Growth (1,000 SMS)</SelectItem>
-                        <SelectItem value="Premium">Enterprise (10,000 SMS)</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Subscription Tier</Label>
+                      <Select value={selectedPlan} onValueChange={handlePlanChange}>
+                        <SelectTrigger className="bg-white">
+                          <SelectValue placeholder="Select a plan" />
+                        </SelectTrigger>
+                        <SelectContent className="glass">
+                          <SelectItem value="Basic">Starter / Basic (100 SMS)</SelectItem>
+                          <SelectItem value="Standard">Ministry Growth (1,000 SMS)</SelectItem>
+                          <SelectItem value="Premium">Enterprise (10,000 SMS)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Denomination</Label>
+                      <Select value={denomination} onValueChange={setDenomination}>
+                        <SelectTrigger className="bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="glass">
+                          <SelectItem value="Pentecostal">Pentecostal</SelectItem>
+                          <SelectItem value="Catholic">Catholic</SelectItem>
+                          <SelectItem value="Methodist">Methodist</SelectItem>
+                          <SelectItem value="Presbyterian">Presbyterian</SelectItem>
+                          <SelectItem value="Baptist">Baptist</SelectItem>
+                          <SelectItem value="Charismatic">Charismatic</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
