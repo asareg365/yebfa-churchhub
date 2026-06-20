@@ -100,7 +100,6 @@ exports.getSystemStats = onCall(
 
 /**
  * ADMIN: Initialize Wallets / Integrity Sync
- * Handles chunked batching for large platform updates.
  */
 exports.initializeWallets = onCall(
   { region: "us-central1" },
@@ -162,13 +161,13 @@ exports.initializeWallets = onCall(
 
 /**
  * ADMIN: Decommission Ministry (Total Data Purge)
- * High-performance execution with chunked deletion for massive root-level collections.
+ * Uses high-resiliency hybrid cleanup strategy.
  */
 exports.decommissionMinistry = onCall(
   { 
     region: "us-central1", 
-    timeoutSeconds: 540, // 9 minutes
-    memory: "4GiB"       // Enhanced memory for massive graph traversal
+    timeoutSeconds: 540,
+    memory: "2GiB"
   },
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
@@ -190,10 +189,10 @@ exports.decommissionMinistry = onCall(
 
       console.log(`[DECOMMISSION_START] Purging: ${churchId} by: ${email}`);
 
-      // 1. Clear root-level locks
+      // 1. Clear root-level technical locks
       await db.collection("smsLocks").doc(churchId).delete().catch(() => {});
 
-      // 2. Scalable ledger cleanup (handles > 500 records)
+      // 2. Scalable ledger cleanup
       let hasMoreLedger = true;
       while (hasMoreLedger) {
         const ledgerSnap = await db.collection("smsLedger")
@@ -207,28 +206,25 @@ exports.decommissionMinistry = onCall(
           const batch = db.batch();
           ledgerSnap.docs.forEach(doc => batch.delete(doc.ref));
           await batch.commit();
-          console.log(`[PURGE] Deleted ${ledgerSnap.size} ledger records...`);
         }
       }
 
       // 3. Native Recursive Delete (Subcollections: Members, Welfare, Attendance, Logs, etc.)
       await db.recursiveDelete(churchRef);
       
-      console.log(`[DECOMMISSION_COMPLETE] Purge successful for ${churchId}`);
-      
       return { 
         success: true, 
-        message: "Organization and all nested data have been permanently scrubbed." 
+        message: "Organization permanently scrubbed." 
       };
     } catch (error) {
-      console.error("DECOMMISSION_CRITICAL_FAILURE:", error);
+      console.error("DECOMMISSION_FAILURE:", error);
+      const msg = error.message || "Unknown purge engine error.";
       
-      const msg = error.message || "Unknown error during purge.";
       if (msg.toLowerCase().includes("deadline") || msg.toLowerCase().includes("timeout")) {
-        throw new HttpsError("deadline-exceeded", "The purge is massive and taking longer than expected. The server is still working in the background.");
+        throw new HttpsError("deadline-exceeded", "The deletion is massive and exceeded the current window. A second attempt may be required.");
       }
       
-      throw new HttpsError("internal", `Backend Purge Engine Error: ${msg}`);
+      throw new HttpsError("internal", msg);
     }
   }
 );

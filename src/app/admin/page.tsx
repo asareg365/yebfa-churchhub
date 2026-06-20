@@ -103,7 +103,6 @@ export default function SystemAdminPortal() {
     setStatsError(false);
     
     try {
-      // Force token refresh for stats sync
       await auth.currentUser.getIdToken(true);
       const fetchStats = httpsCallable(functions, 'getSystemStats');
       const res: any = await fetchStats();
@@ -221,12 +220,10 @@ export default function SystemAdminPortal() {
     setIsProcessing(true);
     
     try {
-      // 1. Force refresh token to ensure high-privilege session is current
       if (auth.currentUser) {
         await auth.currentUser.getIdToken(true);
       }
       
-      // 2. Execute call with 9-minute timeout to match backend recursive purge duration
       const decommissionFn = httpsCallable(functions, 'decommissionMinistry', { timeout: 540000 });
       const res: any = await decommissionFn({ churchId: ministryToDecommission.id });
       
@@ -235,11 +232,10 @@ export default function SystemAdminPortal() {
         setMinistryToDecommission(null);
         await loadStats();
       } else {
-        throw new Error(res.data?.message || "Purge engine failed without specific error.");
+        throw new Error(res.data?.message || "Purge engine failed.");
       }
     } catch (e: any) {
-      console.error("Purge Error Detail:", e);
-      // Surface the actual backend error code or message
+      console.error("Purge Error:", e);
       const errorMsg = e?.message || e?.details?.message || "Internal server failure during deletion.";
       toast({ 
         title: "Purge Failed", 
@@ -391,7 +387,6 @@ export default function SystemAdminPortal() {
         </Card>
       </div>
 
-      {/* Edit Organization Dialog */}
       <Dialog open={!!editingOrg} onOpenChange={(o) => !o && setEditingOrg(null)}>
         <DialogContent className="glass">
           <DialogHeader>
@@ -407,7 +402,6 @@ export default function SystemAdminPortal() {
         </DialogContent>
       </Dialog>
 
-      {/* Top-up Dialog */}
       <Dialog open={!!managingSmsId} onOpenChange={(o) => !o && setManagingSmsId(null)}>
         <DialogContent className="glass">
           <DialogHeader>
@@ -425,7 +419,6 @@ export default function SystemAdminPortal() {
         </DialogContent>
       </Dialog>
 
-      {/* Decommission Confirmation */}
       <AlertDialog open={!!ministryToDecommission} onOpenChange={(o) => !o && setMinistryToDecommission(null)}>
         <AlertDialogContent className="glass border-destructive/30">
           <AlertDialogHeader>
