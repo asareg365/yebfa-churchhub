@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, Suspense, useMemo } from "react";
@@ -99,6 +98,14 @@ function LoginContent() {
         } else {
           toast({ title: "Ministry not found", description: `Tenant ID '${tenantSlug}' is invalid.`, variant: "destructive" });
         }
+      }).catch(async (err) => {
+        if (err.code === 'permission-denied') {
+          const permissionError = new FirestorePermissionError({
+            path: 'churches',
+            operation: 'list',
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        }
       }).finally(() => {
         setIsFetchingChurch(false);
       });
@@ -114,8 +121,14 @@ function LoginContent() {
         const snap = await getDocs(q);
         const churches = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setAllChurches(churches);
-      } catch (e) {
-        console.error("Error fetching church list:", e);
+      } catch (err: any) {
+        if (err.code === 'permission-denied') {
+          const permissionError = new FirestorePermissionError({
+            path: 'churches',
+            operation: 'list',
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        }
       } finally {
         setIsFetchingChurches(false);
       }

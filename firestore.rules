@@ -28,16 +28,18 @@ service cloud.firestore {
 
     // Churches collection
     match /churches/{churchId} {
-      // Allow reading if the user is an admin of the church or a super admin
-      allow read: if isAuthenticated() && (request.auth.token.email.lower() in resource.data.adminEmails || isSuperAdmin());
+      // Allow public reading for discovery, find-ministry, and onboarding
+      // This is required for the "Join Ministry" dropdown and public slug search
+      allow get, list: if true;
       
-      // Allow writing if the user is an admin of the church or a super admin
-      allow write: if isAuthenticated() && (request.auth.token.email.lower() in resource.data.adminEmails || isSuperAdmin());
+      // Writing/Update still restricted to authorized admins or super admins
+      allow update, delete: if isAuthenticated() && (request.auth.token.email.lower() in resource.data.adminEmails || isSuperAdmin());
       
-      // Allow creation for onboarding
+      // Allow creation for new ministry onboarding
       allow create: if isAuthenticated();
       
       // All subcollections within a church (members, attendance, finances, smsLogs, visitors, etc.)
+      // These remain strictly protected and isolated
       match /{allSubcollections=**} {
         allow read, write: if isChurchAdmin(churchId);
       }
