@@ -150,8 +150,8 @@ exports.initializeWallets = onCall(
 exports.decommissionMinistry = onCall(
   { 
     region: "us-central1", 
-    timeoutSeconds: 540, // Max timeout for v2 functions
-    memory: "2GiB"      // Increased memory for heavy recursion
+    timeoutSeconds: 540, // Max timeout for v2 functions (9 minutes)
+    memory: "2GiB"      // 2GB Memory for heavy recursion
   },
   async (request) => {
     const email = request.auth?.token?.email?.toLowerCase().trim();
@@ -173,17 +173,27 @@ exports.decommissionMinistry = onCall(
 
       console.log(`[DECOMMISSION_START] Purging ministry: ${churchId} triggered by: ${email}`);
 
-      // Recursive delete all subcollections and the document itself
-      // This is an intensive operation that can take several minutes for large ministries
+      // Recursive delete all subcollections and the document itself.
+      // This is a native Firestore operation that handles large datasets efficiently.
       await db.recursiveDelete(churchRef);
       
       console.log(`[DECOMMISSION_COMPLETE] Ministry: ${churchId} purged successfully.`);
       
-      return { success: true, message: "Organization and all associated data have been permanently removed." };
+      return { 
+        success: true, 
+        message: "Organization and all associated data have been permanently removed." 
+      };
     } catch (error) {
       console.error("DECOMMISSION_FAILURE:", error);
-      // Surface specific Firestore errors back to the client instead of generic internal
-      throw new HttpsError("internal", `Purge Engine Error: ${error.message}`);
+      
+      // Classify the error for better client handling
+      const message = error.message || "Unknown error during data purge.";
+      
+      if (message.includes("deadline") || message.includes("timeout")) {
+        throw new HttpsError("deadline-exceeded", "The deletion process timed out due to the large volume of data. Some data might remain; please try again to complete the purge.");
+      }
+      
+      throw new HttpsError("internal", `Purge Engine Error: ${message}`);
     }
   }
 );

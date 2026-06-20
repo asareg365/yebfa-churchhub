@@ -233,11 +233,15 @@ export default function SystemAdminPortal() {
       }
     } catch (e: any) {
       console.error("Purge Error:", e);
-      // Surface the actual error message from the backend (often a timeout or internal constraint)
+      // HttpsError code check for specific client-side messaging
+      const isTimeout = e.code === 'deadline-exceeded' || (e.message && e.message.toLowerCase().includes('deadline'));
       const detail = e.message || "An unexpected error occurred during decommission.";
+      
       toast({ 
         title: "Purge Failed", 
-        description: detail.includes('internal') ? "Operation timed out. The ministry may be too large to delete in one pass. Please contact engineering." : detail, 
+        description: isTimeout 
+          ? "Operation timed out due to the large data volume. Please try again to continue the purge process." 
+          : detail, 
         variant: "destructive" 
       });
     } finally {
