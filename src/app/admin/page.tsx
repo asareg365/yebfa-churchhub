@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -401,15 +402,17 @@ export default function SystemAdminPortal() {
             <AlertDialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-6 w-6" /> Total Decommissioning
             </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-4">
-              <p>You are about to permanently delete <strong>{ministryToDecommission?.name}</strong>.</p>
-              <ul className="list-disc pl-6 text-sm text-foreground/80 space-y-1">
-                <li>All member records and photos will be erased.</li>
-                <li>Financial audit logs will be permanently wiped.</li>
-                <li>Attendance history and analytics will be destroyed.</li>
-                <li>SMS credit balance and logs will be deleted.</li>
-              </ul>
-              <p className="font-bold text-destructive">This action is irreversible and will purge all subcollections recursively.</p>
+            <AlertDialogDescription className="space-y-4" asChild>
+              <div className="space-y-4">
+                <p>You are about to permanently delete <strong>{ministryToDecommission?.name}</strong>.</p>
+                <ul className="list-disc pl-6 text-sm text-foreground/80 space-y-1">
+                  <li>All member records and photos will be erased.</li>
+                  <li>Financial audit logs will be permanently wiped.</li>
+                  <li>Attendance history and analytics will be destroyed.</li>
+                  <li>SMS credit balance and logs will be deleted.</li>
+                </ul>
+                <p className="font-bold text-destructive">This action is irreversible and will purge all subcollections recursively.</p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
