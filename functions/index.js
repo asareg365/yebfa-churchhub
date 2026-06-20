@@ -17,7 +17,7 @@ const { processSMSQueueItem, queueSMS, creditWallet, resetWallet } = require("./
 const { dispatchAllBirthdays } = require("./schedulers/birthdayScheduler");
 const { processScheduledCampaigns } = require("./schedulers/campaignScheduler");
 const { processEventReminders } = require("./schedulers/eventScheduler");
-const { processVisitorFollowups } = require("./schedulers/visitorScheduler");
+const { processVisitorFollowups } = require("./schedulers/visitorFollowups");
 const { retryFailedSMS } = require("./schedulers/retryScheduler");
 
 /**
@@ -100,12 +100,33 @@ exports.getSystemStats = onCall(
 );
 
 /**
- * ADMIN: Decommission Missing Wallets (Obsolete - System integrated)
+ * ADMIN: Decommission Ministry (Total Data Purge)
  */
-exports.initializeWallets = onCall(
+exports.decommissionMinistry = onCall(
   { region: "us-central1", cors: true },
   async (request) => {
-    return { success: true, message: "System fully integrated into church documents." };
+    const email = request.auth?.token?.email?.toLowerCase().trim();
+    if (!email || !SUPER_ADMINS.includes(email)) {
+      throw new HttpsError("permission-denied", "Unauthorized access");
+    }
+
+    const { churchId } = request.data;
+    if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID");
+
+    try {
+      const db = admin.firestore();
+      const churchRef = db.collection("churches").doc(churchId);
+      
+      // Perform recursive deletion of the document and all subcollections
+      await db.recursiveDelete(churchRef);
+      
+      console.log(`[DECOMMISSION] Ministry ${churchId} has been purged by ${email}`);
+      
+      return { success: true, message: "Organization and all associated data have been permanently removed." };
+    } catch (error) {
+      console.error("DECOMMISSION_ERROR:", error);
+      throw new HttpsError("internal", error.message);
+    }
   }
 );
 

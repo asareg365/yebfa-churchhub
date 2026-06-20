@@ -19,7 +19,8 @@ import {
   Pencil,
   RefreshCcw,
   CreditCard,
-  Database
+  Database,
+  Trash2
 } from 'lucide-react';
 import {
   Card,
@@ -52,6 +53,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -73,6 +84,7 @@ export default function SystemAdminPortal() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [managingSmsId, setManagingSmsId] = useState<string | null>(null);
+  const [ministryToDecommission, setMinistryToDecommission] = useState<any>(null);
   const [editingOrg, setEditingOrg] = useState<any>(null);
   const [topUpAmount, setTopUpAmount] = useState('500');
   const [platformStats, setPlatformStats] = useState<any>(null);
@@ -199,59 +211,41 @@ export default function SystemAdminPortal() {
     }
   };
 
-  /**
-   * HARDENED TOPUP IMPLEMENTATION
-   */
+  const handleDecommission = async () => {
+    if (!ministryToDecommission || !functions) return;
+    setIsProcessing(true);
+    const decommissionFn = httpsCallable(functions, 'decommissionMinistry');
+    try {
+      await decommissionFn({ churchId: ministryToDecommission.id });
+      toast({ title: "Organization Purged", description: "Ministry and all sub-data permanently deleted." });
+      setMinistryToDecommission(null);
+      await loadStats();
+    } catch (e: any) {
+      toast({ title: "Purge Failed", description: e.message, variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleTopUp = async () => {
     try {
-      if (!auth.currentUser) {
-        throw new Error("User session missing");
-      }
-  
-      if (!functions) {
-        throw new Error("Firebase Functions not initialized");
-      }
-  
-      if (!managingSmsId) {
-        throw new Error("Missing church ID");
-      }
+      if (!auth.currentUser) throw new Error("User session missing");
+      if (!functions) throw new Error("Firebase Functions not initialized");
+      if (!managingSmsId) throw new Error("Missing church ID");
   
       setIsProcessing(true);
-  
-      // FORCE AUTH TOKEN REFRESH
       await auth.currentUser.getIdToken(true);
-  
-      console.log("AUTH USER:", auth.currentUser.email);
-  
       const callable = httpsCallable(functions, "adminTopUpWallet");
-  
-      const response: any = await callable({
+      await callable({
         churchId: managingSmsId,
         amount: Number(topUpAmount),
       });
   
-      console.log("TOPUP RESPONSE:", response);
-  
-      toast({
-        title: "Credits Added",
-        description: `${topUpAmount} SMS credits added successfully.`,
-      });
-  
+      toast({ title: "Credits Added", description: `${topUpAmount} SMS credits added successfully.` });
       setManagingSmsId(null);
-  
       await loadStats();
-  
     } catch (error: any) {
-      console.error("TOPUP ERROR:", error);
-  
-      toast({
-        title: "Top-up Failed",
-        description:
-          error?.message ||
-          error?.details ||
-          "Authentication or server error",
-        variant: "destructive",
-      });
+      toast({ title: "Top-up Failed", description: error?.message || "Server error", variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
@@ -332,7 +326,7 @@ export default function SystemAdminPortal() {
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="text-muted-foreground"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="glass w-48">
+                        <DropdownMenuContent align="end" className="glass w-56">
                           <DropdownMenuItem onClick={() => setEditingOrg(church)} className="font-bold"><Pencil className="mr-2 h-4 w-4" /> Edit Details</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setManagingSmsId(church.id)} className="font-bold text-primary"><Zap className="mr-2 h-4 w-4" /> Top-up Wallet</DropdownMenuItem>
                           <DropdownMenuSeparator />
@@ -342,6 +336,10 @@ export default function SystemAdminPortal() {
                           ) : (
                             <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'suspended')} className="text-destructive"><Ban className="mr-2 h-4 w-4" /> Suspend Service</DropdownMenuItem>
                           )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => setMinistryToDecommission(church)} className="text-destructive font-bold focus:bg-destructive focus:text-white">
+                            <Trash2 className="mr-2 h-4 w-4" /> Decommission Org
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -395,6 +393,38 @@ export default function SystemAdminPortal() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Decommission Confirmation */}
+      <AlertDialog open={!!ministryToDecommission} onOpenChange={(o) => !o && setMinistryToDecommission(null)}>
+        <AlertDialogContent className="glass border-destructive/30">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-6 w-6" /> Total Decommissioning
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-4">
+              <p>You are about to permanently delete <strong>{ministryToDecommission?.name}</strong>.</p>
+              <ul className="list-disc pl-6 text-sm text-foreground/80 space-y-1">
+                <li>All member records and photos will be erased.</li>
+                <li>Financial audit logs will be permanently wiped.</li>
+                <li>Attendance history and analytics will be destroyed.</li>
+                <li>SMS credit balance and logs will be deleted.</li>
+              </ul>
+              <p className="font-bold text-destructive">This action is irreversible and will purge all subcollections recursively.</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDecommission}
+              className="bg-destructive hover:bg-destructive/90 text-white font-bold"
+              disabled={isProcessing}
+            >
+              {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Purge Organization
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
