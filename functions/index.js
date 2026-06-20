@@ -161,7 +161,7 @@ exports.initializeWallets = onCall(
 
 /**
  * ADMIN: Delete Ministry (Total Data Purge)
- * Uses high-resiliency hybrid cleanup strategy.
+ * Uses high-resiliency hybrid cleanup strategy with chunked batching.
  */
 exports.deleteMinistry = onCall(
   { 
@@ -175,8 +175,11 @@ exports.deleteMinistry = onCall(
       throw new HttpsError("permission-denied", "Unauthorized access.");
     }
 
+    if (!request.data || !request.data.churchId) {
+      throw new HttpsError("invalid-argument", "Missing organization ID.");
+    }
+
     const { churchId } = request.data;
-    if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID.");
 
     try {
       const db = admin.firestore();
@@ -189,10 +192,10 @@ exports.deleteMinistry = onCall(
 
       console.log(`[DELETE_MINISTRY_START] Purging: ${churchId} by: ${email}`);
 
-      // 1. Clear root-level technical locks
+      // 1. Clear root-level technical documents (smsLocks)
       await db.collection("smsLocks").doc(churchId).delete().catch(() => {});
 
-      // 2. Scalable ledger cleanup
+      // 2. Scalable ledger cleanup using chunked batching
       let hasMoreLedger = true;
       while (hasMoreLedger) {
         const ledgerSnap = await db.collection("smsLedger")
@@ -206,10 +209,12 @@ exports.deleteMinistry = onCall(
           const batch = db.batch();
           ledgerSnap.docs.forEach(doc => batch.delete(doc.ref));
           await batch.commit();
+          console.log(`[DELETE_MINISTRY] Deleted batch of 450 ledger entries for ${churchId}`);
         }
       }
 
       // 3. Native Recursive Delete (Subcollections: Members, Welfare, Attendance, Logs, etc.)
+      // churchRef points to /churches/{churchId}
       await db.recursiveDelete(churchRef);
       
       return { 
@@ -218,6 +223,9 @@ exports.deleteMinistry = onCall(
       };
     } catch (error) {
       console.error("DELETE_MINISTRY_FAILURE:", error);
+      
+      if (error instanceof HttpsError) throw error;
+
       const msg = error.message || "Unknown purge engine error.";
       
       if (msg.toLowerCase().includes("deadline") || msg.toLowerCase().includes("timeout")) {
