@@ -98,137 +98,87 @@ exports.getSystemStats = onCall(
 );
 
 /**
- * ADMIN: Delete Ministry (Layer 1 - Soft Delete / Queue)
- * Marks ministry for deletion to trigger the background worker.
+ * ADMIN: Delete Ministry (DEBUG VERSION)
  */
 exports.deleteMinistry = onCall(
   { region: "us-central1" },
   async (request) => {
-    const email = request.auth?.token?.email?.toLowerCase().trim();
-    if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized access.");
-    }
-
-    const { churchId } = request.data;
-    if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID.");
-
-    const db = admin.firestore();
-    const churchRef = db.collection("churches").doc(churchId);
-    
-    const churchDoc = await churchRef.get();
-    if (!churchDoc.exists) {
-      throw new HttpsError("not-found", "Organization not found.");
-    }
-
-    const churchData = churchDoc.data();
-    
-    // SAFETY SHIELD: Prevent deleting active organizations
-    if (churchData.sms?.subscriptionStatus === "active" || churchData.status === "Approved") {
-      throw new HttpsError(
-        "failed-precondition", 
-        "Safety Shield Active: You must suspend the organization service first before it can be deleted."
-      );
-    }
+    console.log("STEP 0: function entered");
 
     try {
-      // Mark for deletion - this provides an instant UI response
-      await churchRef.update({
-        deletionStatus: "PENDING",
-        deletionRequestedAt: admin.firestore.FieldValue.serverTimestamp(),
-        deletionRequestedBy: email,
-        status: "Decommissioning"
-      });
+      const email = request.auth?.token?.email?.toLowerCase().trim();
+      console.log("STEP 1: auth ok", email);
 
-      return { 
-        success: true, 
-        message: "Organization deletion has been queued safely." 
-      };
+      if (!SUPER_ADMINS.includes(email)) {
+        throw new HttpsError("permission-denied", "Unauthorized");
+      }
+
+      const { churchId } = request.data || {};
+      console.log("STEP 2: churchId", churchId);
+
+      if (!churchId) {
+        throw new HttpsError("invalid-argument", "Missing churchId");
+      }
+
+      const db = admin.firestore();
+      const churchRef = db.collection("churches").doc(churchId);
+
+      const churchDoc = await churchRef.get();
+      console.log("STEP 3: church exists?", churchDoc.exists);
+
+      if (!churchDoc.exists) {
+        throw new HttpsError("not-found", "Organization not found.");
+      }
+
+      // Safety Shield
+      const churchData = churchDoc.data();
+      if (churchData.sms?.subscriptionStatus === "active" || churchData.status === "Approved") {
+        console.log("STEP 3.5: Safety Shield Triggered");
+        throw new HttpsError(
+          "failed-precondition", 
+          "Safety Shield Active: You must suspend the organization service first before it can be deleted."
+        );
+      }
+
+      console.log("STEP 4: deleting smsLocks");
+      await db.collection("smsLocks").doc(churchId).delete().catch(console.error);
+
+      console.log("STEP 5: deleting ledger");
+      let snap;
+      let i = 0;
+
+      do {
+        i++;
+        snap = await db.collection("smsLedger")
+          .where("churchId", "==", churchId)
+          .limit(200)
+          .get();
+
+        console.log("ledger batch", i, snap.size);
+
+        if (!snap.empty) {
+          const batch = db.batch();
+          snap.docs.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+        }
+
+      } while (!snap.empty && i < 100);
+
+      console.log("STEP 6: BEFORE recursive delete (DISABLED FOR DEBUG)");
+      // await db.recursiveDelete(churchRef);
+
+      console.log("STEP 7: deleting church doc");
+      await churchRef.delete();
+
+      console.log("STEP 8: DONE");
+
+      return { success: true };
     } catch (error) {
-      console.error("DELETE_MINISTRY_QUEUE_FAILURE:", error);
+      console.error("🔥 FULL DELETE ERROR:", error);
       throw new HttpsError("internal", error.message);
     }
   }
 );
-
-/**
- * BACKGROUND WORKER: Delete Ministry (Layer 2 - Deep Purge)
- * Triggered when a church is marked as PENDING.
- */
-exports.onChurchDeletionRequested = onDocumentUpdated(
-  { region: "us-central1", document: "churches/{churchId}" },
-  async (event) => {
-    const data = event.data.after.data();
-    const previousData = event.data.before.data();
-
-    // Only run if status transitioned to PENDING
-    if (data.deletionStatus !== "PENDING" || previousData.deletionStatus === "PENDING") {
-      return null;
-    }
-
-    const { churchId } = event.params;
-    const db = admin.firestore();
-    const churchRef = event.data.after.ref;
-
-    console.log(`[DEEP_PURGE_START] Processing deletion for: ${churchId}`);
-
-    try {
-      // 1. Clear root-level technical documents (smsLocks)
-      await db.collection("smsLocks").doc(churchId).delete().catch(() => {});
-
-      // 2. Safe batch delete root-level ledger entries
-      await deleteCollectionByQuery(
-        db.collection("smsLedger").where("churchId", "==", churchId),
-        400
-      );
-
-      // 3. Delete all subcollections in chunks
-      const subcollections = [
-        "members", "attendance", "finances", "events", "visitors", 
-        "welfare", "smsLogs", "smsTemplates", "scheduledSms", 
-        "birthdayHistory", "transactions", "billingReports", 
-        "aiInsights", "reports", "smsWallets"
-      ];
-
-      for (const sub of subcollections) {
-        await deleteCollectionByQuery(churchRef.collection(sub), 400);
-      }
-
-      // 4. Final document delete
-      await churchRef.delete();
-
-      console.log(`[DEEP_PURGE_COMPLETE] Successfully scrubbed: ${churchId}`);
-      return { success: true };
-    } catch (error) {
-      console.error(`[DEEP_PURGE_FAILURE] ${churchId}:`, error);
-      // Log failure back to the doc if it still exists
-      try {
-        await churchRef.update({
-          deletionStatus: "FAILED",
-          deletionError: error.message,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-      } catch (e) {}
-      return null;
-    }
-  }
-);
-
-/**
- * SAFE BATCH DELETE HELPER
- * Avoids timeout and internal Firestore limits by deleting in blocks.
- */
-async function deleteCollectionByQuery(query, batchSize = 400) {
-  let snapshot;
-  do {
-    snapshot = await query.limit(batchSize).get();
-    if (snapshot.empty) break;
-
-    const batch = admin.firestore().batch();
-    snapshot.docs.forEach(doc => batch.delete(doc.ref));
-    await batch.commit();
-    console.log(`Deleted batch of ${snapshot.size} records.`);
-  } while (snapshot.size >= batchSize);
-}
 
 /**
  * ADMIN: Update Church Status
