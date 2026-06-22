@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 import { useAuth, useUser, useCollection, useFirestore } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { collection, query, where, limit } from "firebase/firestore";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const ALL_MENU_ITEMS = [
@@ -81,6 +81,11 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
   const { user } = useUser();
   const [smsOpen, setSmsOpen] = useState(pathname.startsWith('/dashboard/sms'));
   const [billingOpen, setBillingOpen] = useState(pathname.startsWith('/dashboard/billing'));
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const isSuperAdmin = useMemo(() => {
     const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
@@ -88,7 +93,7 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
   }, [user?.email]);
 
   const churchQuery = useMemo(() => {
-    if (!user?.email || isSuperAdmin) return null;
+    if (!user?.email || isSuperAdmin || !db) return null;
     return query(
       collection(db, "churches"),
       where("adminEmails", "array-contains", user.email.toLowerCase().trim()),
@@ -100,8 +105,13 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
   const currentChurch = churches?.[0];
 
   const filteredMenuItems = useMemo(() => {
+    // Before hydration, return base items to prevent empty sidebar
+    if (!mounted) return ALL_MENU_ITEMS.filter(item => ["dashboard", "settings"].includes(item.id));
+    
     if (isSuperAdmin) return ALL_MENU_ITEMS;
-    if (churchLoading) return [];
+    if (churchLoading && !currentChurch) {
+        return ALL_MENU_ITEMS.filter(item => ["dashboard", "settings"].includes(item.id));
+    }
 
     const baseModules = ["dashboard", "settings", "billing-group", "visitors", "welfare"];
     const enabledModules = currentChurch?.enabledModules || [];
@@ -112,7 +122,7 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
     return ALL_MENU_ITEMS.filter(item => 
       activeModules.includes(item.id)
     );
-  }, [currentChurch, churchLoading, isSuperAdmin]);
+  }, [currentChurch, churchLoading, isSuperAdmin, mounted]);
 
   const handleLogout = async () => {
     try {
@@ -126,97 +136,99 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
   return (
     <div className="flex flex-col h-full">
       <div className="mb-8 px-2">
-        <h1 className="font-headline text-lg font-bold text-primary flex items-center gap-3">
+        <Link href="/dashboard" className="font-headline text-lg font-bold text-primary flex items-center gap-3 hover:opacity-80 transition-opacity">
           <div className="w-10 h-10 rounded-xl bg-white border border-border shadow-sm flex items-center justify-center">
             <CrossIcon />
           </div>
           <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">CHURCHHUB</span>
-        </h1>
+        </Link>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto pr-2 custom-scrollbar">
-        {(churchLoading && !isSuperAdmin) ? (
-          <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-primary/50" /></div>
-        ) : (
-          filteredMenuItems.map((item) => {
-            if (item.isGroup) {
-              const isGroupActive = pathname.startsWith(item.href);
-              const isOpen = item.id === 'sms' ? smsOpen : billingOpen;
-              const setOpen = item.id === 'sms' ? setSmsOpen : setBillingOpen;
+        {filteredMenuItems.map((item) => {
+          if (item.isGroup) {
+            const isGroupActive = pathname.startsWith(item.href);
+            const isOpen = item.id === 'sms' ? smsOpen : billingOpen;
+            const setOpen = item.id === 'sms' ? setSmsOpen : setBillingOpen;
 
-              return (
-                <Collapsible
-                  key={item.id}
-                  open={isOpen}
-                  onOpenChange={setOpen}
-                  className="space-y-1"
-                >
-                  <CollapsibleTrigger asChild>
-                    <button
-                      className={cn(
-                        "w-full group flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-300",
-                        isGroupActive && !isOpen
-                          ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
-                          : "text-muted-foreground hover:bg-muted hover:text-primary"
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <item.icon className={cn("w-5 h-5", isGroupActive && !isOpen ? "text-primary-foreground" : "text-primary/70")} />
-                        <span className="text-sm font-medium">{item.label}</span>
-                      </div>
-                      <ChevronRight className={cn("w-4 h-4 transition-transform", isOpen && "rotate-90")} />
-                    </button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-1 pl-4">
-                    {item.subItems?.map((sub) => {
-                      const isSubActive = pathname === sub.href;
-                      return (
-                        <Link
-                          key={sub.id}
-                          href={sub.href}
-                          onClick={onNavItemClick}
-                          className={cn(
-                            "flex items-center gap-3 px-4 py-2 rounded-lg transition-all text-sm",
-                            isSubActive
-                              ? "bg-primary/10 text-primary font-bold"
-                              : "text-muted-foreground hover:bg-muted hover:text-primary"
-                          )}
-                        >
-                          <sub.icon className="w-4 h-4" />
-                          {sub.label}
-                        </Link>
-                      );
-                    })}
-                  </CollapsibleContent>
-                </Collapsible>
-              );
-            }
-
-            const isActive = pathname === item.href;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onNavItemClick}
-                className={cn(
-                  "group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300",
-                  isActive 
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
-                    : "text-muted-foreground hover:bg-muted hover:text-primary"
-                )}
+              <Collapsible
+                key={item.id}
+                open={isOpen}
+                onOpenChange={setOpen}
+                className="space-y-1"
               >
-                <item.icon className={cn("w-5 h-5 transition-transform group-hover:scale-110", isActive ? "text-primary-foreground" : "text-primary/70")} />
-                <span className="text-sm font-medium">{item.label}</span>
-              </Link>
+                <CollapsibleTrigger asChild>
+                  <button
+                    className={cn(
+                      "w-full group flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200",
+                      isGroupActive && !isOpen
+                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
+                        : "text-muted-foreground hover:bg-muted hover:text-primary"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon className={cn("w-5 h-5", isGroupActive && !isOpen ? "text-primary-foreground" : "text-primary/70")} />
+                      <span className="text-sm font-medium">{item.label}</span>
+                    </div>
+                    <ChevronRight className={cn("w-4 h-4 transition-transform duration-200", isOpen && "rotate-90")} />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-1 pl-4 animate-in slide-in-from-top-1 duration-200">
+                  {item.subItems?.map((sub) => {
+                    const isSubActive = pathname === sub.href;
+                    return (
+                      <Link
+                        key={sub.id}
+                        href={sub.href}
+                        onClick={onNavItemClick}
+                        className={cn(
+                          "flex items-center gap-3 px-4 py-2 rounded-lg transition-all duration-200 text-sm",
+                          isSubActive
+                            ? "bg-primary/10 text-primary font-bold"
+                            : "text-muted-foreground hover:bg-muted hover:text-primary"
+                        )}
+                      >
+                        <sub.icon className="w-4 h-4" />
+                        {sub.label}
+                      </Link>
+                    );
+                  })}
+                </CollapsibleContent>
+              </Collapsible>
             );
-          })
+          }
+
+          const isActive = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavItemClick}
+              className={cn(
+                "group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
+                isActive 
+                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
+                  : "text-muted-foreground hover:bg-muted hover:text-primary"
+              )}
+            >
+              <item.icon className={cn("w-5 h-5 transition-transform group-hover:scale-110", isActive ? "text-primary-foreground" : "text-primary/70")} />
+              <span className="text-sm font-medium">{item.label}</span>
+            </Link>
+          );
+        })}
+        {churchLoading && !isSuperAdmin && (
+          <div className="flex items-center gap-3 px-4 py-3 text-muted-foreground animate-pulse">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span className="text-sm">Loading Modules...</span>
+          </div>
         )}
       </nav>
 
       <div className="pt-6 border-t border-border mt-auto">
         <button 
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-300"
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-200"
         >
           <LogOut className="w-5 h-5" />
           <span className="text-sm font-medium">Logout</span>

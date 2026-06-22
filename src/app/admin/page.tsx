@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ShieldCheck,
@@ -77,6 +78,7 @@ import { signOut } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const SUPER_ADMINS = ['asareg365@gmail.com', 'frankyeb@gmail.com'];
 
@@ -102,7 +104,7 @@ export default function SystemAdminPortal() {
     setMounted(true);
   }, []);
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     if (!auth?.currentUser || !functions) return;
     
     setIsRefreshing(true);
@@ -127,7 +129,7 @@ export default function SystemAdminPortal() {
     } finally {
       setIsRefreshing(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     if (mounted && !userLoading && (!user || !SUPER_ADMINS.includes(user.email?.toLowerCase() || ''))) {
@@ -139,7 +141,7 @@ export default function SystemAdminPortal() {
     if (user && SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
       loadStats();
     }
-  }, [user]);
+  }, [user, loadStats]);
 
   const activeMinistries = useMemo(() => {
     const list = platformStats?.churches || [];
@@ -208,7 +210,8 @@ export default function SystemAdminPortal() {
       setMinistryToDelete(null);
       await loadStats();
     } catch (e: any) {
-      toast({ title: "Deletion Failed", description: e.message, variant: "destructive" });
+      const msg = e.message || "Deletion Failed";
+      toast({ title: "Action Blocked", description: msg, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
@@ -230,16 +233,22 @@ export default function SystemAdminPortal() {
   };
 
   const handlePermanentPurge = async () => {
-    if (!ministryToPurge || !functions) return;
+    if (!ministryToPurge || !functions || !auth.currentUser) return;
     setIsProcessing(true);
     try {
+      await auth.currentUser.getIdToken(true);
       const purgeFn = httpsCallable(functions, 'hardPurgeMinistry', { timeout: 540000 });
-      await purgeFn({ churchId: ministryToPurge.id });
-      toast({ title: "Permanent Purge Complete", description: "All data has been wiped from the system." });
-      setMinistryToPurge(null);
-      await loadStats();
+      const res: any = await purgeFn({ churchId: ministryToPurge.id });
+      if (res.data?.success) {
+        toast({ title: "Permanent Purge Complete", description: "All data has been wiped from the system." });
+        setMinistryToPurge(null);
+        await loadStats();
+      } else {
+        throw new Error(res.data?.error || "Purge execution failed on server.");
+      }
     } catch (e: any) {
-      toast({ title: "Purge Failed", description: e.message, variant: "destructive" });
+      const detail = e.details || e.message || "Deep purge failed. The ministry might have protected documents or active locks.";
+      toast({ title: "Purge Error", description: detail, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
@@ -269,8 +278,18 @@ export default function SystemAdminPortal() {
     );
   }
 
+  const TableSkeleton = () => (
+    <div className="p-8 space-y-4">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="flex gap-4 items-center">
+          <Skeleton className="h-12 w-full rounded-xl" />
+        </div>
+      ))}
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-background p-8 space-y-8">
+    <div className="min-h-screen bg-background p-8 space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-4xl font-bold tracking-tight mb-1 text-foreground flex items-center gap-3">
@@ -301,7 +320,7 @@ export default function SystemAdminPortal() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
-        <Card className="glass md:col-span-2 overflow-hidden">
+        <Card className="glass md:col-span-2 overflow-hidden border-border/40">
           <Tabs defaultValue="active" className="w-full">
             <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-7 border-b border-border bg-muted/5">
               <div className="space-y-4">
@@ -310,95 +329,97 @@ export default function SystemAdminPortal() {
                   <CardDescription>Managing the ministry landscape.</CardDescription>
                 </div>
                 <TabsList className="bg-muted p-1 rounded-xl w-fit">
-                  <TabsTrigger value="active" className="rounded-lg px-6 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <TabsTrigger value="active" className="rounded-lg px-6 transition-all duration-200 data-[state=active]:bg-white data-[state=active]:shadow-sm">
                     <Users className="w-4 h-4 mr-2" /> Active
                   </TabsTrigger>
-                  <TabsTrigger value="deleted" className="rounded-lg px-6 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <TabsTrigger value="deleted" className="rounded-lg px-6 transition-all duration-200 data-[state=active]:bg-white data-[state=active]:shadow-sm">
                     <Archive className="w-4 h-4 mr-2" /> Recycle Bin ({deletedMinistries.length})
                   </TabsTrigger>
                 </TabsList>
               </div>
               <div className="relative w-full md:w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search ministries..." className="pl-10 h-11 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                <Input placeholder="Search ministries..." className="pl-10 h-11 bg-white rounded-xl" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
               </div>
             </CardHeader>
-            <CardContent className="p-0">
-              <TabsContent value="active" className="mt-0">
-                <Table>
-                  <TableHeader className="bg-muted/10">
-                    <TableRow>
-                      <TableHead className="font-bold text-[10px] uppercase">Ministry</TableHead>
-                      <TableHead className="font-bold text-[10px] uppercase">Plan</TableHead>
-                      <TableHead className="font-bold text-[10px] uppercase">Status</TableHead>
-                      <TableHead className="font-bold text-[10px] uppercase">Balance</TableHead>
-                      <TableHead className="text-right font-bold text-[10px] uppercase">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {isRefreshing && !platformStats ? (
-                      <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" /></TableCell></TableRow>
-                    ) : activeMinistries.map((church: any) => (
-                      <TableRow key={church.id} className="group hover:bg-muted/5 transition-colors">
-                        <TableCell>
-                          <div className="font-bold text-foreground">{church.name}</div>
-                          <code className="text-[10px] text-primary">{church.slug}</code>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-foreground font-bold">{church.plan || 'Starter'}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={cn("uppercase text-[9px] font-bold px-2 py-0.5", church.sms?.subscriptionStatus === 'active' ? "bg-accent text-white" : church.sms?.subscriptionStatus === 'suspended' ? "bg-destructive text-white" : "bg-amber-100 text-amber-700")}>
-                            {church.sms?.subscriptionStatus || 'Pending'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <CreditCard className="h-3 w-3 text-muted-foreground" />
-                            <span className="font-mono font-bold">{(church.sms?.credits || 0).toLocaleString()}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="text-muted-foreground group-hover:bg-white group-hover:shadow-sm">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="glass w-56">
-                              <DropdownMenuItem onClick={() => setEditingOrg(church)} className="font-bold">
-                                <Pencil className="mr-2 h-4 w-4" /> Edit Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setManagingSmsId(church.id)} className="font-bold text-primary">
-                                <Zap className="mr-2 h-4 w-4" /> Top-up Wallet
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              {church.sms?.subscriptionStatus !== 'active' ? (
-                                <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'active')}>
-                                  <CheckCircle2 className="mr-2 h-4 w-4 text-accent" /> Activate Org
-                                </DropdownMenuItem>
-                              ) : (
-                                <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'suspended')} className="text-destructive">
-                                  <Ban className="mr-2 h-4 w-4" /> Suspend Service
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => setMinistryToDelete(church)} className="text-destructive font-bold focus:bg-destructive focus:text-white">
-                                <Trash2 className="mr-2 h-4 w-4" /> Delete Ministry
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
+            <CardContent className="p-0 min-h-[400px]">
+              <TabsContent value="active" className="mt-0 animate-in fade-in duration-300">
+                {isRefreshing && !platformStats ? (
+                  <TableSkeleton />
+                ) : (
+                  <Table>
+                    <TableHeader className="bg-muted/10">
+                      <TableRow>
+                        <TableHead className="font-bold text-[10px] uppercase">Ministry</TableHead>
+                        <TableHead className="font-bold text-[10px] uppercase">Plan</TableHead>
+                        <TableHead className="font-bold text-[10px] uppercase">Status</TableHead>
+                        <TableHead className="font-bold text-[10px] uppercase">Balance</TableHead>
+                        <TableHead className="text-right font-bold text-[10px] uppercase">Actions</TableHead>
                       </TableRow>
-                    ))}
-                    {activeMinistries.length === 0 && !isRefreshing && (
-                      <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">No active organizations found.</TableCell></TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {activeMinistries.map((church: any) => (
+                        <TableRow key={church.id} className="group hover:bg-muted/5 transition-colors">
+                          <TableCell>
+                            <div className="font-bold text-foreground">{church.name}</div>
+                            <code className="text-[10px] text-primary">{church.slug}</code>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-foreground font-bold">{church.plan || 'Starter'}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={cn("uppercase text-[9px] font-bold px-2 py-0.5", church.sms?.subscriptionStatus === 'active' ? "bg-accent text-white" : church.sms?.subscriptionStatus === 'suspended' ? "bg-destructive text-white" : "bg-amber-100 text-amber-700")}>
+                              {church.sms?.subscriptionStatus || 'Pending'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <CreditCard className="h-3 w-3 text-muted-foreground" />
+                              <span className="font-mono font-bold">{(church.sms?.credits || 0).toLocaleString()}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="text-muted-foreground group-hover:bg-white group-hover:shadow-sm">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="glass w-56">
+                                <DropdownMenuItem onClick={() => setEditingOrg(church)} className="font-bold">
+                                  <Pencil className="mr-2 h-4 w-4" /> Edit Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setManagingSmsId(church.id)} className="font-bold text-primary">
+                                  <Zap className="mr-2 h-4 w-4" /> Top-up Wallet
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                {church.sms?.subscriptionStatus !== 'active' ? (
+                                  <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'active')}>
+                                    <CheckCircle2 className="mr-2 h-4 w-4 text-accent" /> Activate Org
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem onClick={() => handleUpdateStatus(church.id, 'suspended')} className="text-destructive">
+                                    <Ban className="mr-2 h-4 w-4" /> Suspend Service
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => setMinistryToDelete(church)} className="text-destructive font-bold focus:bg-destructive focus:text-white">
+                                  <Trash2 className="mr-2 h-4 w-4" /> Delete Ministry
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {activeMinistries.length === 0 && !isRefreshing && (
+                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">No active organizations found.</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
               </TabsContent>
 
-              <TabsContent value="deleted" className="mt-0">
+              <TabsContent value="deleted" className="mt-0 animate-in fade-in duration-300">
                 <Table>
                   <TableHeader className="bg-muted/10">
                     <TableRow>
@@ -426,7 +447,7 @@ export default function SystemAdminPortal() {
                             <Button 
                               variant="outline" 
                               size="sm" 
-                              className="h-8 rounded-lg border-primary/20 text-primary hover:bg-primary/10 font-bold" 
+                              className="h-8 rounded-lg border-primary/20 text-primary hover:bg-primary/10 font-bold transition-all" 
                               onClick={() => handleRestore(church.id)} 
                               disabled={isProcessing}
                             >
@@ -435,7 +456,7 @@ export default function SystemAdminPortal() {
                             <Button 
                               variant="destructive" 
                               size="sm" 
-                              className="h-8 rounded-lg font-bold" 
+                              className="h-8 rounded-lg font-bold transition-all" 
                               onClick={() => setMinistryToPurge(church)} 
                               disabled={isProcessing}
                             >
@@ -463,7 +484,7 @@ export default function SystemAdminPortal() {
           </Tabs>
         </Card>
 
-        <Card className="glass h-fit">
+        <Card className="glass h-fit border-border/40">
           <CardHeader><CardTitle className="text-sm font-bold uppercase tracking-widest text-foreground">Top Active Tenants</CardTitle><CardDescription className="text-xs">Based on total SMS dispatches.</CardDescription></CardHeader>
           <CardContent className="space-y-4">
             {(platformStats?.topSpenders || []).map((spender: any, i: number) => (
@@ -484,11 +505,11 @@ export default function SystemAdminPortal() {
         <DialogContent className="glass">
           <DialogHeader><DialogTitle>Edit Organization</DialogTitle><DialogDescription>Modify primary markers for {editingOrg?.name}.</DialogDescription></DialogHeader>
           <div className="py-6 space-y-4">
-            <div className="space-y-2"><Label>Ministry Name</Label><Input value={editingOrg?.name || ''} onChange={(e) => setEditingOrg({...editingOrg, name: e.target.value})} /></div>
-            <div className="space-y-2"><Label>Tenant Slug</Label><Input value={editingOrg?.slug || ''} onChange={(e) => setEditingOrg({...editingOrg, slug: e.target.value})} className="font-mono" /></div>
-            <div className="space-y-2"><Label>Service Plan</Label><Select value={editingOrg?.plan || 'Basic'} onValueChange={(v) => setEditingOrg({...editingOrg, plan: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Basic">Starter (Basic)</SelectItem><SelectItem value="Standard">Ministry Growth (Standard)</SelectItem><SelectItem value="Premium">Enterprise (Premium)</SelectItem></SelectContent></Select></div>
-            <Button className="w-full bg-primary h-12 rounded-xl mt-4" onClick={handleSaveOrg} disabled={isProcessing}>
-              {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+            <div className="space-y-2"><Label>Ministry Name</Label><Input value={editingOrg?.name || ''} onChange={(e) => setEditingOrg({...editingOrg, name: e.target.value})} className="rounded-xl h-11" /></div>
+            <div className="space-y-2"><Label>Tenant Slug</Label><Input value={editingOrg?.slug || ''} onChange={(e) => setEditingOrg({...editingOrg, slug: e.target.value})} className="font-mono rounded-xl h-11" /></div>
+            <div className="space-y-2"><Label>Service Plan</Label><Select value={editingOrg?.plan || 'Basic'} onValueChange={(v) => setEditingOrg({...editingOrg, plan: v})}><SelectTrigger className="rounded-xl h-11"><SelectValue /></SelectTrigger><SelectContent className="glass"><SelectItem value="Basic">Starter (Basic)</SelectItem><SelectItem value="Standard">Ministry Growth (Standard)</SelectItem><SelectItem value="Premium">Enterprise (Premium)</SelectItem></SelectContent></Select></div>
+            <Button className="w-full bg-primary h-12 rounded-xl mt-4 text-white font-bold" onClick={handleSaveOrg} disabled={isProcessing}>
+              {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Save Changes"}
             </Button>
           </div>
         </DialogContent>
@@ -498,8 +519,8 @@ export default function SystemAdminPortal() {
         <DialogContent className="glass">
           <DialogHeader><DialogTitle>Wallet Credit Allocation</DialogTitle><DialogDescription>Adding credits for <strong>{activeChurchSms?.name}</strong>.</DialogDescription></DialogHeader>
           <div className="py-6 space-y-4">
-            <div className="p-4 rounded-xl bg-muted/20 border flex justify-between items-center"><span className="text-sm font-medium">Current Balance:</span><span className="text-xl font-bold text-foreground">{(activeChurchSms?.sms?.credits || 0).toLocaleString()} Credits</span></div>
-            <div className="space-y-2"><Label>SMS Credits to Add</Label><div className="flex gap-2"><Input type="number" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="h-12" /><Button className="bg-primary h-12 px-6" onClick={handleTopUp} disabled={isProcessing}>{isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}</Button></div></div>
+            <div className="p-4 rounded-xl bg-muted/20 border border-border flex justify-between items-center"><span className="text-sm font-medium">Current Balance:</span><span className="text-xl font-bold text-foreground">{(activeChurchSms?.sms?.credits || 0).toLocaleString()} Credits</span></div>
+            <div className="space-y-2"><Label>SMS Credits to Add</Label><div className="flex gap-2"><Input type="number" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} className="h-12 rounded-xl" /><Button className="bg-primary h-12 px-6 rounded-xl text-white" onClick={handleTopUp} disabled={isProcessing}>{isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}</Button></div></div>
           </div>
         </DialogContent>
       </Dialog>
@@ -514,7 +535,7 @@ export default function SystemAdminPortal() {
                 <div className="p-4 bg-muted/20 rounded-xl border border-border space-y-2">
                   <div className="flex items-start gap-2 text-xs">
                     <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                    <p>The organization will be suspended and hidden from the active directory. Data is preserved for 30 days for potential recovery.</p>
+                    <p>The organization will be suspended and hidden from the active directory. Data is preserved for potential recovery.</p>
                   </div>
                 </div>
                 <p className="font-bold text-destructive flex items-center gap-2">
@@ -525,8 +546,8 @@ export default function SystemAdminPortal() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSoftDelete} className="bg-destructive hover:bg-destructive/90 text-white font-bold" disabled={isProcessing}>
+            <AlertDialogCancel disabled={isProcessing} className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSoftDelete} className="bg-destructive hover:bg-destructive/90 text-white font-bold rounded-xl" disabled={isProcessing}>
               {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />} Delete Ministry
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -556,8 +577,8 @@ export default function SystemAdminPortal() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-6">
-            <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handlePermanentPurge} className="bg-destructive hover:bg-red-700 text-white font-black h-12 px-8" disabled={isProcessing}>
+            <AlertDialogCancel disabled={isProcessing} className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handlePermanentPurge} className="bg-destructive hover:bg-red-700 text-white font-black h-12 px-8 rounded-xl" disabled={isProcessing}>
               {isProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />} PURGE FOREVER
             </AlertDialogAction>
           </AlertDialogFooter>
