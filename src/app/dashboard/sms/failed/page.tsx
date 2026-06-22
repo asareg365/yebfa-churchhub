@@ -7,12 +7,11 @@ import {
   Loader2,
   RefreshCcw,
   Clock,
-  History,
   Info,
   Trash2,
   CheckCircle2
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,7 +33,7 @@ export default function FailedMessagesPage() {
   const [isRetryingAll, setIsRetryingAll] = useState(false);
 
   const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
+    if (!user?.email || !db) return null;
     return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
   }, [db, user?.email]);
   
@@ -42,13 +41,12 @@ export default function FailedMessagesPage() {
   const currentChurch = churches?.[0];
 
   const logsRef = useMemo(() => {
-    if (!currentChurch?.id) return null;
+    if (!currentChurch?.id || !db) return null;
     return collection(db, 'churches', currentChurch.id, 'smsLogs');
   }, [db, currentChurch?.id]);
 
   const failedQuery = useMemo(() => {
     if (!logsRef) return null;
-    // Show messages failed within last 3 retries
     return query(logsRef, where('status', '==', 'failed'), orderBy('updatedAt', 'desc'), limit(100));
   }, [logsRef]);
 
@@ -63,19 +61,17 @@ export default function FailedMessagesPage() {
   }, [failedLogs, searchTerm]);
 
   const handleRetry = async (log: SMSLog) => {
-    if (!currentChurch?.id || !log.id) return;
+    if (!currentChurch?.id || !log.id || !logsRef) return;
     setRetryingId(log.id);
     
     try {
-      // 1. Update status to retrying immediately
-      const logDoc = doc(logsRef!, log.id);
-      await updateDoc(logDoc, { 
+      const logDocRef = doc(logsRef, log.id);
+      await updateDoc(logDocRef, { 
         status: 'retrying', 
         updatedAt: serverTimestamp(),
         retryCount: (log.retryCount || 0) + 1 
       });
 
-      // 2. Attempt send
       const outcome = await sendAndLogSMS(db, currentChurch.id, {
         phone: log.phone,
         message: log.message,
@@ -86,13 +82,10 @@ export default function FailedMessagesPage() {
       });
 
       if (outcome.success) {
-        // Remove the original failed log or keep it marked as resolved? 
-        // For simplicity, we delete the specific OLD failure record since sendAndLogSMS creates a NEW one
-        await deleteDoc(logDoc);
-        toast({ title: 'Retry successful', description: 'Message has been delivered.' });
+        await deleteDoc(logDocRef);
+        toast({ title: 'Retry successful' });
       } else {
-        // Update status back to failed with new error
-        await updateDoc(logDoc, { 
+        await updateDoc(logDocRef, { 
           status: 'failed', 
           error: outcome.error,
           updatedAt: serverTimestamp() 
@@ -100,69 +93,19 @@ export default function FailedMessagesPage() {
         toast({ title: 'Retry failed', description: outcome.error, variant: 'destructive' });
       }
     } catch (error: any) {
-      toast({ title: 'Error during retry', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } finally {
       setRetryingId(null);
     }
   };
 
-  const handleRetryAll = async () => {
-    if (!filteredLogs.length || isRetryingAll) return;
-    setIsRetryingAll(true);
-    let successCount = 0;
-    
-    for (const log of filteredLogs) {
-      if ((log.retryCount || 0) < 3) {
-        // Individual logic handled in a loop for simplicity
-        try {
-          const outcome = await sendAndLogSMS(db, currentChurch!.id, {
-            phone: log.phone,
-            message: log.message,
-            type: log.type,
-            memberName: log.memberName,
-            memberId: log.memberId,
-            retryCount: (log.retryCount || 0) + 1
-          });
-          if (outcome.success) {
-            await deleteDoc(doc(logsRef!, log.id!));
-            successCount++;
-          }
-        } catch (e) {}
-      }
-    }
-    
-    toast({ title: 'Batch retry complete', description: `Successfully resent ${successCount} messages.` });
-    setIsRetryingAll(false);
-  };
-
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex justify-between items-end">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight mb-1 text-destructive flex items-center gap-3">
-            <AlertTriangle className="h-8 w-8" />
-            Failed Messages
-          </h2>
-          <p className="text-muted-foreground">Monitor and manage communication delivery failures.</p>
-        </div>
-        <div className="flex gap-2">
-          <Button 
-            variant="destructive" 
-            className="h-10 px-6 rounded-xl"
-            onClick={handleRetryAll}
-            disabled={!filteredLogs.length || isRetryingAll}
-          >
-            {isRetryingAll ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
-            Retry All Eligible
-          </Button>
-        </div>
-      </div>
-
+    <div className="space-y-6">
       <Alert variant="destructive" className="glass bg-destructive/5 border-destructive/20">
         <Info className="h-4 w-4" />
         <AlertTitle className="font-bold">Automated Retries</AlertTitle>
         <AlertDescription className="text-xs">
-          The system automatically attempts to resend failed messages up to 3 times within 24 hours. Messages exceeding this limit require manual investigation.
+          The system automatically attempts to resend failed messages up to 3 times. Manual retry is available for permanent failures.
         </AlertDescription>
       </Alert>
 
@@ -173,7 +116,7 @@ export default function FailedMessagesPage() {
             <div className="relative w-full md:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
-                placeholder="Search by recipient..." 
+                placeholder="Search recipient..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 h-10 rounded-xl bg-white"
@@ -181,7 +124,7 @@ export default function FailedMessagesPage() {
             </div>
           </div>
         </CardHeader>
-        <div className="p-0">
+        <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="bg-muted/10 text-muted-foreground">
@@ -201,50 +144,35 @@ export default function FailedMessagesPage() {
                       <div className="text-[10px] text-muted-foreground">{log.phone}</div>
                     </td>
                     <td className="p-4">
-                      <p className="text-xs text-muted-foreground line-clamp-1 max-w-[200px]" title={log.message}>
-                        {log.message}
-                      </p>
+                      <p className="text-xs text-muted-foreground line-clamp-1 max-w-[200px]">{log.message}</p>
                     </td>
                     <td className="p-4">
-                      <div className="flex flex-col gap-1">
-                        <Badge variant="destructive" className="bg-destructive/10 text-destructive text-[10px] border-0 w-fit">
-                          {log.error || 'Provider Timeout'}
-                        </Badge>
-                        <span className="text-[9px] text-muted-foreground flex items-center">
-                          <Clock className="w-2 h-2 mr-1" />
-                          Last: {log.updatedAt?.toDate ? format(log.updatedAt.toDate(), 'HH:mm') : 'N/A'}
-                        </span>
-                      </div>
+                      <Badge variant="destructive" className="bg-destructive/10 text-destructive text-[10px] border-0">
+                        {log.error || 'Provider Timeout'}
+                      </Badge>
                     </td>
                     <td className="p-4">
-                      <div className="flex items-center gap-1">
-                        <Badge variant={log.retryCount >= 3 ? "secondary" : "outline"} className="text-[10px]">
-                          {log.retryCount || 0} / 3
-                        </Badge>
-                      </div>
+                      <Badge variant="outline" className="text-[10px]">
+                        {log.retryCount || 0} / 3
+                      </Badge>
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex justify-end gap-2">
                         <Button 
                           size="sm" 
                           variant="outline" 
-                          className="rounded-lg h-8 px-3 border-destructive/20 hover:bg-destructive/10 text-destructive"
-                          onClick={() => log.id && deleteDoc(doc(logsRef!, log.id))}
+                          className="rounded-lg h-8 w-8 p-0"
+                          onClick={() => log.id && logsRef && deleteDoc(doc(logsRef, log.id))}
                         >
                           <Trash2 className="w-3 h-3" />
                         </Button>
                         <Button 
                           size="sm" 
-                          variant="default" 
                           className="rounded-lg h-8 px-3 bg-primary"
                           onClick={() => handleRetry(log)}
                           disabled={retryingId === log.id || log.retryCount >= 3}
                         >
-                          {retryingId === log.id ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <RefreshCcw className="w-3 h-3" />
-                          )}
+                          {retryingId === log.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCcw className="w-3 h-3" />}
                           <span className="ml-1">Retry</span>
                         </Button>
                       </div>
@@ -264,7 +192,7 @@ export default function FailedMessagesPage() {
               </tbody>
             </table>
           </div>
-        </div>
+        </CardContent>
       </Card>
     </div>
   );

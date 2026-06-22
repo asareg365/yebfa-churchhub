@@ -35,7 +35,7 @@ import { startOfDay, format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
-// Sub-page components
+// Sub-page components refactored as parts of the hub
 import SMSLogsPage from './logs/page';
 import FailedMessagesPage from './failed/page';
 import SMSTemplatesPage from './templates/page';
@@ -56,17 +56,28 @@ export default function SMSCenterHub() {
   const [scheduledAt, setScheduledAt] = useState('');
 
   const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
+    if (!user?.email || !db) return null;
     return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
   }, [db, user?.email]);
-  const { data: churches } = useCollection(churchQuery);
+  
+  const { data: churches, loading: churchLoading } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
   const smsRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'smsLogs') : null, [db, currentChurch?.id]);
   const campaignRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'scheduledSms') : null, [db, currentChurch?.id]);
   
-  const { data: allLogs } = useCollection(smsRef ? query(smsRef, orderBy('createdAt', 'desc'), limit(100)) : null);
-  const { data: campaigns } = useCollection(campaignRef ? query(campaignRef, orderBy('scheduledAt', 'desc')) : null);
+  const allLogsQuery = useMemo(() => {
+    if (!smsRef) return null;
+    return query(smsRef, orderBy('createdAt', 'desc'), limit(100));
+  }, [smsRef]);
+  
+  const campaignQuery = useMemo(() => {
+    if (!campaignRef) return null;
+    return query(campaignRef, orderBy('scheduledAt', 'desc'));
+  }, [campaignRef]);
+
+  const { data: allLogs } = useCollection(allLogsQuery);
+  const { data: campaigns } = useCollection(campaignQuery);
 
   const stats = useMemo(() => {
     const sms = currentChurch?.sms || { credits: 0, enabled: false, subscriptionStatus: 'pending' };
@@ -136,6 +147,10 @@ export default function SMSCenterHub() {
     finally { setIsSending(false); }
   };
 
+  if (churchLoading) {
+    return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
@@ -148,7 +163,21 @@ export default function SMSCenterHub() {
             </Badge>
           </div>
         </div>
-        <Button variant="outline" className="w-full md:w-auto glass border-primary/20 text-primary" onClick={() => processBirthdaysToday(db, currentChurch!.id)} disabled={isProcessingBirthdays || stats.status !== 'active'}>
+        <Button 
+          variant="outline" 
+          className="w-full md:w-auto glass border-primary/20 text-primary" 
+          onClick={async () => {
+            if (!currentChurch?.id) return;
+            setIsProcessingBirthdays(true);
+            try {
+              const res = await processBirthdaysToday(db, currentChurch.id);
+              toast({ title: "Birthday check complete", description: `Sent: ${res.sent}, Failed: ${res.failed}` });
+            } finally {
+              setIsProcessingBirthdays(false);
+            }
+          }} 
+          disabled={isProcessingBirthdays || stats.status !== 'active'}
+        >
           {isProcessingBirthdays ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Cake className="w-4 h-4 mr-2" />}
           Run Birthday Check
         </Button>
@@ -270,8 +299,8 @@ export default function SMSCenterHub() {
                               </div>
                             </td>
                             <td className="p-4 text-right">
-                              {camp.status !== 'completed' && (
-                                <Button variant="ghost" size="icon" className="text-destructive h-8 w-8 rounded-lg" onClick={() => deleteDoc(doc(campaignRef!, camp.id))}>
+                              {camp.status !== 'completed' && campaignRef && (
+                                <Button variant="ghost" size="icon" className="text-destructive h-8 w-8 rounded-lg" onClick={() => deleteDoc(doc(campaignRef, camp.id))}>
                                   <Trash2 className="w-4 h-4" />
                                 </Button>
                               )}
