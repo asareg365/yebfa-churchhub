@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -105,7 +104,6 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
   const currentChurch = churches?.[0];
 
   const filteredMenuItems = useMemo(() => {
-    // Before hydration, return base items to prevent empty sidebar
     if (!mounted) return ALL_MENU_ITEMS.filter(item => ["dashboard", "settings"].includes(item.id));
     
     if (isSuperAdmin) return ALL_MENU_ITEMS;
@@ -161,7 +159,7 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
                 <CollapsibleTrigger asChild>
                   <button
                     className={cn(
-                      "w-full group flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200",
+                      "w-full group flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-150",
                       isGroupActive && !isOpen
                         ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
                         : "text-muted-foreground hover:bg-muted hover:text-primary"
@@ -174,7 +172,7 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
                     <ChevronRight className={cn("w-4 h-4 transition-transform duration-200", isOpen && "rotate-90")} />
                   </button>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-1 pl-4 animate-in slide-in-from-top-1 duration-200">
+                <CollapsibleContent className="space-y-1 pl-4 animate-in slide-in-from-top-1 duration-150">
                   {item.subItems?.map((sub) => {
                     const isSubActive = pathname === sub.href;
                     return (
@@ -183,7 +181,7 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
                         href={sub.href}
                         onClick={onNavItemClick}
                         className={cn(
-                          "flex items-center gap-3 px-4 py-2 rounded-lg transition-all duration-200 text-sm",
+                          "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-150 text-sm",
                           isSubActive
                             ? "bg-primary/10 text-primary font-bold"
                             : "text-muted-foreground hover:bg-muted hover:text-primary"
@@ -206,7 +204,7 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
               href={item.href}
               onClick={onNavItemClick}
               className={cn(
-                "group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
+                "group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-150",
                 isActive 
                   ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
                   : "text-muted-foreground hover:bg-muted hover:text-primary"
@@ -219,7 +217,7 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
         })}
         {churchLoading && !isSuperAdmin && (
           <div className="flex items-center gap-3 px-4 py-3 text-muted-foreground animate-pulse">
-            <Loader2 className="w-5 h-5 animate-spin" />
+            <Loader2 className="w-5 h-5 animate-spin text-primary/40" />
             <span className="text-sm">Loading Modules...</span>
           </div>
         )}
@@ -240,7 +238,7 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
 
 export function Sidebar() {
   return (
-    <div className="fixed left-4 top-4 bottom-4 w-72 bg-white rounded-3xl z-50 hidden lg:flex flex-col p-6 border border-border shadow-xl overflow-hidden">
+    <div className="fixed left-4 top-4 bottom-4 w-72 bg-white rounded-3xl z-50 hidden lg:flex flex-col p-6 border border-border shadow-xl overflow-hidden transition-all duration-300">
       <SidebarContent />
     </div>
   );

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
@@ -52,7 +51,6 @@ export default function BillingCenterHub() {
 
   const { data: transactions } = useCollection(transactionsRef ? query(transactionsRef, orderBy('createdAt', 'desc'), limit(5)) : null);
 
-  // Sync logic: Use real-time SMS credits from church doc as the source of truth
   const sub = useMemo(() => ({
     plan: currentChurch?.plan || 'Basic',
     smsCredits: currentChurch?.sms?.credits || 0,
@@ -61,7 +59,6 @@ export default function BillingCenterHub() {
     renewalDate: currentChurch?.subscription?.renewalDate || '1st of Month'
   }), [currentChurch]);
 
-  // For usage bar: assuming a standard monthly allocation based on plan
   const totalAllocation = useMemo(() => {
     if (sub.plan === 'Premium') return 5000;
     if (sub.plan === 'Standard') return 1000;
@@ -76,25 +73,27 @@ export default function BillingCenterHub() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight mb-1">Billing Center</h2>
           <p className="text-muted-foreground">Managing subscriptions and enterprise credits for {currentChurch?.name}.</p>
         </div>
-        <div className="flex gap-2">
-          <Button className="bg-primary rounded-xl" onClick={() => setActiveTab('plans')}>
+        <div className="flex gap-2 w-full md:w-auto">
+          <Button className="flex-1 md:flex-none bg-primary rounded-xl" onClick={() => setActiveTab('plans')}>
             <Package className="w-4 h-4 mr-2" /> Upgrade Plan
           </Button>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="glass border-white/10 p-1 rounded-2xl w-full md:w-auto">
-          <TabsTrigger value="overview" className="rounded-xl px-6 flex-1 md:flex-none"><Wallet className="w-4 h-4 mr-2" />Overview</TabsTrigger>
-          <TabsTrigger value="plans" className="rounded-xl px-6 flex-1 md:flex-none"><Package className="w-4 h-4 mr-2" />Plans</TabsTrigger>
-          <TabsTrigger value="transactions" className="rounded-xl px-6 flex-1 md:flex-none"><History className="w-4 h-4 mr-2" />Transactions</TabsTrigger>
-          <TabsTrigger value="usage" className="rounded-xl px-6 flex-1 md:flex-none"><FileText className="w-4 h-4 mr-2" />Usage Reports</TabsTrigger>
-        </TabsList>
+        <div className="w-full overflow-x-auto hide-scrollbar pb-1">
+          <TabsList className="glass border-white/10 p-1 rounded-2xl w-fit min-w-full inline-flex md:w-auto">
+            <TabsTrigger value="overview" className="rounded-xl px-6 shrink-0"><Wallet className="w-4 h-4 mr-2" />Overview</TabsTrigger>
+            <TabsTrigger value="plans" className="rounded-xl px-6 shrink-0"><Package className="w-4 h-4 mr-2" />Plans</TabsTrigger>
+            <TabsTrigger value="transactions" className="rounded-xl px-6 shrink-0"><History className="w-4 h-4 mr-2" />Transactions</TabsTrigger>
+            <TabsTrigger value="usage" className="rounded-xl px-6 shrink-0"><FileText className="w-4 h-4 mr-2" />Usage Reports</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-3">
@@ -157,13 +156,13 @@ export default function BillingCenterHub() {
             <Card className="glass bg-accent/5 border-accent/20 h-fit">
               <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Smartphone className="w-5 h-5 text-accent" />Manual Top-up</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <div className="p-4 rounded-2xl bg-white/50 border border-accent/10 space-y-2">
+                <div className="p-4 rounded-2xl bg-white/50 border border-accent/10 space-y-2 text-center">
                   <p className="text-xs font-medium text-muted-foreground">MoMo Pay</p>
                   <p className="text-2xl font-bold text-accent">0248472474</p>
                   <p className="text-[10px] italic text-muted-foreground">Reference: {currentChurch?.slug}</p>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">Payments are typically applied within 1 hour. Contact support for instant activation.</p>
-                <Button variant="outline" className="w-full border-accent/20 text-accent font-bold" onClick={() => window.open('https://wa.me/233248472474')}>WhatsApp Verification</Button>
+                <Button variant="outline" className="w-full border-accent/20 text-accent font-bold rounded-xl" onClick={() => window.open('https://wa.me/233248472474')}>WhatsApp Verification</Button>
               </CardContent>
             </Card>
           </div>

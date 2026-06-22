@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -11,12 +10,9 @@ import {
   AlertTriangle,
   Wallet,
   MessageSquare,
-  BarChart3,
   Clock,
-  CreditCard,
   Layout,
   History,
-  TrendingDown,
   Info,
   Calendar,
   Filter,
@@ -142,7 +138,7 @@ export default function SMSCenterHub() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight mb-1">SMS Center</h2>
           <div className="flex items-center gap-2">
@@ -152,27 +148,29 @@ export default function SMSCenterHub() {
             </Badge>
           </div>
         </div>
-        <Button variant="outline" className="glass border-primary/20 text-primary" onClick={() => processBirthdaysToday(db, currentChurch!.id)} disabled={isProcessingBirthdays || stats.status !== 'active'}>
+        <Button variant="outline" className="w-full md:w-auto glass border-primary/20 text-primary" onClick={() => processBirthdaysToday(db, currentChurch!.id)} disabled={isProcessingBirthdays || stats.status !== 'active'}>
           {isProcessingBirthdays ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Cake className="w-4 h-4 mr-2" />}
           Run Birthday Check
         </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="glass border-white/10 p-1 rounded-2xl">
-          <TabsTrigger value="dashboard" className="rounded-xl px-6"><MessageSquare className="w-4 h-4 mr-2" />Dashboard</TabsTrigger>
-          <TabsTrigger value="campaigns" className="rounded-xl px-6"><Calendar className="w-4 h-4 mr-2" />Campaigns</TabsTrigger>
-          <TabsTrigger value="logs" className="rounded-xl px-6"><History className="w-4 h-4 mr-2" />Logs</TabsTrigger>
-          <TabsTrigger value="failed" className="rounded-xl px-6"><AlertTriangle className="w-4 h-4 mr-2" />Failed</TabsTrigger>
-          <TabsTrigger value="templates" className="rounded-xl px-6"><Layout className="w-4 h-4 mr-2" />Templates</TabsTrigger>
-        </TabsList>
+        <div className="w-full overflow-x-auto hide-scrollbar pb-1">
+          <TabsList className="glass border-white/10 p-1 rounded-2xl w-fit min-w-full inline-flex md:w-auto">
+            <TabsTrigger value="dashboard" className="rounded-xl px-6 shrink-0"><MessageSquare className="w-4 h-4 mr-2" />Dashboard</TabsTrigger>
+            <TabsTrigger value="campaigns" className="rounded-xl px-6 shrink-0"><Calendar className="w-4 h-4 mr-2" />Campaigns</TabsTrigger>
+            <TabsTrigger value="logs" className="rounded-xl px-6 shrink-0"><History className="w-4 h-4 mr-2" />Logs</TabsTrigger>
+            <TabsTrigger value="failed" className="rounded-xl px-6 shrink-0"><AlertTriangle className="w-4 h-4 mr-2" />Failed</TabsTrigger>
+            <TabsTrigger value="templates" className="rounded-xl px-6 shrink-0"><Layout className="w-4 h-4 mr-2" />Templates</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="dashboard" className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-4">
-            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Available Credits</p><h3 className="text-2xl font-bold text-primary">{stats.remaining.toLocaleString()}</h3></CardContent></Card>
-            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sent Today</p><h3 className="text-2xl font-bold text-accent">{stats.today}</h3></CardContent></Card>
-            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Failures Today</p><h3 className="text-2xl font-bold text-destructive">{stats.failed}</h3></CardContent></Card>
-            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Service Status</p><h3 className="text-2xl font-bold capitalize">{stats.status}</h3></CardContent></Card>
+          <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Available Credits</p><h3 className="text-xl md:text-2xl font-bold text-primary">{stats.remaining.toLocaleString()}</h3></CardContent></Card>
+            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sent Today</p><h3 className="text-xl md:text-2xl font-bold text-accent">{stats.today}</h3></CardContent></Card>
+            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Failures Today</p><h3 className="text-xl md:text-2xl font-bold text-destructive">{stats.failed}</h3></CardContent></Card>
+            <Card className="glass"><CardContent className="pt-6"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Status</p><h3 className="text-xl md:text-2xl font-bold capitalize">{stats.status}</h3></CardContent></Card>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
@@ -199,7 +197,7 @@ export default function SMSCenterHub() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button className="w-full bg-primary h-11" onClick={handleGenerate} disabled={isGenerating || stats.status !== 'active'}>
+                  <Button className="w-full bg-primary h-11 rounded-xl" onClick={handleGenerate} disabled={isGenerating || stats.status !== 'active'}>
                     {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                     Generate with AI
                   </Button>
@@ -215,14 +213,14 @@ export default function SMSCenterHub() {
                   <div className="space-y-2">
                     <Label className="text-xs uppercase font-bold text-muted-foreground">Schedule for later (Optional)</Label>
                     <div className="flex gap-2">
-                       <Input type="datetime-local" className="bg-white h-11" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} />
-                       <Button className="bg-primary px-6" onClick={handleScheduleCampaign} disabled={!draft || !scheduledAt || isScheduling}>
+                       <Input type="datetime-local" className="bg-white h-11 rounded-xl" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} />
+                       <Button className="bg-primary px-6 rounded-xl shrink-0" onClick={handleScheduleCampaign} disabled={!draft || !scheduledAt || isScheduling}>
                          {isScheduling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
                        </Button>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" className="flex-1 h-11" onClick={handleSendTest} disabled={!draft || isSending}>
+                    <Button variant="outline" className="flex-1 h-11 rounded-xl" onClick={handleSendTest} disabled={!draft || isSending}>
                       {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                       Send Test SMS
                     </Button>
@@ -246,7 +244,7 @@ export default function SMSCenterHub() {
                         <tr>
                           <th className="p-4 font-bold text-[10px] uppercase">Message</th>
                           <th className="p-4 font-bold text-[10px] uppercase">Target</th>
-                          <th className="p-4 font-bold text-[10px] uppercase">Scheduled Time</th>
+                          <th className="p-4 font-bold text-[10px] uppercase">Scheduled</th>
                           <th className="p-4 font-bold text-[10px] uppercase">Status</th>
                           <th className="p-4 font-bold text-[10px] uppercase text-right">Action</th>
                         </tr>
@@ -255,14 +253,14 @@ export default function SMSCenterHub() {
                         {campaigns?.map(camp => (
                           <tr key={camp.id} className="hover:bg-muted/5 transition-colors">
                             <td className="p-4 max-w-[200px] truncate font-medium">{camp.message}</td>
-                            <td className="p-4"><Badge variant="outline" className="capitalize">{camp.target}</Badge></td>
+                            <td className="p-4"><Badge variant="outline" className="capitalize text-[10px]">{camp.target}</Badge></td>
                             <td className="p-4 text-xs">
                               {camp.scheduledAt?.toDate ? format(camp.scheduledAt.toDate(), 'MMM d, HH:mm') : 'N/A'}
                             </td>
                             <td className="p-4">
                               <div className="flex flex-col gap-1">
                                 <Badge className={cn(
-                                  "text-[10px] font-bold uppercase w-fit",
+                                  "text-[9px] font-bold uppercase w-fit",
                                   camp.status === 'completed' ? "bg-accent" : 
                                   camp.status === 'failed' ? "bg-destructive" : "bg-primary"
                                 )}>
@@ -273,7 +271,7 @@ export default function SMSCenterHub() {
                             </td>
                             <td className="p-4 text-right">
                               {camp.status !== 'completed' && (
-                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteDoc(doc(campaignRef!, camp.id))}>
+                                <Button variant="ghost" size="icon" className="text-destructive h-8 w-8 rounded-lg" onClick={() => deleteDoc(doc(campaignRef!, camp.id))}>
                                   <Trash2 className="w-4 h-4" />
                                 </Button>
                               )}

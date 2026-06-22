@@ -123,7 +123,6 @@ export default function WelfarePage() {
   const welfareRef = useMemo(() => currentChurch?.id ? collection(db, "churches", currentChurch.id, "welfare") : null, [db, currentChurch?.id]);
   const { data: welfareMembers, loading } = useCollection(welfareRef);
 
-  // Sub-collection listener for transactions when viewing a statement
   const transactionsRef = useMemo(() => {
     if (!currentChurch?.id || !selectedMember?.id) return null;
     return collection(db, "churches", currentChurch.id, "welfare", selectedMember.id, "transactions");
@@ -200,7 +199,6 @@ export default function WelfarePage() {
       const amount = Number(newTransaction.amount);
       const batch = writeBatch(db);
 
-      // 1. Add to Ledger
       const txDocRef = doc(transactionsRef);
       batch.set(txDocRef, {
         ...newTransaction,
@@ -209,7 +207,6 @@ export default function WelfarePage() {
         createdAt: serverTimestamp()
       });
 
-      // 2. Update Member Summary
       const memberDocRef = doc(welfareRef, selectedMember.id);
       const incrementField = newTransaction.type === "CONTRIBUTION" ? "totalContributions" : "totalBenefits";
       batch.update(memberDocRef, {
@@ -315,13 +312,13 @@ export default function WelfarePage() {
           <p className="text-muted-foreground">Transactional account system for member support and contributions.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
-          <Button variant="outline" onClick={() => setIsBulkImportOpen(true)} className="flex-1 md:flex-none glass border-white/10">
+          <Button variant="outline" onClick={() => setIsBulkImportOpen(true)} className="flex-1 md:flex-none glass border-white/10 rounded-xl">
             <FileUp className="mr-2 h-4 w-4" /> Bulk Setup
           </Button>
 
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="flex-1 md:flex-none bg-primary shadow-lg shadow-primary/20">
+              <Button className="flex-1 md:flex-none bg-primary shadow-lg shadow-primary/20 rounded-xl">
                 <Plus className="mr-2 h-4 w-4" /> New Account
               </Button>
             </DialogTrigger>
@@ -354,13 +351,13 @@ export default function WelfarePage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card className="glass border-primary/20 bg-primary/5">
           <CardContent className="pt-6">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Active Accounts</p>
-                <h3 className="text-2xl font-bold mt-1">{welfareMembers?.filter(m => m.status === 'Active').length || 0}</h3>
+                <h3 className="text-xl md:text-2xl font-bold mt-1">{welfareMembers?.filter(m => m.status === 'Active').length || 0}</h3>
               </div>
               <HandHelping className="w-4 h-4 text-primary" />
             </div>
@@ -371,7 +368,7 @@ export default function WelfarePage() {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Total Pooled</p>
-                <h3 className="text-2xl font-bold text-accent mt-1">GH₵{welfareMembers?.reduce((acc, curr) => acc + (curr.totalContributions || 0), 0).toLocaleString()}</h3>
+                <h3 className="text-xl md:text-2xl font-bold text-accent mt-1">GH₵{welfareMembers?.reduce((acc, curr) => acc + (curr.totalContributions || 0), 0).toLocaleString()}</h3>
               </div>
               <Wallet className="w-4 h-4 text-accent" />
             </div>
@@ -382,7 +379,7 @@ export default function WelfarePage() {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Support Disbursed</p>
-                <h3 className="text-2xl font-bold text-destructive mt-1">GH₵{welfareMembers?.reduce((acc, curr) => acc + (curr.totalBenefits || 0), 0).toLocaleString()}</h3>
+                <h3 className="text-xl md:text-2xl font-bold text-destructive mt-1">GH₵{welfareMembers?.reduce((acc, curr) => acc + (curr.totalBenefits || 0), 0).toLocaleString()}</h3>
               </div>
               <Heart className="w-4 h-4 text-destructive" />
             </div>
@@ -392,10 +389,12 @@ export default function WelfarePage() {
 
       <Tabs value={statusTab} onValueChange={setStatusTab} className="space-y-6">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-          <TabsList className="glass border-white/10 p-1 rounded-2xl">
-            <TabsTrigger value="all" className="rounded-xl px-6">Global Directory</TabsTrigger>
-            <TabsTrigger value="active" className="rounded-xl px-6">Active Only</TabsTrigger>
-          </TabsList>
+          <div className="w-full overflow-x-auto hide-scrollbar">
+            <TabsList className="glass border-white/10 p-1 rounded-2xl w-fit inline-flex">
+              <TabsTrigger value="all" className="rounded-xl px-6">Global Directory</TabsTrigger>
+              <TabsTrigger value="active" className="rounded-xl px-6">Active Only</TabsTrigger>
+            </TabsList>
+          </div>
           <div className="relative w-full md:max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Search account name..." className="pl-10 rounded-xl" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -406,93 +405,95 @@ export default function WelfarePage() {
           {loading ? (
             <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
           ) : (
-            <Table>
-              <TableHeader className="bg-muted/30">
-                <TableRow className="border-white/5">
-                  <TableHead className="w-[80px]"></TableHead>
-                  <TableHead>Account Holder</TableHead>
-                  <TableHead>Ledger Summary</TableHead>
-                  <TableHead>Net Standing</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Manage</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredMembers.map((member) => {
-                  const netStanding = (member.totalContributions || 0) - (member.totalBenefits || 0);
-                  return (
-                    <TableRow key={member.id} className="hover:bg-white/5 border-white/5 transition-colors group">
-                      <TableCell>
-                        <Avatar className="h-10 w-10 border border-white/10 shadow-sm">
-                          <AvatarImage src={member.photo} />
-                          <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">{getInitials(member.name)}</AvatarFallback>
-                        </Avatar>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-bold text-foreground">{member.name}</div>
-                        <div className="text-[10px] text-muted-foreground font-mono">{member.phone}</div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-3 text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <TrendingUp className="w-3 h-3 text-accent" />
-                            <span className="font-bold">GH₵{(member.totalContributions || 0).toLocaleString()}</span>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-muted/30">
+                  <TableRow className="border-white/5">
+                    <TableHead className="w-[80px]"></TableHead>
+                    <TableHead>Account Holder</TableHead>
+                    <TableHead>Ledger Summary</TableHead>
+                    <TableHead>Net Standing</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Manage</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredMembers.map((member) => {
+                    const netStanding = (member.totalContributions || 0) - (member.totalBenefits || 0);
+                    return (
+                      <TableRow key={member.id} className="hover:bg-white/5 border-white/5 transition-colors group">
+                        <TableCell>
+                          <Avatar className="h-10 w-10 border border-white/10 shadow-sm">
+                            <AvatarImage src={member.photo} />
+                            <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">{getInitials(member.name)}</AvatarFallback>
+                          </Avatar>
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-bold text-foreground text-sm whitespace-nowrap">{member.name}</div>
+                          <div className="text-[10px] text-muted-foreground font-mono">{member.phone}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3 text-[10px] md:text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <TrendingUp className="w-3 h-3 text-accent" />
+                              <span className="font-bold whitespace-nowrap">GH₵{(member.totalContributions || 0).toLocaleString()}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <TrendingDown className="w-3 h-3 text-destructive" />
+                              <span className="font-bold whitespace-nowrap">GH₵{(member.totalBenefits || 0).toLocaleString()}</span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <TrendingDown className="w-3 h-3 text-destructive" />
-                            <span className="font-bold">GH₵{(member.totalBenefits || 0).toLocaleString()}</span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn(
+                            "font-mono font-bold text-[10px] whitespace-nowrap",
+                            netStanding >= 0 ? "border-accent/20 text-accent bg-accent/5" : "border-destructive/20 text-destructive bg-destructive/5"
+                          )}>
+                            GH₵{netStanding.toLocaleString()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn("text-[9px] md:text-[10px] uppercase font-bold px-2 py-0.5 whitespace-nowrap", member.status === 'Active' ? 'text-accent border-accent/20' : 'text-muted-foreground')}>
+                            {member.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="group-hover:bg-white/10 rounded-lg"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="glass min-w-56">
+                              <DropdownMenuItem onClick={() => { setSelectedMember(member); setIsStatementDialogOpen(true); }} className="font-bold text-primary">
+                                <FileText className="mr-2 h-4 w-4" /> View Account Statement
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => { setSelectedMember(member); setIsTransactionDialogOpen(true); }}>
+                                <Plus className="mr-2 h-4 w-4 text-accent" /> Record Transaction
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator className="border-white/10" />
+                              <DropdownMenuItem onClick={() => { setEditingMember(member); setIsEditDialogOpen(true); }}>
+                                <Pencil className="mr-2 h-4 w-4" /> Edit Account Info
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator className="border-white/10" />
+                              <DropdownMenuItem className="text-destructive focus:text-white focus:bg-destructive" onClick={() => setMemberToDelete(member)}>
+                                <Trash2 className="mr-2 h-4 w-4" /> Close Account
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {filteredMembers.length === 0 && !loading && (
+                     <TableRow>
+                       <TableCell colSpan={6} className="py-24 text-center">
+                          <div className="flex flex-col items-center gap-2 opacity-30">
+                            <History className="w-12 h-12 mb-2" />
+                            <p className="text-sm font-medium italic">No welfare accounts found.</p>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={cn(
-                          "font-mono font-bold text-[10px]",
-                          netStanding >= 0 ? "border-accent/20 text-accent bg-accent/5" : "border-destructive/20 text-destructive bg-destructive/5"
-                        )}>
-                          GH₵{netStanding.toLocaleString()}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={cn("text-[10px] uppercase font-bold px-2 py-0.5", member.status === 'Active' ? 'text-accent border-accent/20' : 'text-muted-foreground')}>
-                          {member.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="group-hover:bg-white/10"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="glass min-w-56">
-                            <DropdownMenuItem onClick={() => { setSelectedMember(member); setIsStatementDialogOpen(true); }} className="font-bold text-primary">
-                              <FileText className="mr-2 h-4 w-4" /> View Account Statement
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { setSelectedMember(member); setIsTransactionDialogOpen(true); }}>
-                              <Plus className="mr-2 h-4 w-4 text-accent" /> Record Transaction
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator className="border-white/10" />
-                            <DropdownMenuItem onClick={() => { setEditingMember(member); setIsEditDialogOpen(true); }}>
-                              <Pencil className="mr-2 h-4 w-4" /> Edit Account Info
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator className="border-white/10" />
-                            <DropdownMenuItem className="text-destructive focus:text-white focus:bg-destructive" onClick={() => setMemberToDelete(member)}>
-                              <Trash2 className="mr-2 h-4 w-4" /> Close Account
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {filteredMembers.length === 0 && !loading && (
-                   <TableRow>
-                     <TableCell colSpan={6} className="py-24 text-center">
-                        <div className="flex flex-col items-center gap-2 opacity-30">
-                          <History className="w-12 h-12 mb-2" />
-                          <p className="text-sm font-medium italic">No welfare accounts found.</p>
-                        </div>
-                     </TableCell>
-                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                       </TableCell>
+                     </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </div>
       </Tabs>
@@ -501,31 +502,31 @@ export default function WelfarePage() {
       <Dialog open={isStatementDialogOpen} onOpenChange={setIsStatementDialogOpen}>
         <DialogContent className="glass max-w-4xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-6 bg-muted/20 border-b">
-            <div className="flex justify-between items-start">
+            <div className="flex justify-between items-start gap-4">
               <div className="space-y-1">
-                <DialogTitle className="text-2xl font-bold">Account Statement</DialogTitle>
-                <DialogDescription className="font-medium text-foreground">
+                <DialogTitle className="text-xl md:text-2xl font-bold">Account Statement</DialogTitle>
+                <DialogDescription className="font-medium text-foreground text-xs md:text-sm">
                   Ledger details for <span className="text-primary font-bold">{selectedMember?.name}</span>
                 </DialogDescription>
               </div>
-              <Button onClick={handleExportStatement} variant="outline" className="rounded-xl h-10 border-primary/20 text-primary hover:bg-primary/5" disabled={!transactions?.length}>
-                <Download className="mr-2 h-4 w-4" /> Export CSV
+              <Button onClick={handleExportStatement} variant="outline" className="rounded-xl h-10 border-primary/20 text-primary hover:bg-primary/5 shrink-0" disabled={!transactions?.length}>
+                <Download className="mr-2 h-4 w-4" /> <span className="hidden md:inline">Export CSV</span>
               </Button>
             </div>
           </DialogHeader>
           <div className="flex-1 overflow-hidden flex flex-col">
             <div className="grid grid-cols-3 gap-px bg-border border-b">
               <div className="bg-card p-4 text-center">
-                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-1">Total Contributed</p>
-                <p className="text-xl font-bold text-accent">GH₵{(selectedMember?.totalContributions || 0).toLocaleString()}</p>
+                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-1">Pooled</p>
+                <p className="text-base md:text-xl font-bold text-accent">GH₵{(selectedMember?.totalContributions || 0).toLocaleString()}</p>
               </div>
               <div className="bg-card p-4 text-center">
-                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-1">Total Benefits</p>
-                <p className="text-xl font-bold text-destructive">GH₵{(selectedMember?.totalBenefits || 0).toLocaleString()}</p>
+                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-1">Disbursed</p>
+                <p className="text-base md:text-xl font-bold text-destructive">GH₵{(selectedMember?.totalBenefits || 0).toLocaleString()}</p>
               </div>
               <div className="bg-card p-4 text-center">
-                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-1">Net Balance</p>
-                <p className="text-xl font-bold text-primary">GH₵{((selectedMember?.totalContributions || 0) - (selectedMember?.totalBenefits || 0)).toLocaleString()}</p>
+                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-1">Balance</p>
+                <p className="text-base md:text-xl font-bold text-primary">GH₵{((selectedMember?.totalContributions || 0) - (selectedMember?.totalBenefits || 0)).toLocaleString()}</p>
               </div>
             </div>
             
@@ -533,38 +534,40 @@ export default function WelfarePage() {
                {transactionsLoading ? (
                  <div className="py-20 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
                ) : transactions && transactions.length > 0 ? (
-                 <Table>
-                   <TableHeader className="bg-muted/10 sticky top-0 z-10">
-                     <TableRow>
-                       <TableHead className="text-[10px] font-bold uppercase py-2">Date</TableHead>
-                       <TableHead className="text-[10px] font-bold uppercase py-2">Transaction Type</TableHead>
-                       <TableHead className="text-[10px] font-bold uppercase py-2">Description</TableHead>
-                       <TableHead className="text-[10px] font-bold uppercase py-2 text-right">Amount (GH₵)</TableHead>
-                     </TableRow>
-                   </TableHeader>
-                   <TableBody>
-                     {transactions.map((tx) => (
-                       <TableRow key={tx.id} className="hover:bg-muted/5 border-white/5 transition-colors">
-                         <TableCell className="text-xs font-medium whitespace-nowrap">{tx.date}</TableCell>
-                         <TableCell>
-                           <Badge variant="outline" className={cn(
-                             "text-[9px] font-bold uppercase h-5",
-                             tx.type === 'CONTRIBUTION' ? 'border-accent/30 text-accent' : 'border-destructive/30 text-destructive'
-                           )}>
-                             {tx.type}
-                           </Badge>
-                         </TableCell>
-                         <TableCell className="text-xs text-muted-foreground max-w-xs">{tx.description || "N/A"}</TableCell>
-                         <TableCell className={cn(
-                           "text-sm font-bold text-right tabular-nums",
-                           tx.type === 'CONTRIBUTION' ? 'text-accent' : 'text-destructive'
-                         )}>
-                           {tx.type === 'CONTRIBUTION' ? '+' : '-'} {tx.amount.toLocaleString()}
-                         </TableCell>
+                 <div className="overflow-x-auto">
+                   <Table>
+                     <TableHeader className="bg-muted/10 sticky top-0 z-10">
+                       <TableRow>
+                         <TableHead className="text-[10px] font-bold uppercase py-2">Date</TableHead>
+                         <TableHead className="text-[10px] font-bold uppercase py-2">Type</TableHead>
+                         <TableHead className="text-[10px] font-bold uppercase py-2">Description</TableHead>
+                         <TableHead className="text-[10px] font-bold uppercase py-2 text-right">Amount (GH₵)</TableHead>
                        </TableRow>
-                     ))}
-                   </TableBody>
-                 </Table>
+                     </TableHeader>
+                     <TableBody>
+                       {transactions.map((tx) => (
+                         <TableRow key={tx.id} className="hover:bg-muted/5 border-white/5 transition-colors">
+                           <TableCell className="text-[11px] md:text-xs font-medium whitespace-nowrap">{tx.date}</TableCell>
+                           <TableCell>
+                             <Badge variant="outline" className={cn(
+                               "text-[9px] font-bold uppercase h-5 whitespace-nowrap",
+                               tx.type === 'CONTRIBUTION' ? 'border-accent/30 text-accent' : 'border-destructive/30 text-destructive'
+                             )}>
+                               {tx.type}
+                             </Badge>
+                           </TableCell>
+                           <TableCell className="text-[11px] md:text-xs text-muted-foreground max-w-[150px] md:max-w-xs truncate md:whitespace-normal">{tx.description || "N/A"}</TableCell>
+                           <TableCell className={cn(
+                             "text-xs md:text-sm font-bold text-right tabular-nums whitespace-nowrap",
+                             tx.type === 'CONTRIBUTION' ? 'text-accent' : 'text-destructive'
+                           )}>
+                             {tx.type === 'CONTRIBUTION' ? '+' : '-'} {tx.amount.toLocaleString()}
+                           </TableCell>
+                         </TableRow>
+                       ))}
+                     </TableBody>
+                   </Table>
+                 </div>
                ) : (
                  <div className="py-32 text-center opacity-30">
                     <FileText className="w-12 h-12 mx-auto mb-4" />
@@ -643,7 +646,7 @@ export default function WelfarePage() {
              <Button variant="outline" onClick={() => setIsTransactionDialogOpen(false)} className="rounded-xl">Cancel</Button>
              <Button 
                onClick={handleRecordTransaction} 
-               className={cn("rounded-xl h-10 px-8", newTransaction.type === 'CONTRIBUTION' ? 'bg-accent' : 'bg-destructive')}
+               className={cn("rounded-xl h-10 px-8", newTransaction.type === 'CONTRIBUTION' ? "bg-accent" : "bg-destructive")}
                disabled={isSavingTransaction || !newTransaction.amount}
              >
                {isSavingTransaction ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <History className="w-4 h-4 mr-2" />}
@@ -665,7 +668,7 @@ export default function WelfarePage() {
                   <AvatarFallback>{getInitials(editingMember.name)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 flex gap-2">
-                   <Button variant="outline" size="sm" onClick={() => addCaptureInputRef.current?.click()} className="flex-1 rounded-xl h-10"><Camera className="w-3 h-3 mr-1" /> Update Snapshot</Button>
+                   <Button variant="outline" size="sm" onClick={() => addCaptureInputRef.current?.click()} className="flex-1 rounded-xl h-10"><Camera className="w-3 h-3 mr-1" /> Snapshot</Button>
                    <input type="file" ref={addCaptureInputRef} capture="environment" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, true)} />
                 </div>
               </div>
