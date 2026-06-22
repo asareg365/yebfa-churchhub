@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { 
   Plus, 
   Search, 
@@ -28,6 +27,7 @@ import {
   TrendingDown,
   History
 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -93,6 +93,7 @@ export default function WelfarePage() {
   const [memberToDelete, setMemberToDelete] = useState<any>(null);
   const [editingMember, setEditingMember] = useState<any>(null);
   const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [mounted, setMounted] = useState(false);
 
   const [newTransaction, setNewTransaction] = useState({
     type: "CONTRIBUTION" as "CONTRIBUTION" | "BENEFIT",
@@ -106,6 +107,10 @@ export default function WelfarePage() {
   const db = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   const churchQuery = useMemo(() => {
     if (!user?.email || !db) return null;
@@ -299,6 +304,8 @@ export default function WelfarePage() {
       return matchesSearch && matchesStatus;
     });
   }, [welfareMembers, searchTerm, statusTab]);
+
+  if (!mounted) return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
