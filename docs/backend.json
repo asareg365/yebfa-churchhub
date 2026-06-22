@@ -18,6 +18,32 @@
         }
       }
     },
+    "WelfareMember": {
+      "title": "Welfare Member",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string" },
+        "needs": { "type": "string" },
+        "photo": { "type": "string" },
+        "totalContributions": { "type": "number" },
+        "totalBenefits": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "WelfareTransaction": {
+      "title": "Welfare Transaction",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["CONTRIBUTION", "BENEFIT"] },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "format": "date" },
+        "description": { "type": "string" },
+        "recordedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
     "SMSLedger": {
       "title": "SMS Ledger",
       "type": "object",
@@ -36,7 +62,12 @@
       "description": "Tenant organization settings and configuration. Now includes integrated SMS credit wallet."
     },
     "/churches/{churchId}/welfare/{memberId}": {
+      "schema": "WelfareMember",
       "description": "Dedicated subcollection for welfare support tracking."
+    },
+    "/churches/{churchId}/welfare/{memberId}/transactions/{txId}": {
+      "schema": "WelfareTransaction",
+      "description": "Sub-ledger for individual welfare account activity."
     },
     "/smsLedger/{ledgerId}": {
       "schema": "SMSLedger",
