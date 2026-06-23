@@ -1,4 +1,3 @@
-
 const admin = require("firebase-admin");
 
 /**
@@ -9,11 +8,10 @@ async function retryFailedSMS() {
   const db = admin.firestore();
   const now = admin.firestore.Timestamp.now();
   
-  // Query messages marked for retry whose delay has passed
   const retryQuery = await db.collection("smsQueue")
     .where("status", "==", "queued_retry")
     .where("nextRetryAt", "<=", now)
-    .where("retryCount", "<", 5) // Hard cap of 5 attempts
+    .where("retryCount", "<", 5)
     .limit(100)
     .get();
 
@@ -24,7 +22,7 @@ async function retryFailedSMS() {
 
   for (const doc of retryQuery.docs) {
     batch.update(doc.ref, {
-      status: "queued", // Reset to queued so the worker picks it up
+      status: "queued",
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
     processed++;

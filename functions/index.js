@@ -388,8 +388,13 @@ exports.scheduledBirthdayProcessor = onSchedule(
     memory: "512MiB"
   },
   async () => {
-    console.log("RUNNING BIRTHDAY SCHEDULER");
-    await dispatchAllBirthdays();
+    console.log("=== BIRTHDAY SCHEDULER STARTED ===");
+    try {
+      await dispatchAllBirthdays();
+      console.log("=== BIRTHDAY SCHEDULER COMPLETED ===");
+    } catch (err) {
+      console.error("BIRTHDAY SCHEDULER FAILED:", err);
+    }
   }
 );
 
@@ -400,8 +405,13 @@ exports.scheduledCampaignProcessor = onSchedule(
     region: "us-central1",
   },
   async () => {
-    console.log("RUNNING CAMPAIGN SCHEDULER");
-    await processScheduledCampaigns();
+    console.log("=== CAMPAIGN SCHEDULER STARTED ===");
+    try {
+      await processScheduledCampaigns();
+      console.log("=== CAMPAIGN SCHEDULER COMPLETED ===");
+    } catch (err) {
+      console.error("CAMPAIGN SCHEDULER FAILED:", err);
+    }
   }
 );
 
@@ -412,8 +422,13 @@ exports.scheduledEventReminderProcessor = onSchedule(
     region: "us-central1",
   },
   async () => {
-    console.log("RUNNING EVENT REMINDER SCHEDULER");
-    await processEventReminders();
+    console.log("=== EVENT REMINDER SCHEDULER STARTED ===");
+    try {
+      await processEventReminders();
+      console.log("=== EVENT REMINDER SCHEDULER COMPLETED ===");
+    } catch (err) {
+      console.error("EVENT REMINDER SCHEDULER FAILED:", err);
+    }
   }
 );
 
@@ -424,8 +439,13 @@ exports.scheduledVisitorProcessor = onSchedule(
     region: "us-central1",
   },
   async () => {
-    console.log("RUNNING VISITOR FOLLOWUP SCHEDULER");
-    await processVisitorFollowups();
+    console.log("=== VISITOR FOLLOWUP SCHEDULER STARTED ===");
+    try {
+      await processVisitorFollowups();
+      console.log("=== VISITOR FOLLOWUP SCHEDULER COMPLETED ===");
+    } catch (err) {
+      console.error("VISITOR FOLLOWUP SCHEDULER FAILED:", err);
+    }
   }
 );
 
@@ -436,7 +456,12 @@ exports.scheduledRetryProcessor = onSchedule(
     region: "us-central1",
   },
   async () => {
-    console.log("RUNNING RETRY SCHEDULER");
-    await retryFailedSMS();
+    console.log("=== RETRY SCHEDULER STARTED ===");
+    try {
+      await retryFailedSMS();
+      console.log("=== RETRY SCHEDULER COMPLETED ===");
+    } catch (err) {
+      console.error("RETRY SCHEDULER FAILED:", err);
+    }
   }
 );

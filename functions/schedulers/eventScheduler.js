@@ -1,4 +1,3 @@
-
 const admin = require("firebase-admin");
 const { DateTime } = require("luxon");
 const { queueSMS } = require("../services/smsService");

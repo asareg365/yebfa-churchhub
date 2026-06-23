@@ -1,4 +1,3 @@
-
 const admin = require("firebase-admin");
 const { DateTime } = require("luxon");
 const { queueSMS } = require("../services/smsService");
@@ -59,7 +58,6 @@ async function processChurchBirthdays(churchDoc) {
     });
 
     // PUSH TO GLOBAL QUEUE WITH DEDUPE KEY
-    // This key guarantees zero duplicates even if the queue worker crashes and restarts.
     const result = await queueSMS(churchId, {
       phone: member.phone,
       message,
@@ -69,7 +67,6 @@ async function processChurchBirthdays(churchDoc) {
       dedupeKey: `birthday_${churchId}_${memberDoc.id}_${todayDateStr}`
     });
 
-    // Record history if enqueued successfully or skipped as duplicate
     if (result.success) {
       await historyRef.set({
         queuedAt: admin.firestore.FieldValue.serverTimestamp(),

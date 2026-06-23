@@ -1,4 +1,3 @@
-
 const admin = require("firebase-admin");
 const { DateTime } = require("luxon");
 const { queueSMS } = require("../services/smsService");
@@ -33,7 +32,6 @@ async function processVisitorFollowups() {
         churchName: churchDisplayName
       });
 
-      // PUSH TO QUEUE
       const result = await queueSMS(churchId, {
         phone: visitor.phone,
         message,

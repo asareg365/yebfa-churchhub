@@ -1,4 +1,3 @@
-
 const admin = require("firebase-admin");
 const { queueSMS } = require("../services/smsService");
 
@@ -22,10 +21,8 @@ async function processScheduledCampaigns() {
       const campaign = campDoc.data();
       
       try {
-        // Mark as processing
         await campDoc.ref.update({ status: "processing" });
 
-        // Fetch target audience
         let membersSnap;
         if (campaign.target === "all members") {
           membersSnap = await churchDoc.ref.collection("members").where("status", "==", "Active").get();
@@ -48,7 +45,6 @@ async function processScheduledCampaigns() {
           const member = memDoc.data();
           if (!member.phone) continue;
 
-          // PUSH TO QUEUE
           const result = await queueSMS(churchId, {
             phone: member.phone,
             message: campaign.message,
