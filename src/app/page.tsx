@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Sparkles, Shield, Users, Zap, ArrowRight, Check, Smartphone, Search, ShieldCheck, MessageSquare } from "lucide-react";
+import { Sparkles, Shield, Users, Zap, ArrowRight, Check, Smartphone, Search, ShieldCheck, MessageSquare, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -31,48 +31,6 @@ export default function LandingPage() {
     if (!tenantSlug) return;
     router.push(`/login?tenant=${tenantSlug.toLowerCase().trim()}`);
   };
-
-  const plans = [
-    {
-      name: "Starter",
-      price: "200",
-      description: "Essential tools for small congregations.",
-      features: [
-        "Up to 200 members", 
-        "100 Monthly SMS Credits",
-        "Attendance tracking", 
-        "Basic reports", 
-        "Email support"
-      ],
-      accent: false
-    },
-    {
-      name: "Growth",
-      price: "500",
-      description: "Advanced features for growing ministries.",
-      features: [
-        "Up to 1,000 members", 
-        "1,000 Monthly SMS Credits",
-        "Finance management", 
-        "AI Insights Lite", 
-        "Priority support"
-      ],
-      accent: true
-    },
-    {
-      name: "Premium",
-      price: "1,200",
-      description: "Full suite for enterprise organizations.",
-      features: [
-        "Unlimited members", 
-        "5,000 Monthly SMS Credits",
-        "Full AI Suite", 
-        "Bulk SMS engine", 
-        "Dedicated manager"
-      ],
-      accent: false
-    }
-  ];
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -173,56 +131,47 @@ export default function LandingPage() {
         </section>
 
         <section id="pricing" className="px-8 max-w-7xl mx-auto py-20">
-          <div className="text-center mb-16 space-y-4">
+          <div className="text-center mb-12 space-y-4">
             <h2 className="text-3xl font-bold font-headline tracking-tighter text-foreground">Simple Transparent Pricing</h2>
-            <p className="text-muted-foreground">Choose the plan that fits your ministry's current stage.</p>
+            <p className="text-muted-foreground text-xl">Contact us to Choose the plan that fits your ministry's current stage.</p>
           </div>
 
-          <div className="grid gap-8 md:grid-cols-3 mb-16">
-            {plans.map((plan) => (
-              <div 
-                key={plan.name} 
-                className={`bg-white p-8 rounded-3xl space-y-6 flex flex-col border border-border shadow-sm ${plan.accent ? 'border-primary/50 ring-1 ring-primary/20 scale-105' : ''}`}
-              >
-                <div className="space-y-2">
-                  <h3 className="text-2xl font-bold text-foreground">{plan.name}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{plan.description}</p>
-                </div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-bold text-foreground">GH₵{plan.price}</span>
-                  <span className="text-muted-foreground text-sm">/month</span>
-                </div>
-                <ul className="space-y-4 flex-1">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-center gap-3 text-sm text-foreground">
-                      <div className="h-5 w-5 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
-                        <Check className="h-3 w-3 text-accent" />
-                      </div>
-                      <span className={feature.includes("SMS Credits") ? "font-bold text-primary" : ""}>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Link href="/login?tab=signup" className="block w-full">
-                  <Button className={`w-full h-12 rounded-2xl font-bold ${plan.accent ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground hover:bg-secondary/80'}`}>
-                    Choose {plan.name}
-                  </Button>
-                </Link>
+          <div className="bg-white p-12 rounded-[2.5rem] max-w-4xl mx-auto border border-border shadow-2xl space-y-8 text-center relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-5">
+              <Smartphone className="w-64 h-64 text-primary" />
+            </div>
+            
+            <div className="relative z-10 flex flex-col items-center gap-6">
+              <div className="h-24 w-24 rounded-[2.25rem] bg-primary/10 flex items-center justify-center text-primary shadow-inner">
+                <MessageSquare className="h-12 w-12" />
               </div>
-            ))}
-          </div>
-
-          <div className="bg-white p-8 rounded-3xl max-w-4xl mx-auto border border-border shadow-sm">
-            <div className="flex flex-col md:flex-row items-center gap-8">
-              <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0 text-primary">
-                <Smartphone className="h-10 w-10" />
-              </div>
-              <div className="space-y-2">
-                <h4 className="text-xl font-bold text-foreground">How to Pay</h4>
-                <p className="text-muted-foreground text-sm">
-                  To activate your ministry account and receive your SMS allocation, please send the plan cost via MoMo to <span className="text-primary font-bold">0248472474</span>. 
-                  Use your <span className="underline decoration-primary">Church Name</span> as the transaction reference. 
-                  Approvals are typically processed within 1 hour.
+              <div className="space-y-4">
+                <h3 className="text-3xl font-bold text-foreground">Let's Find Your Perfect Fit</h3>
+                <p className="text-muted-foreground text-lg leading-relaxed max-w-2xl mx-auto">
+                  Our team is ready to help you evaluate your congregation's needs and recommend the most effective tier for your growth. Whether you're a small community or a large organization, we have a solution for you.
                 </p>
+                <div className="flex flex-col sm:flex-row justify-center gap-6 pt-8">
+                  <Button 
+                    size="lg" 
+                    className="h-16 px-10 text-xl bg-primary text-primary-foreground hover:bg-primary/90 rounded-2xl shadow-2xl shadow-primary/20 transition-all hover:scale-105 active:scale-95" 
+                    onClick={() => window.open('https://wa.me/233248472474')}
+                  >
+                    Contact via WhatsApp
+                  </Button>
+                  <Link href="/support">
+                    <Button 
+                      size="lg" 
+                      variant="outline" 
+                      className="h-16 px-10 text-xl rounded-2xl border-2 hover:bg-muted/50 transition-all"
+                    >
+                      Support Center
+                    </Button>
+                  </Link>
+                </div>
+                <div className="pt-8 flex flex-col items-center gap-2">
+                  <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Immediate Activation Support</p>
+                  <p className="text-2xl font-display font-bold text-primary">0248472474</p>
+                </div>
               </div>
             </div>
           </div>
