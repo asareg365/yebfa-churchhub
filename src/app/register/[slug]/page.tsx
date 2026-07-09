@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -11,7 +12,8 @@ import {
   Check,
   Plus,
   Upload,
-  Camera
+  Camera,
+  AlertTriangle
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -73,6 +75,7 @@ export default function PublicRegistrationPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [otherSocietyInput, setOtherSocietyInput] = useState("");
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -83,6 +86,8 @@ export default function PublicRegistrationPage() {
     societies: [] as string[],
     photo: ""
   });
+
+  const normalizePhone = (phone: string) => phone?.replace(/\D/g, "") || "";
 
   const calculateBirthdayKey = (dobString: string) => {
     if (!dobString) return "";
@@ -144,6 +149,8 @@ export default function PublicRegistrationPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setDuplicateError(null);
+
     if (!formData.name || !formData.phone || !formData.dateOfBirth || !church) {
       toast({ title: "Validation Error", description: "All fields are required.", variant: "destructive" });
       return;
@@ -152,6 +159,18 @@ export default function PublicRegistrationPage() {
     setIsSubmitting(true);
     try {
       const membersRef = collection(db, "churches", church.id, "members");
+      
+      // Duplicate Check
+      const normalized = normalizePhone(formData.phone);
+      const dupQuery = query(membersRef, where("phone", "==", formData.phone), limit(1));
+      const dupSnap = await getDocs(dupQuery);
+      
+      if (!dupSnap.empty) {
+        setDuplicateError("This phone number is already registered with this ministry.");
+        setIsSubmitting(false);
+        return;
+      }
+
       await addDoc(membersRef, {
         ...formData,
         birthdayKey: calculateBirthdayKey(formData.dateOfBirth),
@@ -220,6 +239,13 @@ export default function PublicRegistrationPage() {
               <CardDescription>Enter your details correctly. Birth date format must be YYYY-MM-DD.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {duplicateError && (
+                <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+                  <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
+                  <p className="text-sm font-bold text-destructive">{duplicateError}</p>
+                </div>
+              )}
+
               <div className="space-y-6">
                 <div className="flex items-center gap-6">
                   <Avatar className="h-24 w-24 border-2 border-primary/20 shadow-xl">
@@ -246,7 +272,6 @@ export default function PublicRegistrationPage() {
                          <Upload className="w-4 h-4 text-accent" /> Gallery
                        </Button>
                     </div>
-                    {/* Native Inputs */}
                     <input 
                       type="file" 
                       ref={captureInputRef} 
@@ -281,9 +306,12 @@ export default function PublicRegistrationPage() {
                     <Label>Phone Number</Label>
                     <Input 
                       placeholder="024XXXXXXX"
-                      className="bg-white/5"
+                      className={cn("bg-white/5", duplicateError && "border-destructive/50")}
                       value={formData.phone}
-                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                      onChange={(e) => {
+                        setFormData({...formData, phone: e.target.value});
+                        if (duplicateError) setDuplicateError(null);
+                      }}
                       required
                     />
                   </div>

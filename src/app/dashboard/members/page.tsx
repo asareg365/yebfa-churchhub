@@ -18,7 +18,8 @@ import {
   Layers,
   Camera,
   Upload,
-  Info
+  Info,
+  CopyX
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -127,6 +128,14 @@ export default function MembersPage() {
     societies: [] as string[]
   });
 
+  const normalizePhone = (phone: string) => phone?.replace(/\D/g, "") || "";
+
+  const checkDuplicate = (phone: string) => {
+    const normalized = normalizePhone(phone);
+    if (!normalized) return null;
+    return (members || []).find(m => normalizePhone(m.phone) === normalized);
+  };
+
   const calculateBirthdayKey = (dobString: string) => {
     if (!dobString) return "";
     const dob = new Date(dobString);
@@ -180,6 +189,17 @@ export default function MembersPage() {
       toast({ title: "Incomplete data", description: "Name and Date of Birth are required.", variant: "destructive" });
       return;
     }
+
+    const duplicate = checkDuplicate(newMember.phone);
+    if (duplicate) {
+      toast({ 
+        title: "Duplicate Member Found", 
+        description: `A member named ${duplicate.name} already exists with phone ${newMember.phone}.`,
+        variant: "destructive"
+      });
+      return;
+    }
+
     const memberData = {
       ...newMember,
       birthdayKey: calculateBirthdayKey(newMember.dateOfBirth),
@@ -240,6 +260,9 @@ export default function MembersPage() {
       const batch = writeBatch(db);
       let count = 0;
       let skipped = 0;
+      let duplicates = 0;
+
+      const existingPhones = new Set((members || []).map(m => normalizePhone(m.phone)));
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
@@ -256,6 +279,11 @@ export default function MembersPage() {
 
         if (!name) {
           skipped++;
+          continue;
+        }
+
+        if (phone && existingPhones.has(normalizePhone(phone))) {
+          duplicates++;
           continue;
         }
 
@@ -280,7 +308,10 @@ export default function MembersPage() {
       }
 
       await batch.commit();
-      toast({ title: "Import Successful", description: `${count} members added. ${skipped > 0 ? skipped + ' rows skipped.' : ''}` });
+      toast({ 
+        title: "Import Complete", 
+        description: `${count} members added. ${duplicates > 0 ? duplicates + ' duplicates skipped.' : ''} ${skipped > 0 ? skipped + ' invalid rows skipped.' : ''}` 
+      });
       setBulkData("");
       setIsBulkImportOpen(false);
     } catch (error: any) {
@@ -359,7 +390,17 @@ export default function MembersPage() {
                   <div className="space-y-2"><Label>Gender</Label><Select value={newMember.gender} onValueChange={(v: any) => setNewMember({...newMember, gender: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Male">Male</SelectItem><SelectItem value="Female">Female</SelectItem></SelectContent></Select></div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>Phone</Label><Input value={newMember.phone} onChange={(e) => setNewMember({...newMember, phone: e.target.value})} placeholder="0240000000" /></div>
+                  <div className="space-y-2">
+                    <Label className="flex justify-between items-center">
+                      Phone
+                      {newMember.phone && checkDuplicate(newMember.phone) && (
+                        <span className="text-[10px] text-destructive flex items-center gap-1 font-bold animate-pulse">
+                          <CopyX className="w-3 h-3" /> Duplicate Detected
+                        </span>
+                      )}
+                    </Label>
+                    <Input value={newMember.phone} onChange={(e) => setNewMember({...newMember, phone: e.target.value})} placeholder="0240000000" className={cn(newMember.phone && checkDuplicate(newMember.phone) && "border-destructive/50 bg-destructive/5")} />
+                  </div>
                   <div className="space-y-2"><Label>Date of Birth</Label><Input type="date" value={newMember.dateOfBirth} onChange={(e) => setNewMember({...newMember, dateOfBirth: e.target.value})} /></div>
                 </div>
                 <div className="space-y-2">

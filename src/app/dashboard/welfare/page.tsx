@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -25,7 +26,8 @@ import {
   ArrowRight,
   TrendingUp,
   TrendingDown,
-  History
+  History,
+  CopyX
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -142,6 +144,14 @@ export default function WelfarePage() {
     totalBenefits: 0
   });
 
+  const normalizePhone = (phone: string) => phone?.replace(/\D/g, "") || "";
+
+  const checkDuplicate = (phone: string) => {
+    const normalized = normalizePhone(phone);
+    if (!normalized) return null;
+    return (welfareMembers || []).find(m => normalizePhone(m.phone) === normalized);
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -163,6 +173,17 @@ export default function WelfarePage() {
       toast({ title: "Incomplete data", description: "Name is required.", variant: "destructive" });
       return;
     }
+
+    const duplicate = checkDuplicate(newMember.phone);
+    if (duplicate) {
+      toast({ 
+        title: "Account Already Exists", 
+        description: `A welfare account for ${duplicate.name} already exists with this phone number.`,
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       await addDoc(welfareRef, {
         ...newMember,
@@ -259,6 +280,9 @@ export default function WelfarePage() {
       const lines = bulkData.split(/\r?\n/).filter(l => l.trim().length > 0);
       const batch = writeBatch(db);
       let count = 0;
+      let duplicates = 0;
+
+      const existingPhones = new Set((welfareMembers || []).map(m => normalizePhone(m.phone)));
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
@@ -269,6 +293,11 @@ export default function WelfarePage() {
         const [name, phone, status, needs] = parts;
         if (i === 0 && name.toLowerCase().includes("name")) continue;
         if (!name) continue;
+
+        if (phone && existingPhones.has(normalizePhone(phone))) {
+          duplicates++;
+          continue;
+        }
 
         batch.set(doc(welfareRef), {
           name,
@@ -284,7 +313,10 @@ export default function WelfarePage() {
       }
 
       await batch.commit();
-      toast({ title: "Import Successful", description: `${count} welfare accounts created.` });
+      toast({ 
+        title: "Import Successful", 
+        description: `${count} welfare accounts created. ${duplicates > 0 ? duplicates + ' duplicates skipped.' : ''}` 
+      });
       setBulkData("");
       setIsBulkImportOpen(false);
     } catch (error: any) {
@@ -337,7 +369,17 @@ export default function WelfarePage() {
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                    <div className="space-y-2"><Label>Account Name</Label><Input value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} placeholder="e.g. Samuel Osei" className="rounded-xl" /></div>
-                   <div className="space-y-2"><Label>Phone</Label><Input value={newMember.phone} onChange={e => setNewMember({...newMember, phone: e.target.value})} placeholder="024XXXXXXX" className="rounded-xl" /></div>
+                   <div className="space-y-2">
+                     <Label className="flex justify-between items-center">
+                       Phone
+                       {newMember.phone && checkDuplicate(newMember.phone) && (
+                         <span className="text-[10px] text-destructive flex items-center gap-1 font-bold animate-pulse">
+                           <CopyX className="w-3 h-3" /> Duplicate Detected
+                         </span>
+                       )}
+                     </Label>
+                     <Input value={newMember.phone} onChange={e => setNewMember({...newMember, phone: e.target.value})} placeholder="024XXXXXXX" className={cn("rounded-xl", newMember.phone && checkDuplicate(newMember.phone) && "border-destructive/50 bg-destructive/5")} />
+                   </div>
                  </div>
                  <div className="space-y-2"><Label>Account Status</Label><Select value={newMember.status} onValueChange={(v: any) => setNewMember({...newMember, status: v})}><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Active">Active Support</SelectItem><SelectItem value="Inactive">Inactive / On-Hold</SelectItem></SelectContent></Select></div>
                  <div className="space-y-2"><Label>Support Needs / Background</Label><Textarea value={newMember.needs} onChange={e => setNewMember({...newMember, needs: e.target.value})} placeholder="Describe the member's current standing or specific needs..." className="rounded-xl h-24" /></div>
