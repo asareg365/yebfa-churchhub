@@ -1,21 +1,43 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Search, User, Loader2, CheckCircle2, AlertCircle, Trash2, Menu } from "lucide-react";
+import { 
+  Bell, 
+  Search, 
+  User, 
+  Loader2, 
+  CheckCircle2, 
+  AlertCircle, 
+  Trash2, 
+  Menu,
+  ShieldCheck,
+  ChevronDown,
+  Building2
+} from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { useUser, useCollection, useFirestore } from "@/firebase";
-import { collection, query, where, limit, orderBy, writeBatch, doc } from "firebase/firestore";
+import { collection, query, where, limit, orderBy, writeBatch, doc, getDocs } from "firebase/firestore";
 import { useSearch } from "@/context/search-context";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { SidebarContent } from "./Sidebar";
+
+const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 
 export function Header() {
   const { user } = useUser();
@@ -24,19 +46,50 @@ export function Header() {
   const { toast } = useToast();
   const { searchTerm, setSearchTerm } = useSearch();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [allChurches, setAllChurches] = useState<any[]>([]);
+
+  const isSuperAdmin = useMemo(() => {
+    return user?.email && SUPER_ADMINS.includes(user.email.toLowerCase().trim());
+  }, [user?.email]);
+
+  const selectedTenantSlug = typeof window !== 'undefined' ? localStorage.getItem('global_admin_selected_tenant') : null;
 
   const churchQuery = useMemo(() => {
     if (!user?.email || !db) return null;
     const normalizedEmail = user.email.toLowerCase().trim();
+
+    if (isSuperAdmin && selectedTenantSlug) {
+      return query(
+        collection(db, "churches"),
+        where("slug", "==", selectedTenantSlug),
+        limit(1)
+      );
+    }
+
     return query(
       collection(db, "churches"),
       where("adminEmails", "array-contains", normalizedEmail),
       limit(1)
     );
-  }, [db, user?.email]);
+  }, [db, user?.email, isSuperAdmin, selectedTenantSlug]);
 
   const { data: churches, loading: churchLoading } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
+
+  useEffect(() => {
+    if (isSuperAdmin && db) {
+      getDocs(query(collection(db, "churches"), orderBy("name", "asc")))
+        .then(snap => {
+          setAllChurches(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+    }
+  }, [isSuperAdmin, db]);
+
+  const handleSwitchTenant = (slug: string) => {
+    localStorage.setItem('global_admin_selected_tenant', slug);
+    toast({ title: "Switched Ministry", description: `Accessing ${slug}` });
+    window.location.reload();
+  };
 
   const notificationsQuery = useMemo(() => {
     if (!currentChurch?.id || !db) return null;
@@ -49,17 +102,12 @@ export function Header() {
 
   const { data: notifications, loading: notificationsLoading } = useCollection(notificationsQuery);
 
-  const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
-  const isSuperAdmin = user?.email && SUPER_ADMINS.includes(user.email.toLowerCase().trim());
-
   const handleClearNotifications = async () => {
     if (!currentChurch?.id || !notifications || notifications.length === 0) return;
-    
     const batch = writeBatch(db);
     notifications.forEach((notif: any) => {
       batch.delete(doc(db, "churches", currentChurch.id, "smsLogs", notif.id));
     });
-
     try {
       await batch.commit();
       toast({ title: "Notifications cleared" });
@@ -97,6 +145,37 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-3 lg:gap-6">
+        {isSuperAdmin && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="hidden md:flex gap-2 rounded-xl bg-primary/5 border-primary/20 hover:bg-primary/10 h-10">
+                <Building2 className="w-4 h-4 text-primary" />
+                <span className="max-w-[120px] truncate">{currentChurch?.name || "Select Ministry"}</span>
+                <ChevronDown className="w-3 h-3 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64 glass">
+              <DropdownMenuLabel className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-primary" />
+                System Switcher
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <div className="max-h-[300px] overflow-y-auto">
+                {allChurches.map(church => (
+                  <DropdownMenuItem 
+                    key={church.slug} 
+                    onClick={() => handleSwitchTenant(church.slug)}
+                    className={cn("flex flex-col items-start gap-0.5", currentChurch?.slug === church.slug && "bg-primary/10")}
+                  >
+                    <span className="font-bold">{church.name}</span>
+                    <span className="text-[10px] text-muted-foreground">{church.slug}</span>
+                  </DropdownMenuItem>
+                ))}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
         <Popover>
           <PopoverTrigger asChild>
             <button className="relative p-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground group">

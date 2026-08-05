@@ -14,6 +14,8 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { SearchProvider } from '@/context/search-context';
 
+const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+
 const CrossIcon = ({ className }: { className?: string }) => (
   <svg 
     xmlns="http://www.w3.org/2000/svg" 
@@ -39,19 +41,39 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
+  const [selectedTenantSlug, setSelectedTenantSlug] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
+    // Global admins can persist their selected tenant
+    const saved = localStorage.getItem('global_admin_selected_tenant');
+    if (saved) setSelectedTenantSlug(saved);
   }, []);
+
+  const isSuperAdmin = useMemo(() => {
+    return user?.email && SUPER_ADMINS.includes(user.email.toLowerCase().trim());
+  }, [user?.email]);
 
   const churchQuery = useMemo(() => {
     if (!user?.email || !db) return null;
+    const normalizedEmail = user.email.toLowerCase().trim();
+
+    // If super admin has selected a specific tenant, view that one
+    if (isSuperAdmin && selectedTenantSlug) {
+      return query(
+        collection(db, 'churches'),
+        where('slug', '==', selectedTenantSlug),
+        limit(1)
+      );
+    }
+
+    // Default: find churches where user is an admin
     return query(
       collection(db, 'churches'),
-      where('adminEmails', 'array-contains', user.email.toLowerCase().trim()),
+      where('adminEmails', 'array-contains', normalizedEmail),
       limit(1)
     );
-  }, [db, user?.email]);
+  }, [db, user?.email, isSuperAdmin, selectedTenantSlug]);
 
   const { data: churches, loading: churchLoading } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
@@ -74,7 +96,6 @@ export default function DashboardLayout({
 
     applyTheme(currentChurch.settings.theme);
 
-    // If system, listen for changes
     if (currentChurch.settings.theme === 'system') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
       const listener = () => applyTheme('system');
@@ -110,9 +131,7 @@ export default function DashboardLayout({
     );
   }
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   const isChangingPassword = pathname === '/dashboard/settings';
   const forcePasswordChange = currentChurch?.mustChangePassword && !isChangingPassword;
@@ -124,7 +143,15 @@ export default function DashboardLayout({
         <main className="flex-1 lg:ml-80 p-4 flex flex-col min-w-0">
           <Header />
           <div className="flex-1">
-            {forcePasswordChange ? (
+            {!currentChurch && isSuperAdmin ? (
+               <div className="flex items-center justify-center h-full p-8 text-center">
+                 <Card className="glass max-w-md p-8 space-y-4">
+                   <ShieldAlert className="w-12 h-12 text-primary mx-auto" />
+                   <h3 className="text-xl font-bold">Global Admin Access</h3>
+                   <p className="text-sm text-muted-foreground">Select a ministry from the Switcher in the top header to begin management.</p>
+                 </Card>
+               </div>
+            ) : forcePasswordChange ? (
               <div className="flex items-center justify-center h-full p-8">
                 <Card className="glass border-primary/30 max-w-md w-full shadow-2xl">
                   <CardHeader>

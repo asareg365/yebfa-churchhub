@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -91,14 +92,25 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
     return user?.email && SUPER_ADMINS.includes(user.email.toLowerCase().trim());
   }, [user?.email]);
 
+  const selectedTenantSlug = typeof window !== 'undefined' ? localStorage.getItem('global_admin_selected_tenant') : null;
+
   const churchQuery = useMemo(() => {
-    if (!user?.email || isSuperAdmin || !db) return null;
+    if (!user?.email || !db) return null;
+    
+    if (isSuperAdmin && selectedTenantSlug) {
+      return query(
+        collection(db, "churches"),
+        where("slug", "==", selectedTenantSlug),
+        limit(1)
+      );
+    }
+
     return query(
       collection(db, "churches"),
       where("adminEmails", "array-contains", user.email.toLowerCase().trim()),
       limit(1)
     );
-  }, [db, user?.email, isSuperAdmin]);
+  }, [db, user?.email, isSuperAdmin, selectedTenantSlug]);
 
   const { data: churches, loading: churchLoading } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
