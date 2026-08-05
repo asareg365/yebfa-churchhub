@@ -102,7 +102,7 @@ exports.getSystemStats = onCall(
 );
 
 /**
- * ADMIN: Soft Delete Ministry
+ * ADMIN: Soft Delete Ministry (Safety Shield Enabled)
  */
 exports.deleteMinistry = onCall(
   { region: "us-central1" },
@@ -115,28 +115,39 @@ exports.deleteMinistry = onCall(
     const { churchId } = request.data || {};
     if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId");
 
-    const db = admin.firestore();
-    const churchRef = db.collection("churches").doc(churchId);
-    const churchDoc = await churchRef.get();
+    try {
+      const db = admin.firestore();
+      const churchRef = db.collection("churches").doc(churchId);
+      const churchDoc = await churchRef.get();
 
-    if (!churchDoc.exists) throw new HttpsError("not-found", "Organization not found.");
+      if (!churchDoc.exists) throw new HttpsError("not-found", "Organization not found.");
 
-    // Safety Shield
-    const churchData = churchDoc.data();
-    if (churchData.sms?.subscriptionStatus === "active" || churchData.status === "Approved") {
-      throw new HttpsError(
-        "failed-precondition", 
-        "Safety Shield Active: You must suspend the organization service first before it can be moved to the Recycle Bin."
-      );
+      // SAFETY SHIELD: Proactive block for active organizations
+      const churchData = churchDoc.data();
+      const isActuallyActive = churchData.sms?.subscriptionStatus === "active" || 
+                               churchData.status === "Approved" || 
+                               churchData.subscription?.status === "active";
+
+      if (isActuallyActive) {
+        throw new HttpsError(
+          "failed-precondition", 
+          "Safety Shield Active: You must suspend the organization service first before it can be moved to the Recycle Bin."
+        );
+      }
+
+      await churchRef.update({
+        deletionStatus: "DELETED",
+        deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+        deletedBy: email,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return { success: true };
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      console.error("SOFT_DELETE_ERROR:", error);
+      throw new HttpsError("internal", error.message);
     }
-
-    await churchRef.update({
-      deletionStatus: "DELETED",
-      deletedAt: admin.firestore.FieldValue.serverTimestamp(),
-      deletedBy: email
-    });
-
-    return { success: true };
   }
 );
 
@@ -154,22 +165,28 @@ exports.restoreMinistry = onCall(
     const { churchId } = request.data || {};
     if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId");
 
-    const db = admin.firestore();
-    const churchRef = db.collection("churches").doc(churchId);
-    
-    await churchRef.update({
-      deletionStatus: null,
-      deletedAt: null,
-      deletedBy: null,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    try {
+      const db = admin.firestore();
+      const churchRef = db.collection("churches").doc(churchId);
+      
+      await churchRef.update({
+        deletionStatus: null,
+        deletedAt: null,
+        deletedBy: null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
 
-    return { success: true };
+      return { success: true };
+    } catch (error) {
+      console.error("RESTORE_ERROR:", error);
+      throw new HttpsError("internal", error.message);
+    }
   }
 );
 
 /**
  * ADMIN: Permanent Purge (Hard Delete)
+ * Massive cleanup across all subcollections.
  */
 exports.hardPurgeMinistry = onCall(
   { region: "us-central1", memory: "2GiB", timeoutSeconds: 540 },
@@ -186,7 +203,7 @@ exports.hardPurgeMinistry = onCall(
     const churchRef = db.collection("churches").doc(churchId);
 
     try {
-      // 1. Scrub Ledger
+      // 1. Scrub Global Ledger
       let snap;
       let i = 0;
       do {
@@ -206,19 +223,37 @@ exports.hardPurgeMinistry = onCall(
       // 2. Scrub Locks
       await db.collection("smsLocks").doc(churchId).delete().catch(console.error);
 
-      // 3. Recursive Delete
+      // 3. Scrub Queue items for this church
+      let qSnap;
+      let qCount = 0;
+      do {
+        qCount++;
+        qSnap = await db.collection("smsQueue")
+          .where("churchId", "==", churchId)
+          .limit(200)
+          .get();
+
+        if (!qSnap.empty) {
+          const batch = db.batch();
+          qSnap.docs.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+        }
+      } while (!qSnap.empty && qCount < 100);
+
+      // 4. Recursive Delete of Tenant Root and all Subcollections
       await db.recursiveDelete(churchRef);
 
       return { success: true };
     } catch (error) {
-      console.error("PURGE_ERROR:", error);
+      console.error("HARD_PURGE_ERROR:", error);
       throw new HttpsError("internal", "Deep purge failed: " + error.message);
     }
   }
 );
 
 /**
- * ADMIN: Update Church Status
+ * ADMIN: Update Church Status (Activate/Suspend)
+ * Fixes "Internal Error" by using granular dot-notation updates.
  */
 exports.updateChurchStatus = onCall(
   { region: "us-central1" }, 
@@ -234,23 +269,23 @@ exports.updateChurchStatus = onCall(
     try {
       const db = admin.firestore();
       const isApproved = status === 'active';
-      await db.collection("churches").doc(churchId).set({
-        sms: {
-          subscriptionStatus: status,
-          approved: isApproved,
-          status: isApproved ? 'Approved' : 'Suspended',
-          enabled: isApproved
-        },
-        status: isApproved ? 'Approved' : 'Suspended',
-        subscription: {
-          status: status
-        },
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      const label = isApproved ? 'Approved' : 'Suspended';
+
+      // Use Granular Dot-Notation to prevent wiping out other nested data
+      await db.collection("churches").doc(churchId).update({
+        "sms.subscriptionStatus": status,
+        "sms.approved": isApproved,
+        "sms.status": label,
+        "sms.enabled": isApproved,
+        "status": label,
+        "subscription.status": status,
+        "updatedAt": admin.firestore.FieldValue.serverTimestamp()
+      });
+
       return { success: true };
     } catch (error) { 
       console.error("STATUS_UPDATE_ERROR:", error);
-      throw new HttpsError("internal", error.message); 
+      throw new HttpsError("internal", "Activation failed: " + error.message); 
     }
   }
 );
@@ -271,15 +306,13 @@ exports.updateOrganization = onCall(
     
     try {
       const db = admin.firestore();
-      await db.collection("churches").doc(churchId).set({
-        name: name || "Unnamed Ministry",
-        slug: slug || "no-slug",
-        plan: plan || "Starter",
-        subscription: {
-          plan: plan || "Starter"
-        },
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      await db.collection("churches").doc(churchId).update({
+        "name": name || "Unnamed Ministry",
+        "slug": slug || "no-slug",
+        "plan": plan || "Starter",
+        "subscription.plan": plan || "Starter",
+        "updatedAt": admin.firestore.FieldValue.serverTimestamp()
+      });
       return { success: true };
     } catch (error) { 
       console.error("ORG_UPDATE_ERROR:", error);
