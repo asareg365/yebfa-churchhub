@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -173,6 +172,10 @@ export default function SystemAdminPortal() {
       toast({ title: `Organization ${status.toUpperCase()}`, description: "Status updated in secure ledger." });
       await loadStats(); 
     } catch (e: any) {
+      console.log(e);
+      console.log(e.code);
+      console.log(e.message);
+      console.log(e.details);
       toast({ title: "Operation Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
@@ -194,6 +197,10 @@ export default function SystemAdminPortal() {
       setEditingOrg(null);
       await loadStats(); 
     } catch (e: any) {
+      console.log(e);
+      console.log(e.code);
+      console.log(e.message);
+      console.log(e.details);
       toast({ title: "Update Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
@@ -210,6 +217,10 @@ export default function SystemAdminPortal() {
       setMinistryToDelete(null);
       await loadStats();
     } catch (e: any) {
+      console.log(e);
+      console.log(e.code);
+      console.log(e.message);
+      console.log(e.details);
       const msg = e.message || "Deletion Failed";
       toast({ title: "Action Blocked", description: msg, variant: "destructive" });
     } finally {
@@ -226,6 +237,10 @@ export default function SystemAdminPortal() {
       toast({ title: "Ministry Restored", description: "Organization returned to active directory." });
       await loadStats();
     } catch (e: any) {
+      console.log(e);
+      console.log(e.code);
+      console.log(e.message);
+      console.log(e.details);
       toast({ title: "Restore Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
@@ -247,6 +262,10 @@ export default function SystemAdminPortal() {
         throw new Error(res.data?.error || "Purge execution failed on server.");
       }
     } catch (e: any) {
+      console.log(e);
+      console.log(e.code);
+      console.log(e.message);
+      console.log(e.details);
       const detail = e.details || e.message || "Deep purge failed. The ministry might have protected documents or active locks.";
       toast({ title: "Purge Error", description: detail, variant: "destructive" });
     } finally {
@@ -264,6 +283,10 @@ export default function SystemAdminPortal() {
       setManagingSmsId(null);
       await loadStats();
     } catch (error: any) {
+      console.log(error);
+      console.log(error.code);
+      console.log(error.message);
+      console.log(error.details);
       toast({ title: "Top-up Failed", description: error?.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
