@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -40,7 +41,7 @@ export default function SystemAdminPortal() {
 
   // Real-time listener for churches
   const churchesQuery = query(collection(db, 'churches'));
-  const { data: rawChurches, loading: dataLoading } = useCollection<Church>(churchesQuery);
+  const { data: rawChurches, loading: dataLoading } = useCollection<Church>(churchesQuery as any);
 
   useEffect(() => {
     setMounted(true);
@@ -89,6 +90,11 @@ export default function SystemAdminPortal() {
     try {
       // Refresh identity token
       await user?.getIdToken(true);
+
+      console.log("Current user:", auth.currentUser);
+      console.log("Functions:", functions);
+      console.log("Auth app:", auth.app.options);
+      console.log("Functions app:", functions.app.options);
 
       const updateFn = httpsCallable(functions, 'updateChurchStatus');
       await updateFn({ churchId, status });
