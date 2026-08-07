@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Search, Loader2, LogOut, RefreshCcw, Archive, Users, AlertTriangle, Pencil, Save } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { ShieldCheck, Search, Loader2, LogOut, Users, Archive, Pencil, Save } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -16,7 +15,6 @@ import { collection, query } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { signOut } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // Types & Sub-components
@@ -82,15 +80,23 @@ export default function SystemAdminPortal() {
     if (!functions) return;
     setIsProcessing(true);
     try {
-      // Refresh identity token to ensure Super Admin claims are active
-      await auth.currentUser?.getIdToken(true);
+      // Refresh identity token
+      await user?.getIdToken(true);
 
       const updateFn = httpsCallable(functions, 'updateChurchStatus');
       await updateFn({ churchId, status });
       toast({ title: "Status Updated", description: `Organization is now ${status}.` });
     } catch (e: any) {
-      console.error("Cloud Function Error:", e);
-      toast({ title: "Operation Failed", description: e.message, variant: "destructive" });
+      console.log("FULL_ERROR_OBJECT:", e);
+      console.log("ERROR_CODE:", e.code);
+      console.log("ERROR_MESSAGE:", e.message);
+      console.log("ERROR_DETAILS:", e.details);
+
+      toast({ 
+        title: "Operation Failed", 
+        description: e.message || "An unexpected error occurred.", 
+        variant: "destructive" 
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -101,8 +107,7 @@ export default function SystemAdminPortal() {
     if (!functions || !editingOrg) return;
     setIsProcessing(true);
     try {
-      // Forced Token Refresh before sensitive data mutation
-      await auth.currentUser?.getIdToken(true);
+      await user?.getIdToken(true);
 
       const updateFn = httpsCallable(functions, 'updateOrganization');
       await updateFn({
@@ -112,7 +117,7 @@ export default function SystemAdminPortal() {
         plan: editingOrg.plan,
       });
 
-      toast({ title: "Organization details updated successfully." });
+      toast({ title: "Organization details updated." });
       setEditingOrg(null);
     } catch (e: any) {
       console.error("Cloud Function Error:", e);
@@ -126,7 +131,7 @@ export default function SystemAdminPortal() {
     if (!functions) return;
     setIsProcessing(true);
     try {
-      await auth.currentUser?.getIdToken(true);
+      await user?.getIdToken(true);
       const restoreFn = httpsCallable(functions, 'restoreMinistry');
       await restoreFn({ churchId });
       toast({ title: "Ministry Restored" });

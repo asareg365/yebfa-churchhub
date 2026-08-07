@@ -24,24 +24,25 @@ const { retryFailedSMS } = require("./schedulers/retryScheduler");
  * Helper to verify Super Admin status
  */
 function verifySuperAdmin(request) {
-  console.log("AUTH_CHECK:", { 
-    uid: request.auth?.uid, 
-    email: request.auth?.token?.email,
-    timestamp: new Date().toISOString() 
-  });
+  const auth = request.auth;
+  const email = auth?.token?.email;
 
-  const email = request.auth?.token?.email?.toLowerCase().trim();
-  
-  if (!request.auth) {
+  console.log("AUTH =", auth);
+  console.log("EMAIL =", email);
+
+  if (!auth || !email) {
+    console.error("AUTH_FAILED: No valid authentication context");
     throw new HttpsError("unauthenticated", "Authentication required. Please sign in again.");
   }
 
-  if (!email || !SUPER_ADMINS.includes(email)) {
-    console.error("PERMISSION_DENIED: User is not in SUPER_ADMINS list", { email });
-    throw new HttpsError("permission-denied", `Access Denied: ${email || "Unknown User"} is not a system administrator.`);
+  const normalizedEmail = email.toLowerCase().trim();
+
+  if (!SUPER_ADMINS.includes(normalizedEmail)) {
+    console.error("PERMISSION_DENIED: User is not in SUPER_ADMINS list", { email: normalizedEmail });
+    throw new HttpsError("permission-denied", `Access Denied: ${normalizedEmail} is not a system administrator.`);
   }
   
-  return email;
+  return normalizedEmail;
 }
 
 /**
@@ -262,11 +263,8 @@ exports.hardPurgeMinistry = onCall(
 exports.updateChurchStatus = onCall(
   { region: "us-central1" }, 
   async (request) => {
-    // 1. Explicit diagnostic logs for authorization debugging
-    console.log("ACTIVATE_REQUEST_AUTH:", request.auth);
     const adminEmail = verifySuperAdmin(request);
-    console.log("ACTIVATE_REQUEST_ADMIN:", adminEmail);
-
+    
     const { churchId, status } = request.data || {};
     if (!churchId || !status) {
       throw new HttpsError("invalid-argument", "Missing required parameters: churchId or status.");
@@ -278,13 +276,12 @@ exports.updateChurchStatus = onCall(
       const churchDoc = await churchRef.get();
 
       if (!churchDoc.exists) {
-        throw new HttpsError("not-found", `Ministry record '${churchId}' does not exist in the master registry.`);
+        throw new HttpsError("not-found", `Ministry record '${churchId}' does not exist.`);
       }
 
       // Mapping 'active' -> 'Approved' and others -> 'Suspended'
       const displayStatus = status === 'active' ? 'Approved' : 'Suspended';
 
-      // Use granular dot notation to prevent overwriting other fields if the nested map isn't perfectly aligned
       await churchRef.update({
         "status": displayStatus,
         "sms.status": displayStatus,
@@ -296,9 +293,7 @@ exports.updateChurchStatus = onCall(
       console.log(`STATUS_UPDATE_SUCCESS: ${churchId} is now ${displayStatus}`);
       return { success: true };
     } catch (error) {
-      // Re-throw HttpsErrors directly so they reach the frontend with proper codes
       if (error instanceof HttpsError) throw error;
-
       console.error("STATUS_CHANGE_FAILURE:", error);
       throw new HttpsError("internal", `Database error during status update: ${error.message}`);
     }
@@ -383,7 +378,7 @@ exports.mnotifyDeliveryWebhook = onRequest(
   { region: "us-central1", cors: true },
   async (req, res) => {
     const { message_id, status } = req.body;
-    if (!message_id) return res.status(400).send("Missing message_id");
+    if (!!message_id) return res.status(400).send("Missing message_id");
     
     const db = admin.firestore();
     try {
