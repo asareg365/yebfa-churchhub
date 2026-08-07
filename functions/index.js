@@ -49,7 +49,7 @@ function verifySuperAdmin(request) {
  * ADMIN: System Stats Aggregation
  */
 exports.getSystemStats = onCall(
-  { region: "us-central1" },
+  { region: "us-central1", cors: true },
   async (request) => {
     verifySuperAdmin(request);
 
@@ -127,7 +127,7 @@ exports.getSystemStats = onCall(
  * ADMIN: Soft Delete Ministry
  */
 exports.deleteMinistry = onCall(
-  { region: "us-central1" },
+  { region: "us-central1", cors: true },
   async (request) => {
     const adminEmail = verifySuperAdmin(request);
     const { churchId } = request.data || {};
@@ -172,7 +172,7 @@ exports.deleteMinistry = onCall(
  * ADMIN: Restore Ministry
  */
 exports.restoreMinistry = onCall(
-  { region: "us-central1" },
+  { region: "us-central1", cors: true },
   async (request) => {
     verifySuperAdmin(request);
     const { churchId } = request.data || {};
@@ -199,7 +199,7 @@ exports.restoreMinistry = onCall(
  * ADMIN: Permanent Purge (Hard Delete)
  */
 exports.hardPurgeMinistry = onCall(
-  { region: "us-central1", memory: "2GiB", timeoutSeconds: 540 },
+  { region: "us-central1", memory: "2GiB", timeoutSeconds: 540, cors: true },
   async (request) => {
     verifySuperAdmin(request);
     const { churchId } = request.data || {};
@@ -261,7 +261,7 @@ exports.hardPurgeMinistry = onCall(
  * ADMIN: Update Church Status (Activate/Suspend)
  */
 exports.updateChurchStatus = onCall(
-  { region: "us-central1" }, 
+  { region: "us-central1", cors: true }, 
   async (request) => {
     const adminEmail = verifySuperAdmin(request);
     
@@ -304,7 +304,7 @@ exports.updateChurchStatus = onCall(
  * ADMIN: Update Organization Details
  */
 exports.updateOrganization = onCall(
-  { region: "us-central1" }, 
+  { region: "us-central1", cors: true }, 
   async (request) => {
     const adminEmail = verifySuperAdmin(request);
     if (!request.data) throw new HttpsError("invalid-argument", "Missing payload");
@@ -341,7 +341,7 @@ exports.updateOrganization = onCall(
  * ADMIN: Top Up Wallet
  */
 exports.adminTopUpWallet = onCall(
-  { region: "us-central1" }, 
+  { region: "us-central1", cors: true }, 
   async (request) => {
     const adminEmail = verifySuperAdmin(request);
     if (!request.data) throw new HttpsError("invalid-argument", "Missing payload");
@@ -361,7 +361,7 @@ exports.adminTopUpWallet = onCall(
 /**
  * SYSTEM: Send SMS
  */
-exports.sendSMS = onCall({ region: "us-central1" }, async (request) => {
+exports.sendSMS = onCall({ region: "us-central1", cors: true }, async (request) => {
   const { phone, message, type, churchId, memberName, memberId } = request.data || {};
   if (!churchId) throw new HttpsError("invalid-argument", "Missing context");
   try { 
