@@ -25,20 +25,23 @@ const { retryFailedSMS } = require("./schedulers/retryScheduler");
  */
 function verifySuperAdmin(request) {
   const auth = request.auth;
-  const email = auth?.token?.email;
-
-  console.log("AUTH =", auth);
-  console.log("EMAIL =", email);
-
-  if (!auth || !email) {
-    console.error("AUTH_FAILED: No valid authentication context");
+  
+  if (!auth) {
+    console.error("AUTH_FAILED: No authentication context provided");
     throw new HttpsError("unauthenticated", "Authentication required. Please sign in again.");
   }
 
+  const email = auth.token?.email;
+  if (!email) {
+    console.error("AUTH_FAILED: Token exists but email is missing", { uid: auth.uid });
+    throw new HttpsError("unauthenticated", "Identity verification failed: Email missing from token.");
+  }
+
   const normalizedEmail = email.toLowerCase().trim();
+  console.log(`VERIFYING_ADMIN: ${normalizedEmail} (UID: ${auth.uid})`);
 
   if (!SUPER_ADMINS.includes(normalizedEmail)) {
-    console.error("PERMISSION_DENIED: User is not in SUPER_ADMINS list", { email: normalizedEmail });
+    console.error("PERMISSION_DENIED: Access attempt by unauthorized email", { email: normalizedEmail });
     throw new HttpsError("permission-denied", `Access Denied: ${normalizedEmail} is not a system administrator.`);
   }
   
@@ -119,6 +122,113 @@ exports.getSystemStats = onCall(
     } catch (err) {
       console.error("STATS_ENGINE_FAILURE:", err);
       throw new HttpsError("internal", "Stats engine encountered an internal failure.");
+    }
+  }
+);
+
+/**
+ * ADMIN: Update Church Status (Activate/Suspend)
+ * FIXED: Uses merge-safe set operation to prevent crashes on documents missing nested objects.
+ */
+exports.updateChurchStatus = onCall(
+  { region: "us-central1", cors: true }, 
+  async (request) => {
+    const adminEmail = verifySuperAdmin(request);
+    
+    const { churchId, status } = request.data || {};
+    if (!churchId || !status) {
+      console.error("STATUS_UPDATE_FAILED: Missing data", { churchId, status });
+      throw new HttpsError("invalid-argument", "Missing required parameters: churchId or status.");
+    }
+
+    try {
+      const db = admin.firestore();
+      const churchRef = db.collection("churches").doc(churchId);
+      const churchDoc = await churchRef.get();
+
+      if (!churchDoc.exists) {
+        throw new HttpsError("not-found", `Organization record '${churchId}' does not exist.`);
+      }
+
+      // Mapping 'active' -> 'Approved' and others -> 'Suspended' for UI labels
+      const displayStatus = status === 'active' ? 'Approved' : 'Suspended';
+
+      // Use set with merge: true to safely handle nested objects that might not exist
+      await churchRef.set({
+        status: displayStatus,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        statusLastChangedBy: adminEmail,
+        sms: {
+          status: displayStatus,
+          subscriptionStatus: status,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }
+      }, { merge: true });
+
+      console.log(`STATUS_UPDATE_SUCCESS: ${churchId} set to ${status} by ${adminEmail}`);
+      return { success: true };
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      console.error("STATUS_CHANGE_FAILURE:", error);
+      throw new HttpsError("internal", `System error during status update: ${error.message}`);
+    }
+  }
+);
+
+/**
+ * ADMIN: Update Organization Details
+ */
+exports.updateOrganization = onCall(
+  { region: "us-central1", cors: true }, 
+  async (request) => {
+    const adminEmail = verifySuperAdmin(request);
+    if (!request.data) throw new HttpsError("invalid-argument", "Missing payload");
+    const { churchId, name, slug, plan } = request.data;
+    
+    if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID");
+    
+    try {
+      const db = admin.firestore();
+      const churchRef = db.collection("churches").doc(churchId);
+      const churchDoc = await churchRef.get();
+
+      if (!churchDoc.exists) throw new HttpsError("not-found", "Organization record not found.");
+
+      await churchRef.update({
+        "name": name || "Unnamed Ministry",
+        "slug": slug || "no-slug",
+        "plan": plan || "Starter",
+        "subscription.plan": plan || "Starter",
+        "updatedAt": admin.firestore.FieldValue.serverTimestamp(),
+        "updatedBy": adminEmail
+      });
+
+      return { success: true };
+    } catch (error) { 
+      if (error instanceof HttpsError) throw error;
+      console.error("ORG_UPDATE_ERROR:", error);
+      throw new HttpsError("internal", error.message); 
+    }
+  }
+);
+
+/**
+ * ADMIN: Top Up Wallet
+ */
+exports.adminTopUpWallet = onCall(
+  { region: "us-central1", cors: true }, 
+  async (request) => {
+    const adminEmail = verifySuperAdmin(request);
+    if (!request.data) throw new HttpsError("invalid-argument", "Missing payload");
+    const { churchId, amount } = request.data;
+    if (!churchId || amount === undefined) throw new HttpsError("invalid-argument", "Missing top-up details");
+
+    try { 
+      const result = await creditWallet(churchId, Number(amount), "admin_manual", adminEmail); 
+      return result;
+    } catch (error) { 
+      console.error("TOPUP_ERROR:", error);
+      throw new HttpsError("internal", error.message); 
     }
   }
 );
@@ -253,107 +363,6 @@ exports.hardPurgeMinistry = onCall(
     } catch (error) {
       console.error("HARD_PURGE_ERROR:", error);
       throw new HttpsError("internal", "Deep purge failed: " + error.message);
-    }
-  }
-);
-
-/**
- * ADMIN: Update Church Status (Activate/Suspend)
- */
-exports.updateChurchStatus = onCall(
-  { region: "us-central1", cors: true }, 
-  async (request) => {
-    const adminEmail = verifySuperAdmin(request);
-    
-    const { churchId, status } = request.data || {};
-    if (!churchId || !status) {
-      throw new HttpsError("invalid-argument", "Missing required parameters: churchId or status.");
-    }
-
-    try {
-      const db = admin.firestore();
-      const churchRef = db.collection("churches").doc(churchId);
-      const churchDoc = await churchRef.get();
-
-      if (!churchDoc.exists) {
-        throw new HttpsError("not-found", `Ministry record '${churchId}' does not exist.`);
-      }
-
-      // Mapping 'active' -> 'Approved' and others -> 'Suspended'
-      const displayStatus = status === 'active' ? 'Approved' : 'Suspended';
-
-      await churchRef.update({
-        "status": displayStatus,
-        "sms.status": displayStatus,
-        "sms.subscriptionStatus": status,
-        "updatedAt": admin.firestore.FieldValue.serverTimestamp(),
-        "statusLastChangedBy": adminEmail
-      });
-
-      console.log(`STATUS_UPDATE_SUCCESS: ${churchId} is now ${displayStatus}`);
-      return { success: true };
-    } catch (error) {
-      if (error instanceof HttpsError) throw error;
-      console.error("STATUS_CHANGE_FAILURE:", error);
-      throw new HttpsError("internal", `Database error during status update: ${error.message}`);
-    }
-  }
-);
-
-/**
- * ADMIN: Update Organization Details
- */
-exports.updateOrganization = onCall(
-  { region: "us-central1", cors: true }, 
-  async (request) => {
-    const adminEmail = verifySuperAdmin(request);
-    if (!request.data) throw new HttpsError("invalid-argument", "Missing payload");
-    const { churchId, name, slug, plan } = request.data;
-    
-    if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID");
-    
-    try {
-      const db = admin.firestore();
-      const churchRef = db.collection("churches").doc(churchId);
-      const churchDoc = await churchRef.get();
-
-      if (!churchDoc.exists) throw new HttpsError("not-found", "Organization record not found.");
-
-      await churchRef.update({
-        "name": name || "Unnamed Ministry",
-        "slug": slug || "no-slug",
-        "plan": plan || "Starter",
-        "subscription.plan": plan || "Starter",
-        "updatedAt": admin.firestore.FieldValue.serverTimestamp(),
-        "updatedBy": adminEmail
-      });
-
-      return { success: true };
-    } catch (error) { 
-      if (error instanceof HttpsError) throw error;
-      console.error("ORG_UPDATE_ERROR:", error);
-      throw new HttpsError("internal", error.message); 
-    }
-  }
-);
-
-/**
- * ADMIN: Top Up Wallet
- */
-exports.adminTopUpWallet = onCall(
-  { region: "us-central1", cors: true }, 
-  async (request) => {
-    const adminEmail = verifySuperAdmin(request);
-    if (!request.data) throw new HttpsError("invalid-argument", "Missing payload");
-    const { churchId, amount } = request.data;
-    if (!churchId || amount === undefined) throw new HttpsError("invalid-argument", "Missing top-up details");
-
-    try { 
-      const result = await creditWallet(churchId, Number(amount), "admin_manual", adminEmail); 
-      return result;
-    } catch (error) { 
-      console.error("TOPUP_ERROR:", error);
-      throw new HttpsError("internal", error.message); 
     }
   }
 );
