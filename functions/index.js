@@ -21,15 +21,24 @@ const { processVisitorFollowups } = require("./schedulers/visitorScheduler");
 const { retryFailedSMS } = require("./schedulers/retryScheduler");
 
 /**
+ * Helper to verify Super Admin status
+ */
+function verifySuperAdmin(request) {
+  const email = request.auth?.token?.email?.toLowerCase().trim();
+  if (!email || !SUPER_ADMINS.includes(email)) {
+    console.error("PERMISSION_DENIED: User is not a super admin", { email });
+    throw new HttpsError("permission-denied", "Unauthorized access. System Administrator only.");
+  }
+  return email;
+}
+
+/**
  * ADMIN: System Stats Aggregation
  */
 exports.getSystemStats = onCall(
   { region: "us-central1" },
   async (request) => {
-    const email = request.auth?.token?.email?.toLowerCase().trim();
-    if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized access.");
-    }
+    verifySuperAdmin(request);
 
     try {
       const db = admin.firestore();
@@ -102,16 +111,12 @@ exports.getSystemStats = onCall(
 );
 
 /**
- * ADMIN: Soft Delete Ministry (Safety Shield Enabled)
+ * ADMIN: Soft Delete Ministry
  */
 exports.deleteMinistry = onCall(
   { region: "us-central1" },
   async (request) => {
-    const email = request.auth?.token?.email?.toLowerCase().trim();
-    if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized");
-    }
-
+    const adminEmail = verifySuperAdmin(request);
     const { churchId } = request.data || {};
     if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId");
 
@@ -122,7 +127,6 @@ exports.deleteMinistry = onCall(
 
       if (!churchDoc.exists) throw new HttpsError("not-found", "Organization not found.");
 
-      // SAFETY SHIELD: Proactive block for active organizations
       const churchData = churchDoc.data();
       const isActuallyActive = churchData.sms?.subscriptionStatus === "active" || 
                                churchData.status === "Approved" || 
@@ -138,7 +142,7 @@ exports.deleteMinistry = onCall(
       await churchRef.update({
         deletionStatus: "DELETED",
         deletedAt: admin.firestore.FieldValue.serverTimestamp(),
-        deletedBy: email,
+        deletedBy: adminEmail,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
@@ -157,19 +161,13 @@ exports.deleteMinistry = onCall(
 exports.restoreMinistry = onCall(
   { region: "us-central1" },
   async (request) => {
-    const email = request.auth?.token?.email?.toLowerCase().trim();
-    if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized");
-    }
-
+    verifySuperAdmin(request);
     const { churchId } = request.data || {};
     if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId");
 
     try {
       const db = admin.firestore();
-      const churchRef = db.collection("churches").doc(churchId);
-      
-      await churchRef.update({
+      await db.collection("churches").doc(churchId).update({
         deletionStatus: null,
         deletedAt: null,
         deletedBy: null,
@@ -186,16 +184,11 @@ exports.restoreMinistry = onCall(
 
 /**
  * ADMIN: Permanent Purge (Hard Delete)
- * Massive cleanup across all subcollections.
  */
 exports.hardPurgeMinistry = onCall(
   { region: "us-central1", memory: "2GiB", timeoutSeconds: 540 },
   async (request) => {
-    const email = request.auth?.token?.email?.toLowerCase().trim();
-    if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized");
-    }
-
+    verifySuperAdmin(request);
     const { churchId } = request.data || {};
     if (!churchId) throw new HttpsError("invalid-argument", "Missing churchId");
 
@@ -223,7 +216,7 @@ exports.hardPurgeMinistry = onCall(
       // 2. Scrub Locks
       await db.collection("smsLocks").doc(churchId).delete().catch(console.error);
 
-      // 3. Scrub Queue items for this church
+      // 3. Scrub Queue items
       let qSnap;
       let qCount = 0;
       do {
@@ -240,7 +233,7 @@ exports.hardPurgeMinistry = onCall(
         }
       } while (!qSnap.empty && qCount < 100);
 
-      // 4. Recursive Delete of Tenant Root and all Subcollections
+      // 4. Recursive Delete
       await db.recursiveDelete(churchRef);
 
       return { success: true };
@@ -253,16 +246,13 @@ exports.hardPurgeMinistry = onCall(
 
 /**
  * ADMIN: Update Church Status (Activate/Suspend)
- * Fixes "Internal Error" by using granular dot-notation updates.
  */
 exports.updateChurchStatus = onCall(
   { region: "us-central1" }, 
   async (request) => {
-    const email = request.auth?.token?.email?.toLowerCase().trim();
-    if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized access");
-    }
+    verifySuperAdmin(request);
 
+    if (!request.data) throw new HttpsError("invalid-argument", "Missing payload");
     const { churchId, status } = request.data;
     if (!churchId || !status) throw new HttpsError("invalid-argument", "Missing parameters");
 
@@ -271,8 +261,13 @@ exports.updateChurchStatus = onCall(
       const isApproved = status === 'active';
       const label = isApproved ? 'Approved' : 'Suspended';
 
-      // Use Granular Dot-Notation to prevent wiping out other nested data
-      await db.collection("churches").doc(churchId).update({
+      console.log(`Updating status for ${churchId} to ${status}`);
+
+      // We use dot-notation for safety, but check if root maps exist
+      const churchDoc = await db.collection("churches").doc(churchId).get();
+      if (!churchDoc.exists) throw new HttpsError("not-found", "Organization not found");
+
+      const updateData = {
         "sms.subscriptionStatus": status,
         "sms.approved": isApproved,
         "sms.status": label,
@@ -280,12 +275,14 @@ exports.updateChurchStatus = onCall(
         "status": label,
         "subscription.status": status,
         "updatedAt": admin.firestore.FieldValue.serverTimestamp()
-      });
+      };
+
+      await db.collection("churches").doc(churchId).update(updateData);
 
       return { success: true };
     } catch (error) { 
       console.error("STATUS_UPDATE_ERROR:", error);
-      throw new HttpsError("internal", "Activation failed: " + error.message); 
+      throw new HttpsError("internal", error.message); 
     }
   }
 );
@@ -296,11 +293,8 @@ exports.updateChurchStatus = onCall(
 exports.updateOrganization = onCall(
   { region: "us-central1" }, 
   async (request) => {
-    const email = request.auth?.token?.email?.toLowerCase().trim();
-    if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized access");
-    }
-
+    verifySuperAdmin(request);
+    if (!request.data) throw new HttpsError("invalid-argument", "Missing payload");
     const { churchId, name, slug, plan } = request.data;
     if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID");
     
@@ -327,16 +321,13 @@ exports.updateOrganization = onCall(
 exports.adminTopUpWallet = onCall(
   { region: "us-central1" }, 
   async (request) => {
-    const email = request.auth?.token?.email?.toLowerCase().trim();
-    if (!email || !SUPER_ADMINS.includes(email)) {
-      throw new HttpsError("permission-denied", "Unauthorized access");
-    }
-
+    const adminEmail = verifySuperAdmin(request);
+    if (!request.data) throw new HttpsError("invalid-argument", "Missing payload");
     const { churchId, amount } = request.data;
     if (!churchId || amount === undefined) throw new HttpsError("invalid-argument", "Missing top-up details");
 
     try { 
-      const result = await creditWallet(churchId, Number(amount), "admin_manual", email); 
+      const result = await creditWallet(churchId, Number(amount), "admin_manual", adminEmail); 
       return result;
     } catch (error) { 
       console.error("TOPUP_ERROR:", error);
@@ -349,7 +340,7 @@ exports.adminTopUpWallet = onCall(
  * SYSTEM: Send SMS
  */
 exports.sendSMS = onCall({ region: "us-central1" }, async (request) => {
-  const { phone, message, type, churchId, memberName, memberId } = request.data;
+  const { phone, message, type, churchId, memberName, memberId } = request.data || {};
   if (!churchId) throw new HttpsError("invalid-argument", "Missing context");
   try { 
     return await queueSMS(churchId, { phone, message, type, memberName, memberId }); 

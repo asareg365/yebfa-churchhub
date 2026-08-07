@@ -17,15 +17,14 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useCollection, useFirestore, useUser } from '@/firebase';
-import { collection, query, where, limit, orderBy } from 'firebase/firestore';
+import { useCollection, useFirestore } from '@/firebase';
+import { collection, query, limit, orderBy } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { SMSLog } from '@/services/sms-service';
 
-export default function SMSLogsPage() {
+export default function SMSLogsPage({ currentChurch }: { currentChurch: any }) {
   const db = useFirestore();
-  const { user } = useUser();
 
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -33,16 +32,7 @@ export default function SMSLogsPage() {
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
-  const userEmail = useMemo(() => user?.email?.toLowerCase().trim(), [user?.email]);
-
-  const churchQuery = useMemo(() => {
-    if (!userEmail || !db) return null;
-    return query(collection(db, 'churches'), where('adminEmails', 'array-contains', userEmail), limit(1));
-  }, [db, userEmail]);
-  
-  const { data: churches } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
-
+  // Uses inherited church context for stability
   const logsRef = useMemo(() => {
     if (!currentChurch?.id || !db) return null;
     return collection(db, 'churches', currentChurch.id, 'smsLogs');

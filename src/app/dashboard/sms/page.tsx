@@ -35,7 +35,6 @@ import { startOfDay, format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
-// Sub-page components refactored as parts of the hub
 import SMSLogsPage from './logs/page';
 import FailedMessagesPage from './failed/page';
 import SMSTemplatesPage from './templates/page';
@@ -55,6 +54,7 @@ export default function SMSCenterHub() {
   const [draft, setDraft] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
 
+  // Consolidated Parent Church Query
   const churchQuery = useMemo(() => {
     if (!user?.email || !db) return null;
     return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
@@ -63,6 +63,7 @@ export default function SMSCenterHub() {
   const { data: churches, loading: churchLoading } = useCollection(churchQuery);
   const currentChurch = churches?.[0];
 
+  // Consolidated Campaign & Log References
   const smsRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'smsLogs') : null, [db, currentChurch?.id]);
   const campaignRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'scheduledSms') : null, [db, currentChurch?.id]);
   
@@ -81,7 +82,7 @@ export default function SMSCenterHub() {
 
   const stats = useMemo(() => {
     const sms = currentChurch?.sms || { credits: 0, enabled: false, subscriptionStatus: 'pending' };
-    if (!allLogs) return { today: 0, failed: 0, remaining: sms.credits, enabled: sms.enabled, status: sms.subscriptionStatus };
+    if (!allLogs) return { today: 0, failed: 0, remaining: sms.credits || 0, enabled: sms.enabled, status: sms.subscriptionStatus };
     
     const today = startOfDay(new Date());
     const logsToday = allLogs.filter(l => {
@@ -317,9 +318,9 @@ export default function SMSCenterHub() {
            </Card>
         </TabsContent>
 
-        <TabsContent value="logs"><SMSLogsPage /></TabsContent>
-        <TabsContent value="failed"><FailedMessagesPage /></TabsContent>
-        <TabsContent value="templates"><SMSTemplatesPage /></TabsContent>
+        <TabsContent value="logs"><SMSLogsPage currentChurch={currentChurch} /></TabsContent>
+        <TabsContent value="failed"><FailedMessagesPage currentChurch={currentChurch} /></TabsContent>
+        <TabsContent value="templates"><SMSTemplatesPage currentChurch={currentChurch} /></TabsContent>
       </Tabs>
     </div>
   );
