@@ -250,40 +250,21 @@ exports.hardPurgeMinistry = onCall(
 exports.updateChurchStatus = onCall(
   { region: "us-central1" }, 
   async (request) => {
-    verifySuperAdmin(request);
+    console.log("AUTH =", request.auth);
 
-    if (!request.data) throw new HttpsError("invalid-argument", "Missing payload");
-    const { churchId, status } = request.data;
-    if (!churchId || !status) throw new HttpsError("invalid-argument", "Missing parameters");
+    const email = request.auth?.token?.email;
 
-    try {
-      const db = admin.firestore();
-      const isApproved = status === 'active';
-      const label = isApproved ? 'Approved' : 'Suspended';
+    console.log("EMAIL =", email);
 
-      console.log(`Updating status for ${churchId} to ${status}`);
-
-      // We use dot-notation for safety, but check if root maps exist
-      const churchDoc = await db.collection("churches").doc(churchId).get();
-      if (!churchDoc.exists) throw new HttpsError("not-found", "Organization not found");
-
-      const updateData = {
-        "sms.subscriptionStatus": status,
-        "sms.approved": isApproved,
-        "sms.status": label,
-        "sms.enabled": isApproved,
-        "status": label,
-        "subscription.status": status,
-        "updatedAt": admin.firestore.FieldValue.serverTimestamp()
-      };
-
-      await db.collection("churches").doc(churchId).update(updateData);
-
-      return { success: true };
-    } catch (error) { 
-      console.error("STATUS_UPDATE_ERROR:", error);
-      throw new HttpsError("internal", error.message); 
+    if (!email) {
+      throw new HttpsError("unauthenticated", "No email");
     }
+
+    if (!SUPER_ADMINS.includes(email.toLowerCase())) {
+      throw new HttpsError("permission-denied", email);
+    }
+
+    return { success: true };
   }
 );
 
