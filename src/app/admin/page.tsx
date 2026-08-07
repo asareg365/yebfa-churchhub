@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldCheck, Search, Loader2, LogOut, Users, Archive, Pencil, Save } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -91,10 +90,14 @@ export default function SystemAdminPortal() {
       // Refresh identity token
       await user?.getIdToken(true);
 
-      console.log("Current user:", auth.currentUser);
-      console.log("Functions:", functions);
-      console.log("Auth app:", auth.app.options);
-      console.log("Functions app:", functions.app.options);
+      console.log("Firebase SDK:", (functions as any).app.options);
+      console.log("Functions region:", (functions as any).region);
+      console.log("Current user:", auth.currentUser?.email);
+
+      const token = await auth.currentUser?.getIdToken();
+
+      console.log("Token exists:", !!token);
+      console.log("Token length:", token?.length);
 
       const updateFn = httpsCallable(functions, 'updateChurchStatus');
       await updateFn({ churchId, status });
