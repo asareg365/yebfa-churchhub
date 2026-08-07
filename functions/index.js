@@ -128,11 +128,14 @@ exports.getSystemStats = onCall(
 
 /**
  * ADMIN: Update Church Status (Activate/Suspend)
- * FIXED: Uses merge-safe set operation to prevent crashes on documents missing nested objects.
  */
 exports.updateChurchStatus = onCall(
   { region: "us-central1", cors: true }, 
   async (request) => {
+    console.log("===== updateChurchStatus called =====");
+    console.log("AUTH =", request.auth);
+    console.log("DATA =", request.data);
+
     const adminEmail = verifySuperAdmin(request);
     
     const { churchId, status } = request.data || {};
@@ -150,10 +153,8 @@ exports.updateChurchStatus = onCall(
         throw new HttpsError("not-found", `Organization record '${churchId}' does not exist.`);
       }
 
-      // Mapping 'active' -> 'Approved' and others -> 'Suspended' for UI labels
       const displayStatus = status === 'active' ? 'Approved' : 'Suspended';
 
-      // Use set with merge: true to safely handle nested objects that might not exist
       await churchRef.set({
         status: displayStatus,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),

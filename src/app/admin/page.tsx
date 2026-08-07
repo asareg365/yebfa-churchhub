@@ -77,7 +77,14 @@ export default function SystemAdminPortal() {
   };
 
   const handleUpdateStatus = async (churchId: string, status: string) => {
-    if (!functions) return;
+    if (!functions) {
+      toast({
+        title: "Firebase not initialized",
+        description: "Cloud Functions unavailable.",
+        variant: "destructive"
+      });
+      return;
+    }
     setIsProcessing(true);
     try {
       // Refresh identity token
@@ -87,10 +94,14 @@ export default function SystemAdminPortal() {
       await updateFn({ churchId, status });
       toast({ title: "Status Updated", description: `Organization is now ${status}.` });
     } catch (e: any) {
-      console.log("FULL_ERROR_OBJECT:", e);
-      console.log("ERROR_CODE:", e.code);
-      console.log("ERROR_MESSAGE:", e.message);
-      console.log("ERROR_DETAILS:", e.details);
+      console.error("FULL ERROR:", e);
+
+      alert(JSON.stringify({
+        code: e.code,
+        message: e.message,
+        details: e.details,
+        stack: e.stack
+      }, null, 2));
 
       toast({ 
         title: "Operation Failed", 
