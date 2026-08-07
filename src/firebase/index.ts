@@ -9,17 +9,24 @@ import { firebaseConfig } from './config';
 /**
  * SHARED FIREBASE SINGLETONS
  * Central source of truth for all Firebase services.
- * Regional binding for Functions is strictly us-central1.
  */
 
 const isConfigValid = typeof window !== 'undefined' && !!firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined';
 
-export const firebaseApp: FirebaseApp | null = isConfigValid 
-  ? (getApps().length > 0 ? getApp() : initializeApp(firebaseConfig))
-  : null;
+let initializedApp: FirebaseApp | null = null;
+
+if (isConfigValid) {
+  try {
+    initializedApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+  } catch (err) {
+    console.error("Firebase Initialization Error:", err);
+  }
+}
+
+export const firebaseApp = initializedApp;
 
 /**
- * Singleton Instances
+ * Singleton Instances with descriptive initialization
  */
 export const auth: Auth = firebaseApp ? getAuth(firebaseApp) : (null as any);
 export const firestore: Firestore = firebaseApp ? getFirestore(firebaseApp) : (null as any);

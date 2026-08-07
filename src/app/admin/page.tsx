@@ -22,7 +22,6 @@ import {
   Trash2,
   RotateCcw,
   Archive,
-  History,
   Info
 } from 'lucide-react';
 import {
@@ -104,13 +103,13 @@ export default function SystemAdminPortal() {
   }, []);
 
   const loadStats = useCallback(async () => {
-    if (!auth?.currentUser || !functions) return;
+    if (!user || !functions) return;
     
     setIsRefreshing(true);
     setStatsError(false);
     
     try {
-      await auth.currentUser.getIdToken(true);
+      await user.getIdToken(true);
       const fetchStats = httpsCallable(functions, 'getSystemStats');
       const res: any = await fetchStats();
       
@@ -128,11 +127,11 @@ export default function SystemAdminPortal() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [toast]);
+  }, [user, toast]);
 
   useEffect(() => {
     if (mounted && !userLoading && (!user || !SUPER_ADMINS.includes(user.email?.toLowerCase() || ''))) {
-      router.push('/admin/login');
+      router.replace('/admin/login');
     }
   }, [user, userLoading, router, mounted]);
 
@@ -164,7 +163,10 @@ export default function SystemAdminPortal() {
   }, [platformStats, managingSmsId]);
 
   const handleUpdateStatus = async (churchId: string, status: string) => {
-    if (!functions) return;
+    if (!functions) {
+      toast({ title: "Service Error", description: "Cloud Functions are currently unavailable.", variant: "destructive" });
+      return;
+    }
     setIsProcessing(true);
     const updateFn = httpsCallable(functions, 'updateChurchStatus');
     try {
@@ -173,9 +175,6 @@ export default function SystemAdminPortal() {
       await loadStats(); 
     } catch (e: any) {
       console.log(e);
-      console.log(e.code);
-      console.log(e.message);
-      console.log(e.details);
       toast({ title: "Operation Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
@@ -183,7 +182,11 @@ export default function SystemAdminPortal() {
   };
 
   const handleSaveOrg = async () => {
-    if (!editingOrg || !functions) return;
+    if (!editingOrg) return;
+    if (!functions) {
+      toast({ title: "Service Error", description: "Cloud Functions are currently unavailable.", variant: "destructive" });
+      return;
+    }
     setIsProcessing(true);
     const updateFn = httpsCallable(functions, 'updateOrganization');
     try {
@@ -198,9 +201,6 @@ export default function SystemAdminPortal() {
       await loadStats(); 
     } catch (e: any) {
       console.log(e);
-      console.log(e.code);
-      console.log(e.message);
-      console.log(e.details);
       toast({ title: "Update Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
@@ -208,7 +208,11 @@ export default function SystemAdminPortal() {
   };
 
   const handleSoftDelete = async () => {
-    if (!ministryToDelete || !functions) return;
+    if (!ministryToDelete) return;
+    if (!functions) {
+      toast({ title: "Service Error", description: "Cloud Functions are currently unavailable.", variant: "destructive" });
+      return;
+    }
     setIsProcessing(true);
     try {
       const deleteFn = httpsCallable(functions, 'deleteMinistry');
@@ -218,9 +222,6 @@ export default function SystemAdminPortal() {
       await loadStats();
     } catch (e: any) {
       console.log(e);
-      console.log(e.code);
-      console.log(e.message);
-      console.log(e.details);
       const msg = e.message || "Deletion Failed";
       toast({ title: "Action Blocked", description: msg, variant: "destructive" });
     } finally {
@@ -229,7 +230,10 @@ export default function SystemAdminPortal() {
   };
 
   const handleRestore = async (churchId: string) => {
-    if (!functions) return;
+    if (!functions) {
+      toast({ title: "Service Error", description: "Cloud Functions are currently unavailable.", variant: "destructive" });
+      return;
+    }
     setIsProcessing(true);
     try {
       const restoreFn = httpsCallable(functions, 'restoreMinistry');
@@ -238,9 +242,6 @@ export default function SystemAdminPortal() {
       await loadStats();
     } catch (e: any) {
       console.log(e);
-      console.log(e.code);
-      console.log(e.message);
-      console.log(e.details);
       toast({ title: "Restore Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
@@ -248,10 +249,14 @@ export default function SystemAdminPortal() {
   };
 
   const handlePermanentPurge = async () => {
-    if (!ministryToPurge || !functions || !auth.currentUser) return;
+    if (!ministryToPurge || !user) return;
+    if (!functions) {
+      toast({ title: "Service Error", description: "Cloud Functions are currently unavailable.", variant: "destructive" });
+      return;
+    }
     setIsProcessing(true);
     try {
-      await auth.currentUser.getIdToken(true);
+      await user.getIdToken(true);
       const purgeFn = httpsCallable(functions, 'hardPurgeMinistry', { timeout: 540000 });
       const res: any = await purgeFn({ churchId: ministryToPurge.id });
       if (res.data?.success) {
@@ -263,10 +268,7 @@ export default function SystemAdminPortal() {
       }
     } catch (e: any) {
       console.log(e);
-      console.log(e.code);
-      console.log(e.message);
-      console.log(e.details);
-      const detail = e.details || e.message || "Deep purge failed. The ministry might have protected documents or active locks.";
+      const detail = e.details || e.message || "Deep purge failed.";
       toast({ title: "Purge Error", description: detail, variant: "destructive" });
     } finally {
       setIsProcessing(false);
@@ -274,9 +276,13 @@ export default function SystemAdminPortal() {
   };
 
   const handleTopUp = async () => {
+    if (!user || !managingSmsId) return;
+    if (!functions) {
+      toast({ title: "Service Error", description: "Cloud Functions are currently unavailable.", variant: "destructive" });
+      return;
+    }
+    setIsProcessing(true);
     try {
-      if (!auth.currentUser || !functions || !managingSmsId) return;
-      setIsProcessing(true);
       const callable = httpsCallable(functions, "adminTopUpWallet");
       await callable({ churchId: managingSmsId, amount: Number(topUpAmount) });
       toast({ title: "Credits Added", description: `${topUpAmount} SMS credits added.` });
@@ -284,21 +290,22 @@ export default function SystemAdminPortal() {
       await loadStats();
     } catch (error: any) {
       console.log(error);
-      console.log(error.code);
-      console.log(error.message);
-      console.log(error.details);
       toast({ title: "Top-up Failed", description: error?.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
   };
 
-  if (!mounted || userLoading || !auth?.currentUser) {
+  if (!mounted || userLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
       </div>
     );
+  }
+
+  if (!user || !SUPER_ADMINS.includes(user.email?.toLowerCase() || '')) {
+    return null;
   }
 
   const TableSkeleton = () => (

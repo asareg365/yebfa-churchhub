@@ -23,7 +23,7 @@ export function FirebaseClientProvider({
   }
 
   // Check if singleton initialized correctly on the client
-  if (!firebaseApp) {
+  if (firebaseApp === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-6">
         <div className="w-full max-w-2xl space-y-6">
