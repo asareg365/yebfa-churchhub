@@ -1,14 +1,16 @@
-
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Search, Loader2, LogOut, RefreshCcw, Archive, Users, AlertTriangle } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { ShieldCheck, Search, Loader2, LogOut, RefreshCcw, Archive, Users, AlertTriangle, Pencil, Save } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser, auth, functions, useCollection, useFirestore } from '@/firebase';
 import { collection, query } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
@@ -34,6 +36,9 @@ export default function SystemAdminPortal() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [mounted, setMounted] = useState(false);
+  
+  // Edit State
+  const [editingOrg, setEditingOrg] = useState<Church | null>(null);
 
   // Real-time listener for churches
   const churchesQuery = query(collection(db, 'churches'));
@@ -77,6 +82,9 @@ export default function SystemAdminPortal() {
     if (!functions) return;
     setIsProcessing(true);
     try {
+      // Refresh identity token to ensure Super Admin claims are active
+      await auth.currentUser?.getIdToken(true);
+
       const updateFn = httpsCallable(functions, 'updateChurchStatus');
       await updateFn({ churchId, status });
       toast({ title: "Status Updated", description: `Organization is now ${status}.` });
@@ -88,10 +96,37 @@ export default function SystemAdminPortal() {
     }
   };
 
+  const handleUpdateOrg = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!functions || !editingOrg) return;
+    setIsProcessing(true);
+    try {
+      // Forced Token Refresh before sensitive data mutation
+      await auth.currentUser?.getIdToken(true);
+
+      const updateFn = httpsCallable(functions, 'updateOrganization');
+      await updateFn({
+        churchId: editingOrg.id,
+        name: editingOrg.name,
+        slug: editingOrg.slug,
+        plan: editingOrg.plan,
+      });
+
+      toast({ title: "Organization details updated successfully." });
+      setEditingOrg(null);
+    } catch (e: any) {
+      console.error("Cloud Function Error:", e);
+      toast({ title: "Update Failed", description: e.message, variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleRestore = async (churchId: string) => {
     if (!functions) return;
     setIsProcessing(true);
     try {
+      await auth.currentUser?.getIdToken(true);
       const restoreFn = httpsCallable(functions, 'restoreMinistry');
       await restoreFn({ churchId });
       toast({ title: "Ministry Restored" });
@@ -164,7 +199,7 @@ export default function SystemAdminPortal() {
                   <TabsContent value="active" className="mt-0 animate-in fade-in duration-300">
                     <OrganizationTable 
                       ministries={activeMinistries}
-                      onEdit={() => {}} 
+                      onEdit={(church) => setEditingOrg(church)} 
                       onTopUp={() => {}}
                       onUpdateStatus={handleUpdateStatus}
                       onDelete={() => {}}
@@ -207,6 +242,66 @@ export default function SystemAdminPortal() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Organization Dialog */}
+      <Dialog open={!!editingOrg} onOpenChange={(open) => !open && setEditingOrg(null)}>
+        <DialogContent className="glass">
+          <form onSubmit={handleUpdateOrg}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Pencil className="w-5 h-5 text-primary" />
+                Modify Organization
+              </DialogTitle>
+              <DialogDescription>Update master records for {editingOrg?.name}.</DialogDescription>
+            </DialogHeader>
+            {editingOrg && (
+              <div className="space-y-4 py-6">
+                <div className="space-y-2">
+                  <Label>Ministry Legal Name</Label>
+                  <Input 
+                    value={editingOrg.name} 
+                    onChange={(e) => setEditingOrg({ ...editingOrg, name: e.target.value })} 
+                    className="bg-muted/20"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>System Slug (Tenant ID)</Label>
+                  <Input 
+                    value={editingOrg.slug} 
+                    onChange={(e) => setEditingOrg({ ...editingOrg, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') })} 
+                    className="bg-muted/20 font-mono"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Subscription Plan</Label>
+                  <Select 
+                    value={editingOrg.plan || 'Starter'} 
+                    onValueChange={(v) => setEditingOrg({ ...editingOrg, plan: v })}
+                  >
+                    <SelectTrigger className="bg-muted/20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Starter">Starter / Basic</SelectItem>
+                      <SelectItem value="Standard">Ministry Growth</SelectItem>
+                      <SelectItem value="Premium">Enterprise</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" type="button" onClick={() => setEditingOrg(null)}>Cancel</Button>
+              <Button type="submit" disabled={isProcessing} className="bg-primary px-8">
+                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                Commit Changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
