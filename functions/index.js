@@ -250,21 +250,33 @@ exports.hardPurgeMinistry = onCall(
 exports.updateChurchStatus = onCall(
   { region: "us-central1" }, 
   async (request) => {
-    console.log("AUTH =", request.auth);
+    const adminEmail = verifySuperAdmin(request);
+    const { churchId, status } = request.data || {};
 
-    const email = request.auth?.token?.email;
-
-    console.log("EMAIL =", email);
-
-    if (!email) {
-      throw new HttpsError("unauthenticated", "No email");
+    if (!churchId || !status) {
+      throw new HttpsError("invalid-argument", "Missing parameters (churchId, status)");
     }
 
-    if (!SUPER_ADMINS.includes(email.toLowerCase())) {
-      throw new HttpsError("permission-denied", email);
-    }
+    try {
+      const db = admin.firestore();
+      const churchRef = db.collection("churches").doc(churchId);
 
-    return { success: true };
+      // Mapping 'active' -> 'Approved' and others -> 'Suspended'
+      const displayStatus = status === 'active' ? 'Approved' : 'Suspended';
+
+      await churchRef.update({
+        "status": displayStatus,
+        "sms.status": displayStatus,
+        "sms.subscriptionStatus": status,
+        "updatedAt": admin.firestore.FieldValue.serverTimestamp(),
+        "statusLastChangedBy": adminEmail
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error("STATUS_CHANGE_ERROR:", error);
+      throw new HttpsError("internal", "Failed to update organization status: " + error.message);
+    }
   }
 );
 
