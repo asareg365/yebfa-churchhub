@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -11,7 +10,11 @@ import {
 import { errorEmitter } from '../error-emitter';
 import { FirestorePermissionError } from '../errors';
 
-export function useCollection<T = DocumentData>(query: Query<T> | null) {
+/**
+ * Hook to subscribe to a Firestore collection.
+ * Handled injection of document IDs and type casting.
+ */
+export function useCollection<T = DocumentData>(query: Query<any> | null) {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -25,11 +28,11 @@ export function useCollection<T = DocumentData>(query: Query<T> | null) {
 
     const unsubscribe = onSnapshot(
       query,
-      (snapshot: QuerySnapshot<T>) => {
+      (snapshot: QuerySnapshot<DocumentData>) => {
         const items = snapshot.docs.map((doc) => ({
           ...doc.data(),
           id: doc.id,
-        }));
+        } as unknown as T));
         setData(items);
         setError(null);
         setLoading(false);

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -11,7 +10,11 @@ import {
 import { errorEmitter } from '../error-emitter';
 import { FirestorePermissionError } from '../errors';
 
-export function useDoc<T = DocumentData>(docRef: DocumentReference<T> | null) {
+/**
+ * Hook to subscribe to a single Firestore document.
+ * Handles injection of document ID and type casting.
+ */
+export function useDoc<T = DocumentData>(docRef: DocumentReference<any> | null) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -24,8 +27,8 @@ export function useDoc<T = DocumentData>(docRef: DocumentReference<T> | null) {
 
     const unsubscribe = onSnapshot(
       docRef,
-      (snapshot: DocumentSnapshot<T>) => {
-        setData(snapshot.exists() ? { ...snapshot.data()!, id: snapshot.id } : null);
+      (snapshot: DocumentSnapshot<DocumentData>) => {
+        setData(snapshot.exists() ? ({ ...snapshot.data()!, id: snapshot.id } as unknown as T) : null);
         setLoading(false);
       },
       async (serverError: any) => {
