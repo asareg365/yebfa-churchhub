@@ -24,11 +24,23 @@ const { retryFailedSMS } = require("./schedulers/retryScheduler");
  * Helper to verify Super Admin status
  */
 function verifySuperAdmin(request) {
+  console.log("AUTH_CHECK:", { 
+    uid: request.auth?.uid, 
+    email: request.auth?.token?.email,
+    timestamp: new Date().toISOString() 
+  });
+
   const email = request.auth?.token?.email?.toLowerCase().trim();
-  if (!email || !SUPER_ADMINS.includes(email)) {
-    console.error("PERMISSION_DENIED: User is not a super admin", { email });
-    throw new HttpsError("permission-denied", "Unauthorized access. System Administrator only.");
+  
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required. Please sign in again.");
   }
+
+  if (!email || !SUPER_ADMINS.includes(email)) {
+    console.error("PERMISSION_DENIED: User is not in SUPER_ADMINS list", { email });
+    throw new HttpsError("permission-denied", `Access Denied: ${email || "Unknown User"} is not a system administrator.`);
+  }
+  
   return email;
 }
 
@@ -250,20 +262,29 @@ exports.hardPurgeMinistry = onCall(
 exports.updateChurchStatus = onCall(
   { region: "us-central1" }, 
   async (request) => {
+    // 1. Explicit diagnostic logs for authorization debugging
+    console.log("ACTIVATE_REQUEST_AUTH:", request.auth);
     const adminEmail = verifySuperAdmin(request);
-    const { churchId, status } = request.data || {};
+    console.log("ACTIVATE_REQUEST_ADMIN:", adminEmail);
 
+    const { churchId, status } = request.data || {};
     if (!churchId || !status) {
-      throw new HttpsError("invalid-argument", "Missing parameters (churchId, status)");
+      throw new HttpsError("invalid-argument", "Missing required parameters: churchId or status.");
     }
 
     try {
       const db = admin.firestore();
       const churchRef = db.collection("churches").doc(churchId);
+      const churchDoc = await churchRef.get();
+
+      if (!churchDoc.exists) {
+        throw new HttpsError("not-found", `Ministry record '${churchId}' does not exist in the master registry.`);
+      }
 
       // Mapping 'active' -> 'Approved' and others -> 'Suspended'
       const displayStatus = status === 'active' ? 'Approved' : 'Suspended';
 
+      // Use granular dot notation to prevent overwriting other fields if the nested map isn't perfectly aligned
       await churchRef.update({
         "status": displayStatus,
         "sms.status": displayStatus,
@@ -272,10 +293,14 @@ exports.updateChurchStatus = onCall(
         "statusLastChangedBy": adminEmail
       });
 
+      console.log(`STATUS_UPDATE_SUCCESS: ${churchId} is now ${displayStatus}`);
       return { success: true };
     } catch (error) {
-      console.error("STATUS_CHANGE_ERROR:", error);
-      throw new HttpsError("internal", "Failed to update organization status: " + error.message);
+      // Re-throw HttpsErrors directly so they reach the frontend with proper codes
+      if (error instanceof HttpsError) throw error;
+
+      console.error("STATUS_CHANGE_FAILURE:", error);
+      throw new HttpsError("internal", `Database error during status update: ${error.message}`);
     }
   }
 );
@@ -286,22 +311,31 @@ exports.updateChurchStatus = onCall(
 exports.updateOrganization = onCall(
   { region: "us-central1" }, 
   async (request) => {
-    verifySuperAdmin(request);
+    const adminEmail = verifySuperAdmin(request);
     if (!request.data) throw new HttpsError("invalid-argument", "Missing payload");
     const { churchId, name, slug, plan } = request.data;
+    
     if (!churchId) throw new HttpsError("invalid-argument", "Missing organization ID");
     
     try {
       const db = admin.firestore();
-      await db.collection("churches").doc(churchId).update({
+      const churchRef = db.collection("churches").doc(churchId);
+      const churchDoc = await churchRef.get();
+
+      if (!churchDoc.exists) throw new HttpsError("not-found", "Organization record not found.");
+
+      await churchRef.update({
         "name": name || "Unnamed Ministry",
         "slug": slug || "no-slug",
         "plan": plan || "Starter",
         "subscription.plan": plan || "Starter",
-        "updatedAt": admin.firestore.FieldValue.serverTimestamp()
+        "updatedAt": admin.firestore.FieldValue.serverTimestamp(),
+        "updatedBy": adminEmail
       });
+
       return { success: true };
     } catch (error) { 
+      if (error instanceof HttpsError) throw error;
       console.error("ORG_UPDATE_ERROR:", error);
       throw new HttpsError("internal", error.message); 
     }
