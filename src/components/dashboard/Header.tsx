@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
@@ -36,6 +35,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { SidebarContent } from "./Sidebar";
+import { cn } from "@/lib/utils";
 
 const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
 
