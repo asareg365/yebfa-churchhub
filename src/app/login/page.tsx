@@ -144,16 +144,16 @@ function LoginContent() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-  
+
     try {
       await signInWithEmailAndPassword(
         auth,
         email.toLowerCase().trim(),
         password
       );
-  
-      // Preserve the tenant selected on the login URL.
-      // This is especially important for Super Admin users who can access
+
+      // Preserve the church selected on the login URL.
+      // This is required for Super Admin users who can access
       // multiple churches.
       if (tenantSlug) {
         localStorage.setItem(
@@ -161,13 +161,12 @@ function LoginContent() {
           tenantSlug.toLowerCase().trim()
         );
       } else {
-        // If no tenant was explicitly selected, remove any stale tenant
-        // selection so we don't accidentally open another church.
+        // Do not accidentally reuse an old church selection.
         localStorage.removeItem("global_admin_selected_tenant");
       }
-  
+
       router.push("/dashboard");
-  
+
       toast({
         title: "Access Granted",
         description: activeChurch
