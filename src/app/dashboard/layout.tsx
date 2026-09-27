@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -45,9 +44,12 @@ export default function DashboardLayout({
 
   useEffect(() => {
     setMounted(true);
-    // Global admins can persist their selected tenant
-    const saved = localStorage.getItem('global_admin_selected_tenant');
-    if (saved) setSelectedTenantSlug(saved);
+
+    const saved = localStorage.getItem("global_admin_selected_tenant");
+
+    if (saved) {
+      setSelectedTenantSlug(saved.toLowerCase().trim());
+    }
   }, []);
 
   const isSuperAdmin = useMemo(() => {
