@@ -144,15 +144,41 @@ function LoginContent() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+  
     try {
-      await signInWithEmailAndPassword(auth, email.toLowerCase().trim(), password);
+      await signInWithEmailAndPassword(
+        auth,
+        email.toLowerCase().trim(),
+        password
+      );
+  
+      // Preserve the tenant selected on the login URL.
+      // This is especially important for Super Admin users who can access
+      // multiple churches.
+      if (tenantSlug) {
+        localStorage.setItem(
+          "global_admin_selected_tenant",
+          tenantSlug.toLowerCase().trim()
+        );
+      } else {
+        // If no tenant was explicitly selected, remove any stale tenant
+        // selection so we don't accidentally open another church.
+        localStorage.removeItem("global_admin_selected_tenant");
+      }
+  
       router.push("/dashboard");
-      toast({ title: "Access Granted", description: activeChurch ? `Logged into ${activeChurch.name}` : "Welcome back!" });
+  
+      toast({
+        title: "Access Granted",
+        description: activeChurch
+          ? `Logged into ${activeChurch.name}`
+          : "Welcome back!",
+      });
     } catch (error: any) {
-      toast({ 
-        title: "Login failed", 
-        description: error.message, 
-        variant: "destructive" 
+      toast({
+        title: "Login failed",
+        description: error.message,
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -168,12 +194,30 @@ function LoginContent() {
     
     setIsLoading(true);
     try {
-      await createUserWithEmailAndPassword(auth, email.toLowerCase().trim(), password);
-      const targetChurch = allChurches.find(c => c.slug === joiningChurchSlug);
-      toast({ 
-        title: "Account Created", 
-        description: `You can now access ${targetChurch?.name || 'your ministry'} if previously authorized.` 
+      await createUserWithEmailAndPassword(
+        auth,
+        email.toLowerCase().trim(),
+        password
+      );
+
+      const targetChurch = allChurches.find(
+        c => c.slug === joiningChurchSlug
+      );
+
+      if (joiningChurchSlug) {
+        localStorage.setItem(
+          "global_admin_selected_tenant",
+          joiningChurchSlug.toLowerCase().trim()
+        );
+      }
+
+      toast({
+        title: "Account Created",
+        description: `You can now access ${
+          targetChurch?.name || "your ministry"
+        } if previously authorized`,
       });
+
       router.push("/dashboard");
     } catch (error: any) {
       toast({ title: "Signup Failed", description: error.message, variant: "destructive" });
@@ -261,6 +305,7 @@ function LoginContent() {
       const churchDocRef = doc(db, "churches", finalSlug);
       setDoc(churchDocRef, churchData)
         .then(() => {
+          localStorage.setItem("global_admin_selected_tenant", finalSlug.toLowerCase().trim());
           toast({ 
             title: "Ministry Onboarded!", 
             description: `Tenant ID: ${finalSlug}. Account created successfully.` 
