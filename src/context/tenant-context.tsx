@@ -54,7 +54,9 @@ export function TenantProvider({
       "global_admin_selected_tenant"
     );
 
-    setSelectedTenantSlug(saved);
+    if (saved) {
+      setSelectedTenantSlug(saved.toLowerCase().trim());
+    }
   }, []);
 
   const isSuperAdmin = useMemo(() => {
@@ -75,10 +77,14 @@ export function TenantProvider({
     /*
      * SUPER ADMIN
      *
-     * Always use the tenant selected in the
-     * System Switcher.
+     * Strictly use the tenant selected in the System Switcher.
+     * Never fall back to adminEmails list for Super Admins.
      */
-    if (isSuperAdmin && selectedTenantSlug) {
+    if (isSuperAdmin) {
+      if (!selectedTenantSlug) {
+        return null;
+      }
+
       return query(
         collection(db, "churches"),
         where(
