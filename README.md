@@ -17,11 +17,11 @@
 ### 🤖 AI & Automation
 - **AI Pastoral Insights**: Deep-learning analysis of attendance and financial records to suggest personalized growth and engagement strategies.
 - **Communication Assistant**: AI-powered drafting for bulk SMS and announcements tailored to specific target audiences.
-- **Background Schedulers**: 
-    - Automated Birthday greetings (6:00 AM daily).
-    - Event reminders (24 hours before).
-    - Visitor follow-up sequences (24 hours post-visit).
-    - Intelligent SMS retry logic for failed dispatches.
+- **Background Schedulers**:
+  - Automated Birthday greetings (6:00 AM daily).
+  - Event reminders (24 hours before).
+  - Visitor follow-up sequences (24 hours post-visit).
+  - Intelligent SMS retry logic for failed dispatches.
 
 ### 💰 Financial & Resource Management
 - **Audit Trails**: Real-time logging of tithes, offerings, and expenditures.
@@ -34,6 +34,7 @@
 - **Export Capabilities**: Bulk import/export from Excel and Google Sheets for seamless data portability.
 
 ## 🛠 Tech Stack
+
 - **Framework**: Next.js 15 (App Router)
 - **UI/UX**: Tailwind CSS, ShadCN UI, Lucide Icons
 - **Backend**: Firebase (Auth, Firestore, Cloud Functions v2)
@@ -41,4 +42,5 @@
 - **Language**: TypeScript
 
 ---
+
 Built by **Yebfa Consult** – Empowering the modern church through intelligence.
