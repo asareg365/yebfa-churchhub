@@ -41,6 +41,7 @@ import { useToast } from "@/hooks/use-toast";
 import { FirestorePermissionError } from "@/firebase/errors";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { cn } from "@/lib/utils";
+import { useTenant } from "@/context/tenant-context";
 
 const TIMEZONES = [
   "Africa/Accra",
@@ -67,6 +68,7 @@ export default function SettingsPage() {
   const { user } = useUser();
   const auth = useAuth();
   const db = useFirestore();
+  const { currentChurch, loading: churchLoading } = useTenant();
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const isForced = searchParams.get("force") === "true";
@@ -75,14 +77,6 @@ export default function SettingsPage() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [activeTab, setActiveTab] = useState(isForced ? "security" : "general");
   const [newAdminEmail, setNewAdminEmail] = useState("");
-
-  const churchQuery = useMemo(() => {
-    if (!user?.email || !db) return null;
-    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
-  }, [db, user?.email]);
-
-  const { data: churches, loading: churchLoading } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
 
   const [settings, setSettings] = useState({
     name: "",

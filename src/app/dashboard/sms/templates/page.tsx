@@ -30,6 +30,7 @@ import { collection, query, where, limit, deleteDoc, doc, addDoc, serverTimestam
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
+import { useTenant } from "@/context/tenant-context";
 
 const DEFAULT_TEMPLATES = [
   { name: "Birthday Wishes", content: "Happy Birthday {memberName}! God bless your new age. From {churchName}.", category: "Occasion" },
@@ -40,6 +41,7 @@ const DEFAULT_TEMPLATES = [
 export default function SMSTemplatesPage() {
   const db = useFirestore();
   const { user } = useUser();
+  const { currentChurch, loading: churchLoading } = useTenant();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -47,16 +49,8 @@ export default function SMSTemplatesPage() {
   const [editingTemplate, setEditingTemplate] = useState<any>(null);
   const [formData, setFormData] = useState({ name: '', content: '', category: 'General' });
 
-  const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
-    return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
-  }, [db, user?.email]);
-  
-  const { data: churches } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
-
   const templatesRef = useMemo(() => {
-    if (!currentChurch?.id) return null;
+    if (!currentChurch?.id || !db) return null;
     return collection(db, 'churches', currentChurch.id, 'smsTemplates');
   }, [db, currentChurch?.id]);
 
@@ -113,6 +107,8 @@ export default function SMSTemplatesPage() {
       toast({ title: 'Default template added' });
     } catch (e) {}
   };
+
+  if (churchLoading) return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">

@@ -45,10 +45,12 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { sendAndLogSMS } from "@/services/sms-service";
+import { useTenant } from "@/context/tenant-context";
 
 export default function VisitorsPage() {
   const db = useFirestore();
   const { user } = useUser();
+  const { currentChurch, loading: churchLoading } = useTenant();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -59,16 +61,8 @@ export default function VisitorsPage() {
   const [manualMessage, setManualMessage] = useState("");
   const [isSendingSms, setIsSendingSms] = useState(false);
 
-  const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
-    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
-  }, [db, user?.email]);
-  
-  const { data: churches } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
-
   const visitorsRef = useMemo(() => {
-    if (!currentChurch?.id) return null;
+    if (!currentChurch?.id || !db) return null;
     return collection(db, "churches", currentChurch.id, "visitors");
   }, [db, currentChurch?.id]);
 
@@ -164,6 +158,8 @@ export default function VisitorsPage() {
     if (!visitors) return [];
     return visitors.filter(v => v.name?.toLowerCase().includes(searchTerm.toLowerCase()) || v.phone?.includes(searchTerm));
   }, [visitors, searchTerm]);
+
+  if (churchLoading) return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">

@@ -46,6 +46,7 @@ import { collection, query, orderBy, limit, where } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { useSearch } from '@/context/search-context';
+import { useTenant } from "@/context/tenant-context";
 import { sendAndLogSMS } from '@/services/sms-service';
 import { useToast } from '@/hooks/use-toast';
 
@@ -59,6 +60,7 @@ const getInitials = (name: string) => {
 export default function DashboardPage() {
   const db = useFirestore();
   const { user } = useUser();
+  const { currentChurch, loading: churchLoading } = useTenant();
   const { searchTerm } = useSearch();
   const { toast } = useToast();
 
@@ -70,19 +72,6 @@ export default function DashboardPage() {
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  const churchQuery = useMemo(() => {
-    if (!user?.email || !db) return null;
-    const normalizedEmail = user.email.toLowerCase().trim();
-    return query(
-      collection(db, 'churches'),
-      where('adminEmails', 'array-contains', normalizedEmail),
-      limit(1)
-    );
-  }, [db, user?.email]);
-
-  const { data: churches } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
 
   const membersRef = useMemo(() => {
     if (!currentChurch?.id || !db) return null;
@@ -206,7 +195,7 @@ export default function DashboardPage() {
     }
   };
 
-  if (!mounted) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
+  if (!mounted || churchLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">

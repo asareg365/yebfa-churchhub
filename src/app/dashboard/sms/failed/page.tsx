@@ -22,23 +22,16 @@ import { cn } from '@/lib/utils';
 import { sendAndLogSMS, SMSLog } from '@/services/sms-service';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { useTenant } from "@/context/tenant-context";
 
 export default function FailedMessagesPage() {
   const db = useFirestore();
   const { user } = useUser();
+  const { currentChurch, loading: churchLoading } = useTenant();
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [retryingId, setRetryingId] = useState<string | null>(null);
-  const [isRetryingAll, setIsRetryingAll] = useState(false);
-
-  const churchQuery = useMemo(() => {
-    if (!user?.email || !db) return null;
-    return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
-  }, [db, user?.email]);
-  
-  const { data: churches } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
 
   const logsRef = useMemo(() => {
     if (!currentChurch?.id || !db) return null;
@@ -90,14 +83,16 @@ export default function FailedMessagesPage() {
           error: outcome.error,
           updatedAt: serverTimestamp() 
         });
-        toast({ title: 'Retry failed', description: outcome.error, variant: 'destructive' });
+        toast({ title: 'Retry failed', description: outcome.error, variant: "destructive" });
       }
     } catch (error: any) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error', description: error.message, variant: "destructive" });
     } finally {
       setRetryingId(null);
     }
   };
+
+  if (churchLoading) return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
     <div className="space-y-6">

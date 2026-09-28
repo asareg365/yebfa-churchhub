@@ -22,6 +22,7 @@ import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, query, where, limit, orderBy } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useTenant } from "@/context/tenant-context";
 
 // Sub-components
 import PlansPage from './plans/page';
@@ -31,21 +32,14 @@ import BillingUsageReportsPage from './reports/page';
 export default function BillingCenterHub() {
   const db = useFirestore();
   const { user } = useUser();
+  const { currentChurch, loading: churchLoading } = useTenant();
   const router = useRouter();
   const searchParams = useSearchParams();
   
   const [activeTab, setActiveTab] = useState('overview');
 
-  const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
-    return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
-  }, [db, user?.email]);
-  
-  const { data: churches, loading: churchLoading } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
-
   const transactionsRef = useMemo(() => {
-    if (!currentChurch?.id) return null;
+    if (!currentChurch?.id || !db) return null;
     return collection(db, 'churches', currentChurch.id, 'transactions');
   }, [db, currentChurch?.id]);
 
@@ -68,7 +62,7 @@ export default function BillingCenterHub() {
   const usagePercent = Math.min(100, ((sub.smsUsed) / totalAllocation) * 100);
 
   if (churchLoading) {
-    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
+    return <div className="min-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
   }
 
   return (

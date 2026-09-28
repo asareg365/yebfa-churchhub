@@ -34,6 +34,7 @@ import { sendAndLogSMS, processBirthdaysToday } from '@/services/sms-service';
 import { startOfDay, format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { useTenant } from "@/context/tenant-context";
 
 import SMSLogsPage from './logs/page';
 import FailedMessagesPage from './failed/page';
@@ -42,6 +43,7 @@ import SMSTemplatesPage from './templates/page';
 export default function SMSCenterHub() {
   const db = useFirestore();
   const { user } = useUser();
+  const { currentChurch, loading: churchLoading } = useTenant();
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -53,15 +55,6 @@ export default function SMSCenterHub() {
   const [isProcessingBirthdays, setIsProcessingBirthdays] = useState(false);
   const [draft, setDraft] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
-
-  // Consolidated Parent Church Query
-  const churchQuery = useMemo(() => {
-    if (!user?.email || !db) return null;
-    return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
-  }, [db, user?.email]);
-  
-  const { data: churches, loading: churchLoading } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
 
   // Consolidated Campaign & Log References
   const smsRef = useMemo(() => currentChurch?.id ? collection(db, 'churches', currentChurch.id, 'smsLogs') : null, [db, currentChurch?.id]);
@@ -319,8 +312,8 @@ export default function SMSCenterHub() {
         </TabsContent>
 
         <TabsContent value="logs"><SMSLogsPage currentChurch={currentChurch} /></TabsContent>
-        <TabsContent value="failed"><FailedMessagesPage currentChurch={currentChurch} /></TabsContent>
-        <TabsContent value="templates"><SMSTemplatesPage currentChurch={currentChurch} /></TabsContent>
+        <TabsContent value="failed"><FailedMessagesPage /></TabsContent>
+        <TabsContent value="templates"><SMSTemplatesPage /></TabsContent>
       </Tabs>
     </div>
   );

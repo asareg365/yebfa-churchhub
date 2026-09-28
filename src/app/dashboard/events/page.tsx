@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Calendar as CalendarIcon, MapPin, Users, Plus, Loader2, MessageSquare, Clock, ShieldCheck, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,23 +20,17 @@ import { useCollection, useFirestore, useUser } from "@/firebase";
 import { collection, addDoc, serverTimestamp, query, where, limit, updateDoc, doc, deleteDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useTenant } from "@/context/tenant-context";
 
 export default function EventsPage() {
   const db = useFirestore();
   const { user } = useUser();
+  const { currentChurch, loading: churchLoading } = useTenant();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
-  const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
-    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
-  }, [db, user?.email]);
-  
-  const { data: churches } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
-
   const eventsRef = useMemo(() => {
-    if (!currentChurch?.id) return null;
+    if (!currentChurch?.id || !db) return null;
     return collection(db, "churches", currentChurch.id, "events");
   }, [db, currentChurch?.id]);
 
@@ -85,6 +78,8 @@ export default function EventsPage() {
       toast({ title: "Event removed" });
     } catch (e) {}
   };
+
+  if (churchLoading) return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">

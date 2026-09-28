@@ -10,21 +10,15 @@ import { collection, query, where, limit, orderBy } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { useTenant } from "@/context/tenant-context";
 
 export default function BillingTransactionsPage() {
   const db = useFirestore();
   const { user } = useUser();
-
-  const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
-    return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
-  }, [db, user?.email]);
-  
-  const { data: churches, loading: churchLoading } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
+  const { currentChurch, loading: churchLoading } = useTenant();
 
   const transactionsRef = useMemo(() => {
-    if (!currentChurch?.id) return null;
+    if (!currentChurch?.id || !db) return null;
     return collection(db, 'churches', currentChurch.id, 'transactions');
   }, [db, currentChurch?.id]);
 

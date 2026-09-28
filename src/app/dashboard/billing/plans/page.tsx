@@ -17,18 +17,12 @@ import { Badge } from '@/components/ui/badge';
 import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, query, where, limit } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
+import { useTenant } from "@/context/tenant-context";
 
 export default function PlansPage() {
   const db = useFirestore();
   const { user } = useUser();
-
-  const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
-    return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
-  }, [db, user?.email]);
-  
-  const { data: churches } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
+  const { currentChurch } = useTenant();
 
   const currentPlan = currentChurch?.plan || 'Starter';
 

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
@@ -20,26 +19,20 @@ import { collection, query, where, limit, orderBy } from 'firebase/firestore';
 import { ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { format, subDays, startOfMonth } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
+import { useTenant } from "@/context/tenant-context";
 
 export default function SMSAnalyticsPage() {
   const db = useFirestore();
   const { user } = useUser();
+  const { currentChurch, loading: churchLoading } = useTenant();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const churchQuery = useMemo(() => {
-    if (!user?.email) return null;
-    return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
-  }, [db, user?.email]);
-  
-  const { data: churches, loading: churchLoading } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
-
   const logsRef = useMemo(() => {
-    if (!currentChurch?.id) return null;
+    if (!currentChurch?.id || !db) return null;
     return collection(db, 'churches', currentChurch.id, 'smsLogs');
   }, [db, currentChurch?.id]);
 

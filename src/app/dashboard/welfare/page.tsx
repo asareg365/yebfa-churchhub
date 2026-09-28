@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -71,6 +70,7 @@ import { useCollection, useFirestore, useUser } from "@/firebase";
 import { collection, addDoc, serverTimestamp, doc, deleteDoc, query, where, limit, writeBatch, updateDoc, increment, orderBy } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { useTenant } from "@/context/tenant-context";
 
 const getInitials = (name: string) => {
   if (!name) return "?";
@@ -80,6 +80,11 @@ const getInitials = (name: string) => {
 };
 
 export default function WelfarePage() {
+  const db = useFirestore();
+  const { user } = useUser();
+  const { currentChurch, loading: churchLoading } = useTenant();
+  const { toast } = useToast();
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusTab, setStatusTab] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -106,21 +111,9 @@ export default function WelfarePage() {
 
   const addCaptureInputRef = useRef<HTMLInputElement>(null);
 
-  const db = useFirestore();
-  const { user } = useUser();
-  const { toast } = useToast();
-
   useEffect(() => {
     setMounted(true);
   }, []);
-  
-  const churchQuery = useMemo(() => {
-    if (!user?.email || !db) return null;
-    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
-  }, [db, user?.email]);
-  
-  const { data: churches } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
   
   const welfareRef = useMemo(() => currentChurch?.id ? collection(db, "churches", currentChurch.id, "welfare") : null, [db, currentChurch?.id]);
   const { data: welfareMembers, loading } = useCollection(welfareRef);
@@ -334,7 +327,7 @@ export default function WelfarePage() {
     });
   }, [welfareMembers, searchTerm, statusTab]);
 
-  if (!mounted) return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  if (!mounted || churchLoading) return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
@@ -429,7 +422,7 @@ export default function WelfarePage() {
         </Card>
       </div>
 
-      <Tabs value={statusTab} onValueChange={setStatusTab} className="space-y-6">
+      <Tabs value={statusTab} onValueChange={statusTab} className="space-y-6">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="w-full overflow-x-auto hide-scrollbar">
             <TabsList className="glass border-white/10 p-1 rounded-2xl w-fit inline-flex">

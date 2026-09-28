@@ -39,10 +39,12 @@ import { collection, addDoc, serverTimestamp, query, orderBy, doc, updateDoc, de
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { useTenant } from "@/context/tenant-context";
 
 export default function FinancesPage() {
   const db = useFirestore();
   const { user } = useUser();
+  const { currentChurch, loading: churchLoading } = useTenant();
   const { toast } = useToast();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -53,14 +55,6 @@ export default function FinancesPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   
-  const churchQuery = useMemo(() => {
-    if (!user?.email || !db) return null;
-    return query(collection(db, "churches"), where("adminEmails", "array-contains", user.email.toLowerCase().trim()), limit(1));
-  }, [db, user?.email]);
-  
-  const { data: churches } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
-
   const financesRef = useMemo(() => {
     if (!currentChurch?.id || !db) return null;
     return collection(db, "churches", currentChurch.id, "finances");
@@ -180,6 +174,8 @@ export default function FinancesPage() {
   };
 
   const totalBalance = (finances || []).reduce((acc, curr) => curr.type === 'Expenditure' ? acc - curr.amount : acc + curr.amount, 0);
+
+  if (churchLoading) return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">

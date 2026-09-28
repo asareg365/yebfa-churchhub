@@ -20,23 +20,17 @@ import { useCollection, useFirestore, useUser } from '@/firebase';
 import { collection, query, where, limit, orderBy } from 'firebase/firestore';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar } from 'recharts';
 import { format, subMonths } from 'date-fns';
+import { useTenant } from "@/context/tenant-context";
 
 export default function AnalyticsPage() {
   const db = useFirestore();
   const { user } = useUser();
+  const { currentChurch, loading: churchLoading } = useTenant();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  const churchQuery = useMemo(() => {
-    if (!user?.email || !db) return null;
-    return query(collection(db, 'churches'), where('adminEmails', 'array-contains', user.email.toLowerCase().trim()), limit(1));
-  }, [db, user?.email]);
-  
-  const { data: churches } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
 
   const membersRef = useMemo(() => (currentChurch?.id && db) ? collection(db, 'churches', currentChurch.id, 'members') : null, [db, currentChurch?.id]);
   const attendanceRef = useMemo(() => (currentChurch?.id && db) ? collection(db, 'churches', currentChurch.id, 'attendance') : null, [db, currentChurch?.id]);
@@ -65,7 +59,7 @@ export default function AnalyticsPage() {
     return Math.round((sent / logs.length) * 100);
   }, [logs]);
 
-  if (!mounted) return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  if (!mounted || churchLoading) return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
