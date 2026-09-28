@@ -6,7 +6,7 @@ import { ShieldCheck, Search, Loader2, LogOut, Users, Archive, Pencil, Save } fr
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -38,8 +38,12 @@ export default function SystemAdminPortal() {
   // Edit State
   const [editingOrg, setEditingOrg] = useState<Church | null>(null);
 
-  // Real-time listener for churches
-  const churchesQuery = query(collection(db, 'churches'));
+  // SSR-Safe Query Definition
+  const churchesQuery = useMemo(() => {
+    if (!db) return null;
+    return query(collection(db, 'churches'));
+  }, [db]);
+
   const { data: rawChurches, loading: dataLoading } = useCollection<Church>(churchesQuery as any);
 
   useEffect(() => {
@@ -62,7 +66,6 @@ export default function SystemAdminPortal() {
     (c.name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.slug?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  // Aggregate Stats
   const platformStats: PlatformStats = {
     totalTenants: rawChurches.filter(c => c.deletionStatus !== 'DELETED').length,
     activeTenants: rawChurches.filter(c => c.sms?.subscriptionStatus === 'active' && c.deletionStatus !== 'DELETED').length,
@@ -87,34 +90,18 @@ export default function SystemAdminPortal() {
     }
     setIsProcessing(true);
     try {
-      // Refresh identity token
-      await user?.getIdToken(true);
-
-      console.log("Firebase SDK:", (functions as any).app.options);
-      console.log("Functions region:", (functions as any).region);
-      console.log("Current user:", auth.currentUser?.email);
-
-      const token = await auth.currentUser?.getIdToken();
-
-      console.log("Token exists:", !!token);
-      console.log("Token length:", token?.length);
+      // Diagnostic Token Logging
+      const token = await auth.currentUser?.getIdToken(true);
+      console.log("Token Refreshed. Length:", token?.length || 0);
 
       const updateFn = httpsCallable(functions, 'updateChurchStatus');
       await updateFn({ churchId, status });
       toast({ title: "Status Updated", description: `Organization is now ${status}.` });
     } catch (e: any) {
-      console.error("FULL ERROR:", e);
-
-      alert(JSON.stringify({
-        code: e.code,
-        message: e.message,
-        details: e.details,
-        stack: e.stack
-      }, null, 2));
-
+      console.error("ADMIN_ACTION_FAILURE:", e);
       toast({ 
         title: "Operation Failed", 
-        description: e.message || "An unexpected error occurred.", 
+        description: e.message || "An unexpected error occurred during status update.", 
         variant: "destructive" 
       });
     } finally {
@@ -127,8 +114,6 @@ export default function SystemAdminPortal() {
     if (!functions || !editingOrg) return;
     setIsProcessing(true);
     try {
-      await user?.getIdToken(true);
-
       const updateFn = httpsCallable(functions, 'updateOrganization');
       await updateFn({
         churchId: editingOrg.id,
@@ -140,7 +125,7 @@ export default function SystemAdminPortal() {
       toast({ title: "Organization details updated." });
       setEditingOrg(null);
     } catch (e: any) {
-      console.error("Cloud Function Error:", e);
+      console.error("ORG_UPDATE_FAILURE:", e);
       toast({ title: "Update Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
@@ -151,12 +136,11 @@ export default function SystemAdminPortal() {
     if (!functions) return;
     setIsProcessing(true);
     try {
-      await user?.getIdToken(true);
       const restoreFn = httpsCallable(functions, 'restoreMinistry');
       await restoreFn({ churchId });
       toast({ title: "Ministry Restored" });
     } catch (e: any) {
-      console.error("Cloud Function Error:", e);
+      console.error("RESTORE_FAILURE:", e);
       toast({ title: "Restore Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);

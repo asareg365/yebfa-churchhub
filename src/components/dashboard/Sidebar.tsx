@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -26,11 +25,11 @@ import {
   HandHelping
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAuth, useUser, useCollection, useFirestore } from "@/firebase";
+import { useAuth, useUser, useFirestore } from "@/firebase";
 import { signOut } from "firebase/auth";
-import { collection, query, where, limit } from "firebase/firestore";
-import { useMemo, useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useTenant } from "@/context/tenant-context";
 
 const ALL_MENU_ITEMS = [
   { id: "dashboard", icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
@@ -77,8 +76,10 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
   const pathname = usePathname();
   const router = useRouter();
   const auth = useAuth();
-  const db = useFirestore();
-  const { user } = useUser();
+  
+  // Use centralized tenant context
+  const { currentChurch, loading: churchLoading, isSuperAdmin } = useTenant();
+
   const [smsOpen, setSmsOpen] = useState(pathname.startsWith('/dashboard/sms'));
   const [billingOpen, setBillingOpen] = useState(pathname.startsWith('/dashboard/billing'));
   const [mounted, setMounted] = useState(false);
@@ -87,43 +88,21 @@ export function SidebarContent({ onNavItemClick }: { onNavItemClick?: () => void
     setMounted(true);
   }, []);
 
-  const isSuperAdmin = useMemo(() => {
-    const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
-    return user?.email && SUPER_ADMINS.includes(user.email.toLowerCase().trim());
-  }, [user?.email]);
-
-  const selectedTenantSlug = typeof window !== 'undefined' ? localStorage.getItem('global_admin_selected_tenant') : null;
-
-  const churchQuery = useMemo(() => {
-    if (!user?.email || !db) return null;
-    
-    if (isSuperAdmin && selectedTenantSlug) {
-      return query(
-        collection(db, "churches"),
-        where("slug", "==", selectedTenantSlug),
-        limit(1)
-      );
-    }
-
-    return query(
-      collection(db, "churches"),
-      where("adminEmails", "array-contains", user.email.toLowerCase().trim()),
-      limit(1)
-    );
-  }, [db, user?.email, isSuperAdmin, selectedTenantSlug]);
-
-  const { data: churches, loading: churchLoading } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
-
   const filteredMenuItems = useMemo(() => {
     if (!mounted) return ALL_MENU_ITEMS.filter(item => ["dashboard", "settings"].includes(item.id));
     
+    // Super admins always see everything
     if (isSuperAdmin) return ALL_MENU_ITEMS;
+
+    // Show limited items while loading or if no church found for normal user
     if (churchLoading && !currentChurch) {
         return ALL_MENU_ITEMS.filter(item => ["dashboard", "settings"].includes(item.id));
     }
 
+    // Standard items always visible to normal church admins
     const baseModules = ["dashboard", "settings", "billing-group", "visitors", "welfare"];
+    
+    // Items controlled by plan / settings
     const enabledModules = currentChurch?.enabledModules || [];
     
     const activeModules = [...enabledModules, ...baseModules];

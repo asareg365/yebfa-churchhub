@@ -36,8 +36,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { SidebarContent } from "./Sidebar";
 import { cn } from "@/lib/utils";
-
-const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+import { useTenant } from "@/context/tenant-context";
 
 export function Header() {
   const { user } = useUser();
@@ -48,34 +47,10 @@ export function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [allChurches, setAllChurches] = useState<any[]>([]);
 
-  const isSuperAdmin = useMemo(() => {
-    return user?.email && SUPER_ADMINS.includes(user.email.toLowerCase().trim());
-  }, [user?.email]);
+  // Centralized tenant context
+  const { currentChurch, isSuperAdmin } = useTenant();
 
-  const selectedTenantSlug = typeof window !== 'undefined' ? localStorage.getItem('global_admin_selected_tenant') : null;
-
-  const churchQuery = useMemo(() => {
-    if (!user?.email || !db) return null;
-    const normalizedEmail = user.email.toLowerCase().trim();
-
-    if (isSuperAdmin && selectedTenantSlug) {
-      return query(
-        collection(db, "churches"),
-        where("slug", "==", selectedTenantSlug),
-        limit(1)
-      );
-    }
-
-    return query(
-      collection(db, "churches"),
-      where("adminEmails", "array-contains", normalizedEmail),
-      limit(1)
-    );
-  }, [db, user?.email, isSuperAdmin, selectedTenantSlug]);
-
-  const { data: churches, loading: churchLoading } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
-
+  // Fetch all ministries for the super-admin switcher
   useEffect(() => {
     if (isSuperAdmin && db) {
       getDocs(query(collection(db, "churches"), orderBy("name", "asc")))
@@ -245,18 +220,12 @@ export function Header() {
 
         <div className="flex items-center gap-3 pl-4 border-l border-border">
           <div className="text-right hidden lg:block">
-            {churchLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-primary ml-auto" />
-            ) : (
-              <>
-                <p className="text-sm font-semibold truncate max-w-[150px]">
-                  {isSuperAdmin ? "System Administrator" : (currentChurch?.name || "My Ministry")}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {isSuperAdmin ? "Global Access" : `${currentChurch?.plan || "Starter"} Plan`}
-                </p>
-              </>
-            )}
+            <p className="text-sm font-semibold truncate max-w-[150px]">
+              {isSuperAdmin ? "System Administrator" : (currentChurch?.name || "My Ministry")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {isSuperAdmin ? "Global Access" : `${currentChurch?.plan || "Starter"} Plan`}
+            </p>
           </div>
           <Avatar className="h-9 w-9 lg:h-10 lg:w-10 border-2 border-primary/20 p-0.5">
             <AvatarImage src={currentChurch?.logo} />

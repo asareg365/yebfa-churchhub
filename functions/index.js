@@ -388,7 +388,7 @@ exports.mnotifyDeliveryWebhook = onRequest(
   { region: "us-central1", cors: true },
   async (req, res) => {
     const { message_id, status } = req.body;
-    if (!!message_id) return res.status(400).send("Missing message_id");
+    if (!message_id) return res.status(400).send("Missing message_id");
     
     const db = admin.firestore();
     try {
