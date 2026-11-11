@@ -15,6 +15,70 @@
           "type": "array", 
           "items": { "type": "string" },
           "description": "List of church societies or groups the member belongs to."
+        },
+        "extendedProfile": {
+          "$ref": "#/backend/entities/ExtendedProfile",
+          "description": "Optional extended data for churches with the feature enabled."
+        },
+        "profileStatus": {
+          "type": "string",
+          "enum": ["Complete", "Incomplete", "Not Started"],
+          "description": "Indicates the status of the extended profile data completion."
+        }
+      }
+    },
+    "ExtendedProfile": {
+      "title": "Extended Profile",
+      "type": "object",
+      "properties": {
+        "firstName": { "type": "string" },
+        "otherNames": { "type": "string" },
+        "lastName": { "type": "string" },
+        "placeOfBirth": { "type": "string" },
+        "maritalStatus": { 
+          "type": "string",
+          "enum": ["Single", "Married", "Divorced", "Widowed", "Separated", "Other", "Prefer not to say"]
+        },
+        "educationLevel": {
+          "type": "string",
+          "enum": ["No formal education", "Primary", "Junior High School", "Senior High School", "Vocational/Technical", "Certificate", "Diploma", "Bachelor's Degree", "Master's Degree", "Doctorate", "Other"]
+        },
+        "baptism": {
+          "type": "object",
+          "properties": {
+            "baptised": { "type": "boolean" },
+            "date": { "type": "string", "format": "date" }
+          }
+        },
+        "confirmation": {
+          "type": "object",
+          "properties": {
+            "confirmed": { "type": "boolean" },
+            "place": { "type": "string" },
+            "date": { "type": "string", "format": "date" }
+          }
+        }
+      }
+    },
+    "Church": {
+      "title": "Church",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "extendedProfile": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "configVersion": { "type": "number" },
+                "requiredFields": { "type": "array", "items": { "type": "string" } },
+                "showInRegistration": { "type": "boolean" }
+              }
+            }
+          }
         }
       }
     },
@@ -59,7 +123,7 @@
   },
   "firestore": {
     "/churches/{churchId}": {
-      "description": "Tenant organization settings and configuration. Now includes integrated SMS credit wallet."
+      "description": "Tenant organization settings and configuration. Now includes integrated SMS credit wallet and extended profile configuration."
     },
     "/churches/{churchId}/welfare/{memberId}": {
       "schema": "WelfareMember",

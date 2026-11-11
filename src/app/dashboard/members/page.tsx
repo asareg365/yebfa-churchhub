@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -18,11 +19,16 @@ import {
   Camera,
   Upload,
   Info,
-  CopyX
+  CopyX,
+  FileBadge,
+  UserCheck,
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/table";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -77,6 +83,13 @@ const STANDARD_SOCIETIES = [
   "Women's Fellowship"
 ];
 
+const MARITAL_STATUS_OPTIONS = ["Single", "Married", "Divorced", "Widowed", "Separated", "Other", "Prefer not to say"];
+const EDUCATION_LEVEL_OPTIONS = [
+  "No formal education", "Primary", "Junior High School", "Senior High School", 
+  "Vocational/Technical", "Certificate", "Diploma", "Bachelor's Degree", 
+  "Master's Degree", "Doctorate", "Other"
+];
+
 const getInitials = (name: string) => {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);
@@ -115,16 +128,27 @@ export default function MembersPage() {
   const { data: members, loading } = useCollection(membersRef);
 
   const isCatholic = currentChurch?.denomination === 'Catholic';
+  const extendedEnabled = currentChurch?.settings?.extendedProfile?.enabled ?? false;
 
-  const [newMember, setNewMember] = useState({
+  const [newMember, setNewMember] = useState<any>({
     name: "",
     department: "Music",
-    status: "Active" as const,
-    gender: "Male" as const,
+    status: "Active",
+    gender: "Male",
     dateOfBirth: "",
     phone: "",
     photo: "",
-    societies: [] as string[]
+    societies: [],
+    extendedProfile: {
+      firstName: "",
+      otherNames: "",
+      lastName: "",
+      placeOfBirth: "",
+      maritalStatus: "Single",
+      educationLevel: "Bachelor's Degree",
+      baptism: { baptised: false, date: "" },
+      confirmation: { confirmed: false, place: "", date: "" }
+    }
   });
 
   const normalizePhone = (phone: string) => phone?.replace(/\D/g, "") || "";
@@ -176,16 +200,17 @@ export default function MembersPage() {
     }
   };
 
-  const handleAddCustomSociety = (isEdit: boolean) => {
-    const val = customSocietyInput.trim();
-    if (!val) return;
-    toggleSociety(val, isEdit);
-    setCustomSocietyInput("");
+  const calculateProfileStatus = (extended: any) => {
+    if (!extendedEnabled) return null;
+    if (!extended || !extended.firstName) return "Not Started";
+    const requiredSet = ['firstName', 'lastName', 'placeOfBirth'];
+    const filled = requiredSet.every(field => !!extended[field]);
+    return filled ? "Complete" : "Incomplete";
   };
 
   const handleAddMember = async () => {
-    if (!newMember.name || !newMember.dateOfBirth || !membersRef) {
-      toast({ title: "Incomplete data", description: "Name and Date of Birth are required.", variant: "destructive" });
+    if (!newMember.name && !newMember.extendedProfile.firstName) {
+      toast({ title: "Incomplete data", description: "Name is required.", variant: "destructive" });
       return;
     }
 
@@ -199,16 +224,28 @@ export default function MembersPage() {
       return;
     }
 
+    // Auto-generate display name if structured fields are used
+    let finalName = newMember.name;
+    if (extendedEnabled && newMember.extendedProfile.firstName) {
+      finalName = `${newMember.extendedProfile.firstName} ${newMember.extendedProfile.otherNames || ''} ${newMember.extendedProfile.lastName}`.replace(/\s+/g, ' ').trim();
+    }
+
     const memberData = {
       ...newMember,
+      name: finalName,
+      profileStatus: calculateProfileStatus(newMember.extendedProfile),
       birthdayKey: calculateBirthdayKey(newMember.dateOfBirth),
       joined: new Date().toISOString().split('T')[0],
       createdAt: serverTimestamp()
     };
+
     try {
-      await addDoc(membersRef, memberData);
+      await addDoc(membersRef!, memberData);
       setIsAddDialogOpen(false);
-      setNewMember({ name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "", phone: "", photo: "", societies: [] });
+      setNewMember({ 
+        name: "", department: "Music", status: "Active", gender: "Male", dateOfBirth: "", phone: "", photo: "", societies: [],
+        extendedProfile: { firstName: "", otherNames: "", lastName: "", placeOfBirth: "", maritalStatus: "Single", educationLevel: "Bachelor's Degree", baptism: { baptised: false, date: "" }, confirmation: { confirmed: false, place: "", date: "" } }
+      });
       toast({ title: "Member added successfully" });
     } catch (e) {
       toast({ title: "Save failed", variant: "destructive" });
@@ -217,18 +254,19 @@ export default function MembersPage() {
 
   const handleUpdateMember = async () => {
     if (!editingMember || !membersRef) return;
+    
+    let finalName = editingMember.name;
+    if (extendedEnabled && editingMember.extendedProfile?.firstName) {
+      finalName = `${editingMember.extendedProfile.firstName} ${editingMember.extendedProfile.otherNames || ''} ${editingMember.extendedProfile.lastName}`.replace(/\s+/g, ' ').trim();
+    }
+
     try {
       const docRef = doc(membersRef, editingMember.id);
       await updateDoc(docRef, {
-        name: editingMember.name,
-        phone: editingMember.phone || "",
-        gender: editingMember.gender,
-        department: editingMember.department,
-        status: editingMember.status,
-        dateOfBirth: editingMember.dateOfBirth || "",
-        photo: editingMember.photo || "",
+        ...editingMember,
+        name: finalName,
+        profileStatus: calculateProfileStatus(editingMember.extendedProfile),
         birthdayKey: calculateBirthdayKey(editingMember.dateOfBirth || ""),
-        societies: editingMember.societies || [],
         updatedAt: serverTimestamp()
       });
       setIsEditDialogOpen(false);
@@ -239,92 +277,13 @@ export default function MembersPage() {
     }
   };
 
-  const handleDeleteMember = async () => {
-    if (!memberToDelete || !membersRef) return;
-    try {
-      await deleteDoc(doc(membersRef, memberToDelete.id));
-      setMemberToDelete(null);
-      toast({ title: "Member removed from directory" });
-    } catch (e) {
-      toast({ title: "Deletion failed", variant: "destructive" });
-    }
-  };
-
-  const handleBulkImport = async () => {
-    if (!bulkData.trim() || !membersRef || !db) return;
-    setIsImporting(true);
-
-    try {
-      const lines = bulkData.split(/\r?\n/).filter(l => l.trim().length > 0);
-      const batch = writeBatch(db);
-      let count = 0;
-      let skipped = 0;
-      let duplicates = 0;
-
-      const existingPhones = new Set((members || []).map(m => normalizePhone(m.phone)));
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const parts = line.split(/\t|,/).map(p => p.trim().replace(/^["'](.+)["']$/, '$1'));
-        
-        if (parts.length < 2) {
-          skipped++;
-          continue;
-        }
-
-        const [name, phone, dob, gender, dept] = parts;
-
-        if (i === 0 && name.toLowerCase().includes("name")) continue;
-
-        if (!name) {
-          skipped++;
-          continue;
-        }
-
-        if (phone && existingPhones.has(normalizePhone(phone))) {
-          duplicates++;
-          continue;
-        }
-
-        const memberData = {
-          name,
-          phone: phone || "",
-          dateOfBirth: dob || "",
-          gender: (gender?.toLowerCase().startsWith("f") ? "Female" : "Male") as any,
-          department: dept || "Music",
-          status: "Active",
-          birthdayKey: calculateBirthdayKey(dob || ""),
-          joined: new Date().toISOString().split('T')[0],
-          createdAt: serverTimestamp(),
-          societies: []
-        };
-
-        const newDocRef = doc(membersRef);
-        batch.set(newDocRef, memberData);
-        count++;
-
-        if (count >= 500) break;
-      }
-
-      await batch.commit();
-      toast({ 
-        title: "Import Complete", 
-        description: `${count} members added. ${duplicates > 0 ? duplicates + ' duplicates skipped.' : ''} ${skipped > 0 ? skipped + ' invalid rows skipped.' : ''}` 
-      });
-      setBulkData("");
-      setIsBulkImportOpen(false);
-    } catch (error: any) {
-      toast({ title: "Import Failed", description: error.message, variant: "destructive" });
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
   const filteredMembers = useMemo(() => {
     return (Array.isArray(members) ? members : []).filter(m => {
       const matchesSearch = (m.name?.toLowerCase().includes(searchTerm.toLowerCase()) || m.department?.toLowerCase().includes(searchTerm.toLowerCase()));
-      const matchesStatus = statusTab === "all" || m.status?.toLowerCase() === statusTab.toLowerCase();
-      return matchesSearch && matchesStatus;
+      if (statusTab === "all") return matchesSearch;
+      if (statusTab === "active") return matchesSearch && m.status === 'Active';
+      if (statusTab === "incomplete") return matchesSearch && m.profileStatus !== 'Complete';
+      return matchesSearch;
     });
   }, [members, searchTerm, statusTab]);
 
@@ -338,136 +297,145 @@ export default function MembersPage() {
           <p className="text-muted-foreground">Managing directory for {currentChurch?.name || "your ministry"}.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
-          <Dialog open={isBulkImportOpen} onOpenChange={setIsBulkImportOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="flex-1 md:flex-none glass border-white/10">
-                <FileUp className="mr-2 h-4 w-4" /> Bulk Import
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="glass max-w-xl">
-              <DialogHeader>
-                <DialogTitle>Excel / Spreadsheet Import</DialogTitle>
-                <DialogDescription>Copy rows from Excel or Google Sheets and paste below. (Name, Phone, DOB, Gender, Dept)</DialogDescription>
-              </DialogHeader>
-              <div className="py-4 space-y-4">
-                <Textarea 
-                  placeholder="John Doe	0240000000	1990-05-15	Male	Music" 
-                  className="min-h-[250px] font-mono text-xs bg-muted/20"
-                  value={bulkData}
-                  onChange={e => setBulkData(e.target.value)}
-                />
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsBulkImportOpen(false)}>Cancel</Button>
-                <Button onClick={handleBulkImport} disabled={isImporting || !bulkData.trim()}>
-                  {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Process Rows"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild><Button className="flex-1 md:flex-none bg-primary" disabled={!currentChurch}><Plus className="mr-2 h-4 w-4" /> Add Member</Button></DialogTrigger>
             <DialogContent className="glass max-w-2xl">
-              <DialogHeader><DialogTitle>Add New Member</DialogTitle><DialogDescription>Enter member details or take a quick photo.</DialogDescription></DialogHeader>
-              <div className="space-y-6 py-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-                <div className="flex items-center gap-6">
-                  <Avatar className="h-24 w-24 border-2 border-primary/20 shadow-xl">
-                    <AvatarImage src={newMember.photo} />
-                    <AvatarFallback className="bg-primary/10 text-primary font-bold text-3xl">{getInitials(newMember.name)}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 space-y-3">
-                    <Label className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground"><Camera className="w-3 h-3" /> Member Photo</Label>
-                    <div className="flex gap-2">
-                       <Button type="button" variant="outline" className="flex-1 h-10 gap-2 rounded-xl" onClick={() => addCaptureInputRef.current?.click()}><Camera className="w-4 h-4 text-primary" /> Camera</Button>
-                       <Button type="button" variant="outline" className="flex-1 h-10 gap-2 rounded-xl" onClick={() => addFileInputRef.current?.click()}><Upload className="w-4 h-4 text-accent" /> Gallery</Button>
+              <DialogHeader><DialogTitle>Add New Member</DialogTitle><DialogDescription>Initialize record with core details.</DialogDescription></DialogHeader>
+              <ScrollArea className="max-h-[70vh] pr-4">
+                <div className="space-y-8 py-4">
+                  {/* Photo Section */}
+                  <div className="flex items-center gap-6">
+                    <Avatar className="h-24 w-24 border-2 border-primary/20 shadow-xl">
+                      <AvatarImage src={newMember.photo} />
+                      <AvatarFallback className="bg-primary/10 text-primary font-bold text-3xl">{getInitials(newMember.name || newMember.extendedProfile.firstName)}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 space-y-3">
+                      <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Camera className="w-3 h-3" /> Photo Identity</Label>
+                      <div className="flex gap-2">
+                         <Button type="button" variant="outline" className="flex-1 h-10 gap-2 rounded-xl" onClick={() => addCaptureInputRef.current?.click()}><Camera className="w-4 h-4 text-primary" /> Camera</Button>
+                         <Button type="button" variant="outline" className="flex-1 h-10 gap-2 rounded-xl" onClick={() => addFileInputRef.current?.click()}><Upload className="w-4 h-4 text-accent" /> Gallery</Button>
+                      </div>
+                      <input type="file" ref={addCaptureInputRef} accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileChange(e, false)} />
+                      <input type="file" ref={addFileInputRef} accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, false)} />
                     </div>
-                    <input type="file" ref={addCaptureInputRef} accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileChange(e, false)} />
-                    <input type="file" ref={addFileInputRef} accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, false)} />
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>Full Name</Label><Input value={newMember.name} onChange={(e) => setNewMember({...newMember, name: e.target.value})} placeholder="John Doe" /></div>
-                  <div className="space-y-2"><Label>Gender</Label><Select value={newMember.gender} onValueChange={(v: any) => setNewMember({...newMember, gender: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Male">Male</SelectItem><SelectItem value="Female">Female</SelectItem></SelectContent></Select></div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="flex justify-between items-center">
-                      Phone
-                      {newMember.phone && checkDuplicate(newMember.phone) && (
-                        <span className="text-[10px] text-destructive flex items-center gap-1 font-bold animate-pulse">
-                          <CopyX className="w-3 h-3" /> Duplicate Detected
-                        </span>
-                      )}
-                    </Label>
-                    <Input value={newMember.phone} onChange={(e) => setNewMember({...newMember, phone: e.target.value})} placeholder="0240000000" className={cn(newMember.phone && checkDuplicate(newMember.phone) && "border-destructive/50 bg-destructive/5")} />
-                  </div>
-                  <div className="space-y-2"><Label>Date of Birth</Label><Input type="date" value={newMember.dateOfBirth} onChange={(e) => setNewMember({...newMember, dateOfBirth: e.target.value})} /></div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Department</Label>
-                  <Select value={newMember.department} onValueChange={(v) => setNewMember({...newMember, department: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
 
-                {isCatholic && (
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-primary" />
-                      Societies & Groups
-                    </Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-between bg-muted/20 border-border h-11 text-left font-normal">
-                          <span className="truncate">
-                            {newMember.societies.length > 0 ? `${newMember.societies.length} Selected` : "Select Societies"}
-                          </span>
-                          <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 glass overflow-hidden" align="start">
-                        <ScrollArea className="h-64">
-                          <div className="p-2 space-y-1">
-                            {STANDARD_SOCIETIES.map(society => {
-                              const isSelected = newMember.societies.includes(society);
-                              return (
-                                <button 
-                                  key={society} 
-                                  onClick={() => toggleSociety(society, false)}
-                                  className={cn("w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-colors", isSelected ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted/50")}
-                                >
-                                  <div className={cn("w-4 h-4 border rounded flex items-center justify-center", isSelected ? "bg-primary border-primary" : "border-muted-foreground/30")}>
-                                    {isSelected && <Check className="h-3 w-3 text-white" />}
-                                  </div>
-                                  <span className="text-sm">{society}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </ScrollArea>
-                        <div className="p-3 border-t border-border bg-muted/30 space-y-2">
-                          <Label className="text-[10px] uppercase font-bold text-muted-foreground">Add Other Society</Label>
-                          <div className="flex gap-2">
-                            <Input placeholder="Enter name" value={customSocietyInput} onChange={e => setCustomSocietyInput(e.target.value)} className="h-9 text-sm" />
-                            <Button size="icon" className="h-9 w-9 shrink-0" onClick={() => handleAddCustomSociety(false)}><Plus className="h-4 w-4" /></Button>
+                  {/* Identification Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-primary">
+                      <Layers className="w-4 h-4" />
+                      <span className="text-sm font-bold uppercase tracking-widest">Identification</span>
+                    </div>
+                    {extendedEnabled ? (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-2"><Label>First Name</Label><Input value={newMember.extendedProfile.firstName} onChange={(e) => setNewMember({...newMember, extendedProfile: {...newMember.extendedProfile, firstName: e.target.value}})} /></div>
+                        <div className="space-y-2"><Label>Other Names</Label><Input value={newMember.extendedProfile.otherNames} onChange={(e) => setNewMember({...newMember, extendedProfile: {...newMember.extendedProfile, otherNames: e.target.value}})} /></div>
+                        <div className="space-y-2"><Label>Last Name</Label><Input value={newMember.extendedProfile.lastName} onChange={(e) => setNewMember({...newMember, extendedProfile: {...newMember.extendedProfile, lastName: e.target.value}})} /></div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2"><Label>Full Name</Label><Input value={newMember.name} onChange={(e) => setNewMember({...newMember, name: e.target.value})} placeholder="e.g. John Doe" /></div>
+                    )}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Phone</Label>
+                        <Input value={newMember.phone} onChange={(e) => setNewMember({...newMember, phone: e.target.value})} placeholder="024XXXXXXX" />
+                      </div>
+                      <div className="space-y-2"><Label>Date of Birth</Label><Input type="date" value={newMember.dateOfBirth} onChange={(e) => setNewMember({...newMember, dateOfBirth: e.target.value})} /></div>
+                    </div>
+                  </div>
+
+                  {/* Extended Details (Conditional) */}
+                  {extendedEnabled && (
+                    <>
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 text-accent">
+                          <UserCheck className="w-4 h-4" />
+                          <span className="text-sm font-bold uppercase tracking-widest">Extended Profile</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2"><Label>Place of Birth</Label><Input value={newMember.extendedProfile.placeOfBirth} onChange={(e) => setNewMember({...newMember, extendedProfile: {...newMember.extendedProfile, placeOfBirth: e.target.value}})} /></div>
+                          <div className="space-y-2">
+                            <Label>Marital Status</Label>
+                            <Select value={newMember.extendedProfile.maritalStatus} onValueChange={(v) => setNewMember({...newMember, extendedProfile: {...newMember.extendedProfile, maritalStatus: v}})}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>{MARITAL_STATUS_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                            </Select>
                           </div>
                         </div>
-                      </PopoverContent>
-                    </Popover>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {newMember.societies.map(s => (
-                        <Badge key={s} variant="secondary" className="bg-primary/5 text-primary border-primary/20 flex items-center gap-1">
-                          {s} <Trash2 className="w-3 h-3 cursor-pointer opacity-50 hover:opacity-100" onClick={() => toggleSociety(s, false)} />
-                        </Badge>
-                      ))}
+                        <div className="space-y-2">
+                          <Label>Education Level</Label>
+                          <Select value={newMember.extendedProfile.educationLevel} onValueChange={(v) => setNewMember({...newMember, extendedProfile: {...newMember.extendedProfile, educationLevel: v}})}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>{EDUCATION_LEVEL_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* Baptism Section */}
+                      <div className="p-4 rounded-xl bg-muted/20 border space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 font-bold text-sm">
+                            <FileBadge className="w-4 h-4 text-primary" /> Baptism Information
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs">Baptised?</Label>
+                            <Switch checked={newMember.extendedProfile.baptism.baptised} onCheckedChange={(v) => setNewMember({...newMember, extendedProfile: {...newMember.extendedProfile, baptism: {...newMember.extendedProfile.baptism, baptised: v}}})} />
+                          </div>
+                        </div>
+                        {newMember.extendedProfile.baptism.baptised && (
+                          <div className="animate-in fade-in slide-in-from-top-2">
+                            <Label className="text-xs">Date of Baptism</Label>
+                            <Input type="date" className="mt-1" value={newMember.extendedProfile.baptism.date} onChange={(e) => setNewMember({...newMember, extendedProfile: {...newMember.extendedProfile, baptism: {...newMember.extendedProfile.baptism, date: e.target.value}}})} />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Confirmation Section */}
+                      <div className="p-4 rounded-xl bg-muted/20 border space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 font-bold text-sm">
+                            <UserCheck className="w-4 h-4 text-accent" /> Confirmation Information
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs">Confirmed?</Label>
+                            <Switch checked={newMember.extendedProfile.confirmation.confirmed} onCheckedChange={(v) => setNewMember({...newMember, extendedProfile: {...newMember.extendedProfile, confirmation: {...newMember.extendedProfile.confirmation, confirmed: v}}})} />
+                          </div>
+                        </div>
+                        {newMember.extendedProfile.confirmation.confirmed && (
+                          <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Place of Confirmation</Label>
+                              <Input value={newMember.extendedProfile.confirmation.place} onChange={(e) => setNewMember({...newMember, extendedProfile: {...newMember.extendedProfile, confirmation: {...newMember.extendedProfile.confirmation, place: e.target.value}}})} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Date of Confirmation</Label>
+                              <Input type="date" value={newMember.extendedProfile.confirmation.date} onChange={(e) => setNewMember({...newMember, extendedProfile: {...newMember.extendedProfile, confirmation: {...newMember.extendedProfile.confirmation, date: e.target.value}}})} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Department & Status */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Department</Label>
+                      <Select value={newMember.department} onValueChange={(v) => setNewMember({...newMember, department: v})}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>{DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      <Select value={newMember.status} onValueChange={(v: any) => setNewMember({...newMember, status: v})}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="Active">Active</SelectItem><SelectItem value="Inactive">Inactive</SelectItem></SelectContent>
+                      </Select>
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
+              </ScrollArea>
               <DialogFooter><Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button><Button onClick={handleAddMember}>Save Member</Button></DialogFooter>
             </DialogContent>
           </Dialog>
@@ -477,12 +445,18 @@ export default function MembersPage() {
       <Tabs defaultValue="all" value={statusTab} onValueChange={setStatusTab} className="space-y-6">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
           <TabsList className="glass border-white/10 p-1 rounded-2xl">
-            <TabsTrigger value="all" className="rounded-xl px-6">All Members</TabsTrigger>
+            <TabsTrigger value="all" className="rounded-xl px-6">Directory</TabsTrigger>
             <TabsTrigger value="active" className="rounded-xl px-6">Active</TabsTrigger>
+            {extendedEnabled && (
+              <TabsTrigger value="incomplete" className="rounded-xl px-6 flex items-center gap-2">
+                <AlertCircle className="w-3 h-3 text-amber-500" />
+                Incomplete Profiles
+              </TabsTrigger>
+            )}
           </TabsList>
           <div className="relative w-full md:max-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search directory..." className="pl-10 rounded-xl" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <Input placeholder="Search name or dept..." className="pl-10 rounded-xl" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
         </div>
 
@@ -493,18 +467,19 @@ export default function MembersPage() {
             <Table>
               <TableHeader className="bg-white/5">
                 <TableRow>
-                  <TableHead className="w-[80px]"></TableHead>
+                  <TableHead className="w-[60px]"></TableHead>
                   <TableHead>Member Info</TableHead>
                   <TableHead>Department</TableHead>
                   <TableHead>Status</TableHead>
+                  {extendedEnabled && <TableHead>Extended Data</TableHead>}
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredMembers.map((member) => (
-                  <TableRow key={member.id} className="hover:bg-white/5 border-white/5 transition-colors">
+                  <TableRow key={member.id} className="hover:bg-white/5 border-white/5 transition-colors group">
                     <TableCell>
-                      <Avatar className="h-10 w-10 border border-white/10 shadow-sm">
+                      <Avatar className="h-9 w-9 border border-white/10 shadow-sm">
                         <AvatarImage src={member.photo} />
                         <AvatarFallback className="bg-muted text-muted-foreground font-bold text-xs">
                           {getInitials(member.name)}
@@ -512,22 +487,41 @@ export default function MembersPage() {
                       </Avatar>
                     </TableCell>
                     <TableCell>
-                      <div className="font-semibold">{member.name}</div>
+                      <div className="font-semibold text-sm">{member.name}</div>
                       <div className="text-[10px] text-muted-foreground flex items-center gap-2">
                         <span>{member.phone}</span>
                         <span>•</span>
                         <span>{member.dateOfBirth}</span>
                       </div>
                     </TableCell>
-                    <TableCell><Badge variant="secondary" className="bg-primary/10 text-primary border-0">{member.department}</Badge></TableCell>
-                    <TableCell><Badge variant="outline" className={cn("capitalize text-[10px]", member.status === 'Active' ? 'text-accent border-accent/20' : 'text-muted-foreground')}>{member.status}</Badge></TableCell>
+                    <TableCell><Badge variant="secondary" className="bg-primary/10 text-primary border-0 text-[10px]">{member.department}</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className={cn("capitalize text-[9px] font-bold", member.status === 'Active' ? 'text-accent border-accent/20' : 'text-muted-foreground')}>{member.status}</Badge></TableCell>
+                    {extendedEnabled && (
+                      <TableCell>
+                        <Badge variant="outline" className={cn(
+                          "text-[9px] font-bold flex items-center gap-1 w-fit",
+                          member.profileStatus === 'Complete' ? "border-accent/40 text-accent bg-accent/5" : 
+                          member.profileStatus === 'Incomplete' ? "border-amber-400/40 text-amber-600 bg-amber-50" : "border-muted text-muted-foreground"
+                        )}>
+                          {member.profileStatus === 'Complete' ? <CheckCircle2 className="w-2.5 h-2.5" /> : <AlertCircle className="w-2.5 h-2.5" />}
+                          {member.profileStatus || 'Not Started'}
+                        </Badge>
+                      </TableCell>
+                    )}
                     <TableCell className="text-right">
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="glass min-w-40">
-                          <DropdownMenuItem onClick={() => { setEditingMember(member); setIsEditDialogOpen(true); }}><Pencil className="mr-2 h-4 w-4" /> Edit Profile</DropdownMenuItem>
+                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="glass min-w-48">
+                          <DropdownMenuItem onClick={() => { setEditingMember(member); setIsEditDialogOpen(true); }} className="font-bold">
+                            <Pencil className="mr-2 h-4 w-4" /> Edit Profile
+                          </DropdownMenuItem>
+                          {extendedEnabled && member.profileStatus !== 'Complete' && (
+                            <DropdownMenuItem onClick={() => { setEditingMember(member); setIsEditDialogOpen(true); }} className="text-amber-600 font-bold">
+                              <FileBadge className="mr-2 h-4 w-4" /> Complete Information
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuSeparator className="border-white/5" />
-                          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setMemberToDelete(member)}><Trash2 className="mr-2 h-4 w-4" /> Delete Record</DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive focus:text-white focus:bg-destructive" onClick={() => setMemberToDelete(member)}><Trash2 className="mr-2 h-4 w-4" /> Delete Record</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -539,91 +533,126 @@ export default function MembersPage() {
         </div>
       </Tabs>
 
+      {/* Edit Member Dialog (Includes Extended Info) */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="glass max-w-2xl">
           <DialogHeader><DialogTitle>Edit Member Profile</DialogTitle><DialogDescription>Update details for {editingMember?.name}.</DialogDescription></DialogHeader>
-          {editingMember && (
-            <div className="space-y-6 py-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-              <div className="flex items-center gap-6">
-                <Avatar className="h-24 w-24 border-2 border-primary/20 shadow-xl">
-                  <AvatarImage src={editingMember.photo} />
-                  <AvatarFallback className="bg-primary/10 text-primary font-bold text-3xl">{getInitials(editingMember.name)}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1 space-y-3">
-                  <Label className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground"><Camera className="w-3 h-3" /> Member Photo</Label>
-                  <div className="flex gap-2">
-                     <Button type="button" variant="outline" className="flex-1 h-10 gap-2 rounded-xl" onClick={() => editCaptureInputRef.current?.click()}><Camera className="w-4 h-4 text-primary" /> Camera</Button>
-                     <Button type="button" variant="outline" className="flex-1 h-10 gap-2 rounded-xl" onClick={() => editFileInputRef.current?.click()}><Upload className="w-4 h-4 text-accent" /> Gallery</Button>
+          <ScrollArea className="max-h-[70vh] pr-4">
+            {editingMember && (
+              <div className="space-y-8 py-4">
+                <div className="flex items-center gap-6">
+                  <Avatar className="h-24 w-24 border-2 border-primary/20 shadow-xl">
+                    <AvatarImage src={editingMember.photo} />
+                    <AvatarFallback className="bg-primary/10 text-primary font-bold text-3xl">{getInitials(editingMember.name)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 space-y-3">
+                    <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Camera className="w-3 h-3" /> Identity Snapshot</Label>
+                    <div className="flex gap-2">
+                       <Button type="button" variant="outline" className="flex-1 h-10 gap-2 rounded-xl" onClick={() => editCaptureInputRef.current?.click()}><Camera className="w-4 h-4 text-primary" /> Camera</Button>
+                       <Button type="button" variant="outline" className="flex-1 h-10 gap-2 rounded-xl" onClick={() => editFileInputRef.current?.click()}><Upload className="w-4 h-4 text-accent" /> Gallery</Button>
+                    </div>
+                    <input type="file" ref={editCaptureInputRef} accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileChange(e, true)} />
+                    <input type="file" ref={editFileInputRef} accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, true)} />
                   </div>
-                  <input type="file" ref={editCaptureInputRef} accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileChange(e, true)} />
-                  <input type="file" ref={editFileInputRef} accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, true)} />
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Full Name</Label><Input value={editingMember.name} onChange={(e) => setEditingMember({...editingMember, name: e.target.value})} /></div>
-                <div className="space-y-2"><Label>Status</Label><Select value={editingMember.status} onValueChange={(v: any) => setEditingMember({...editingMember, status: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Active">Active</SelectItem><SelectItem value="Inactive">Inactive</SelectItem><SelectItem value="Probation">Probation</SelectItem></SelectContent></Select></div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Phone</Label><Input value={editingMember.phone} onChange={(e) => setEditingMember({...editingMember, phone: e.target.value})} /></div>
-                <div className="space-y-2"><Label>Date of Birth</Label><Input type="date" value={editingMember.dateOfBirth} onChange={(e) => setEditingMember({...editingMember, dateOfBirth: e.target.value})} /></div>
-              </div>
-              <div className="space-y-2"><Label>Department</Label><Select value={editingMember.department} onValueChange={(v: any) => setEditingMember({...editingMember, department: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent></Select></div>
 
-              {isCatholic && (
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-primary" />
-                    Societies & Groups
-                  </Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-between bg-muted/20 border-border h-11 text-left font-normal">
-                        <span className="truncate">
-                          {(editingMember.societies || []).length > 0 ? `${editingMember.societies.length} Selected` : "Select Societies"}
-                        </span>
-                        <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 glass overflow-hidden" align="start">
-                      <ScrollArea className="h-64">
-                        <div className="p-2 space-y-1">
-                          {STANDARD_SOCIETIES.map(society => {
-                            const isSelected = (editingMember.societies || []).includes(society);
-                            return (
-                              <button 
-                                key={society} 
-                                onClick={() => toggleSociety(society, true)}
-                                className={cn("w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-colors", isSelected ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted/50")}
-                              >
-                                <div className={cn("w-4 h-4 border rounded flex items-center justify-center", isSelected ? "bg-primary border-primary" : "border-muted-foreground/30")}>
-                                  {isSelected && <Check className="h-3 w-3 text-white" />}
-                                </div>
-                                <span className="text-sm">{society}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </ScrollArea>
-                      <div className="p-3 border-t border-border bg-muted/30 space-y-2">
-                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Add Other Society</Label>
-                        <div className="flex gap-2">
-                          <Input placeholder="Enter name" value={customSocietyInput} onChange={e => setCustomSocietyInput(e.target.value)} className="h-9 text-sm" />
-                          <Button size="icon" className="h-9 w-9 shrink-0" onClick={() => handleAddCustomSociety(true)}><Plus className="h-4 w-4" /></Button>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-primary">
+                    <Layers className="w-4 h-4" />
+                    <span className="text-sm font-bold uppercase tracking-widest">Identification</span>
+                  </div>
+                  {extendedEnabled ? (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2"><Label>First Name</Label><Input value={editingMember.extendedProfile?.firstName || ""} onChange={(e) => setEditingMember({...editingMember, extendedProfile: {...(editingMember.extendedProfile || {}), firstName: e.target.value}})} /></div>
+                      <div className="space-y-2"><Label>Other Names</Label><Input value={editingMember.extendedProfile?.otherNames || ""} onChange={(e) => setEditingMember({...editingMember, extendedProfile: {...(editingMember.extendedProfile || {}), otherNames: e.target.value}})} /></div>
+                      <div className="space-y-2"><Label>Last Name</Label><Input value={editingMember.extendedProfile?.lastName || ""} onChange={(e) => setEditingMember({...editingMember, extendedProfile: {...(editingMember.extendedProfile || {}), lastName: e.target.value}})} /></div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2"><Label>Full Name</Label><Input value={editingMember.name} onChange={(e) => setEditingMember({...editingMember, name: e.target.value})} /></div>
+                  )}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><Label>Phone</Label><Input value={editingMember.phone} onChange={(e) => setEditingMember({...editingMember, phone: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>Date of Birth</Label><Input type="date" value={editingMember.dateOfBirth} onChange={(e) => setEditingMember({...editingMember, dateOfBirth: e.target.value})} /></div>
+                  </div>
+                </div>
+
+                {extendedEnabled && (
+                  <>
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-accent">
+                        <UserCheck className="w-4 h-4" />
+                        <span className="text-sm font-bold uppercase tracking-widest">Extended Profile</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2"><Label>Place of Birth</Label><Input value={editingMember.extendedProfile?.placeOfBirth || ""} onChange={(e) => setEditingMember({...editingMember, extendedProfile: {...(editingMember.extendedProfile || {}), placeOfBirth: e.target.value}})} /></div>
+                        <div className="space-y-2">
+                          <Label>Marital Status</Label>
+                          <Select value={editingMember.extendedProfile?.maritalStatus || "Single"} onValueChange={(v) => setEditingMember({...editingMember, extendedProfile: {...(editingMember.extendedProfile || {}), maritalStatus: v}})}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>{MARITAL_STATUS_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                          </Select>
                         </div>
                       </div>
-                    </PopoverContent>
-                  </Popover>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {(editingMember.societies || []).map(s => (
-                      <Badge key={s} variant="secondary" className="bg-primary/5 text-primary border-primary/20 flex items-center gap-1">
-                        {s} <Trash2 className="w-3 h-3 cursor-pointer opacity-50 hover:opacity-100" onClick={() => toggleSociety(s, true)} />
-                      </Badge>
-                    ))}
-                  </div>
+                      <div className="space-y-2">
+                        <Label>Education Level</Label>
+                        <Select value={editingMember.extendedProfile?.educationLevel || "Bachelor's Degree"} onValueChange={(v) => setEditingMember({...editingMember, extendedProfile: {...(editingMember.extendedProfile || {}), educationLevel: v}})}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>{EDUCATION_LEVEL_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-muted/20 border space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 font-bold text-sm">
+                          <FileBadge className="w-4 h-4 text-primary" /> Baptism Information
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Label className="text-xs">Baptised?</Label>
+                          <Switch checked={editingMember.extendedProfile?.baptism?.baptised || false} onCheckedChange={(v) => setEditingMember({...editingMember, extendedProfile: {...(editingMember.extendedProfile || {}), baptism: {...(editingMember.extendedProfile?.baptism || {}), baptised: v}}})} />
+                        </div>
+                      </div>
+                      {editingMember.extendedProfile?.baptism?.baptised && (
+                        <div>
+                          <Label className="text-xs">Date of Baptism</Label>
+                          <Input type="date" className="mt-1" value={editingMember.extendedProfile.baptism.date || ""} onChange={(e) => setEditingMember({...editingMember, extendedProfile: {...(editingMember.extendedProfile || {}), baptism: {...(editingMember.extendedProfile?.baptism || {}), date: e.target.value}}})} />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-muted/20 border space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 font-bold text-sm">
+                          <UserCheck className="w-4 h-4 text-accent" /> Confirmation Information
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Label className="text-xs">Confirmed?</Label>
+                          <Switch checked={editingMember.extendedProfile?.confirmation?.confirmed || false} onCheckedChange={(v) => setEditingMember({...editingMember, extendedProfile: {...(editingMember.extendedProfile || {}), confirmation: {...(editingMember.extendedProfile?.confirmation || {}), confirmed: v}}})} />
+                        </div>
+                      </div>
+                      {editingMember.extendedProfile?.confirmation?.confirmed && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Place of Confirmation</Label>
+                            <Input value={editingMember.extendedProfile.confirmation.place || ""} onChange={(e) => setEditingMember({...editingMember, extendedProfile: {...(editingMember.extendedProfile || {}), confirmation: {...(editingMember.extendedProfile?.confirmation || {}), place: e.target.value}}})} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Date of Confirmation</Label>
+                            <Input type="date" value={editingMember.extendedProfile.confirmation.date || ""} onChange={(e) => setEditingMember({...editingMember, extendedProfile: {...(editingMember.extendedProfile || {}), confirmation: {...(editingMember.extendedProfile?.confirmation || {}), date: e.target.value}}})} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2"><Label>Department</Label><Select value={editingMember.department} onValueChange={(v) => setEditingMember({...editingMember, department: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="space-y-2"><Label>Status</Label><Select value={editingMember.status} onValueChange={(v: any) => setEditingMember({...editingMember, status: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Active">Active</SelectItem><SelectItem value="Inactive">Inactive</SelectItem></SelectContent></Select></div>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </ScrollArea>
           <DialogFooter><Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button><Button onClick={handleUpdateMember}>Save Changes</Button></DialogFooter>
         </DialogContent>
       </Dialog>
@@ -631,12 +660,12 @@ export default function MembersPage() {
       <AlertDialog open={!!memberToDelete} onOpenChange={(o) => !o && setMemberToDelete(null)}>
         <AlertDialogContent className="glass">
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2"><AlertTriangle className="text-destructive h-5 w-5" /> Serious Action Required</AlertDialogTitle>
-            <AlertDialogDescription>This will permanently remove <strong>{memberToDelete?.name}</strong>. This cannot be undone.</AlertDialogDescription>
+            <AlertDialogTitle className="flex items-center gap-2"><AlertTriangle className="text-destructive h-5 w-5" /> Permanent Deletion</AlertDialogTitle>
+            <AlertDialogDescription>Remove <strong>{memberToDelete?.name}</strong> from the directory? This cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive hover:bg-destructive/80" onClick={handleDeleteMember}>Confirm Delete</AlertDialogAction>
+            <AlertDialogAction className="bg-destructive" onClick={() => { if (membersRef && memberToDelete) { deleteDoc(doc(membersRef, memberToDelete.id)); setMemberToDelete(null); toast({ title: "Member deleted" }); } }}>Confirm Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

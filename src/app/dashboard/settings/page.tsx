@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -13,15 +14,16 @@ import {
   Moon,
   Laptop,
   Cake,
-  Bell,
-  Smartphone,
   Globe,
   Users,
   UserPlus,
   Trash2,
   ShieldCheck,
   Mail,
-  Church
+  Church as ChurchIcon,
+  UserCheck,
+  FileBadge,
+  Layout
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,8 +36,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { useUser, useFirestore, useCollection, useAuth, functions } from "@/firebase";
-import { doc, updateDoc, query, collection, where, limit, arrayUnion, arrayRemove } from "firebase/firestore";
+import { useUser, useFirestore, useAuth } from "@/firebase";
+import { doc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import { updatePassword } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -68,7 +70,7 @@ export default function SettingsPage() {
   const { user } = useUser();
   const auth = useAuth();
   const db = useFirestore();
-  const { currentChurch, loading: churchLoading } = useTenant();
+  const { currentChurch, loading: churchLoading, isSuperAdmin } = useTenant();
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const isForced = searchParams.get("force") === "true";
@@ -89,7 +91,18 @@ export default function SettingsPage() {
     dailyReportsEnabled: false,
     senderId: "YEBFA",
     displayName: "",
-    theme: "dark" as "light" | "dark" | "system"
+    theme: "dark" as "light" | "dark" | "system",
+    extendedProfile: {
+      enabled: false,
+      showInRegistration: true,
+      fields: {
+        placeOfBirth: true,
+        maritalStatus: true,
+        educationLevel: true,
+        baptism: true,
+        confirmation: true
+      }
+    }
   });
 
   const [passwords, setPasswords] = useState({
@@ -110,7 +123,18 @@ export default function SettingsPage() {
         dailyReportsEnabled: currentChurch.settings?.dailyReportsEnabled ?? false,
         senderId: currentChurch.sms?.senderId || "YEBFA",
         displayName: currentChurch.sms?.displayName || currentChurch.name || "",
-        theme: (currentChurch.settings?.theme as any) || "dark"
+        theme: (currentChurch.settings?.theme as any) || "dark",
+        extendedProfile: {
+          enabled: currentChurch.settings?.extendedProfile?.enabled ?? false,
+          showInRegistration: currentChurch.settings?.extendedProfile?.showInRegistration ?? true,
+          fields: currentChurch.settings?.extendedProfile?.fields || {
+            placeOfBirth: true,
+            maritalStatus: true,
+            educationLevel: true,
+            baptism: true,
+            confirmation: true
+          }
+        }
       });
     }
   }, [currentChurch]);
@@ -137,17 +161,20 @@ export default function SettingsPage() {
       phone: settings.phone,
       denomination: settings.denomination,
       settings: {
+        ...currentChurch.settings,
         birthdaySmsEnabled: settings.birthdaySmsEnabled,
         timezone: settings.timezone,
         lowCreditAlertEnabled: settings.lowCreditAlertEnabled,
         dailyReportsEnabled: settings.dailyReportsEnabled,
-        theme: settings.theme
+        theme: settings.theme,
+        extendedProfile: settings.extendedProfile
       },
       sms: {
         ...currentChurch.sms,
         displayName: settings.displayName || settings.name
       },
       smsTemplates: {
+        ...currentChurch.smsTemplates,
         birthday: settings.birthdayTemplate
       }
     };
@@ -258,6 +285,7 @@ export default function SettingsPage() {
         <TabsList className="glass border-white/10 p-1 rounded-2xl w-full md:w-auto">
           <TabsTrigger value="general" className="rounded-xl px-6" disabled={isForced}>General</TabsTrigger>
           <TabsTrigger value="team" className="rounded-xl px-6" disabled={isForced}>Team</TabsTrigger>
+          <TabsTrigger value="extended-profile" className="rounded-xl px-6" disabled={isForced}>Extended Profile</TabsTrigger>
           <TabsTrigger value="automation" className="rounded-xl px-6" disabled={isForced}>Automation</TabsTrigger>
           <TabsTrigger value="display" className="rounded-xl px-6" disabled={isForced}>Display</TabsTrigger>
           <TabsTrigger value="security" className="rounded-xl px-6">Security</TabsTrigger>
@@ -285,7 +313,7 @@ export default function SettingsPage() {
                       {DENOMINATIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <p className="text-[10px] text-muted-foreground italic flex items-center gap-1"><Church className="w-3 h-3" /> Unlocks specialized fields for specific denominations.</p>
+                  <p className="text-[10px] text-muted-foreground italic flex items-center gap-1"><ChurchIcon className="w-3 h-3" /> Unlocks specialized fields for specific denominations.</p>
                 </div>
                 <div className="space-y-2">
                   <Label>Local Timezone</Label>
@@ -332,6 +360,91 @@ export default function SettingsPage() {
                 </div>
                 <Badge variant="outline">Verified SaaS ID</Badge>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="extended-profile" className="animate-in fade-in-50 duration-500 space-y-6">
+          <Card className="glass border-border shadow-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileBadge className="w-5 h-5 text-primary" />
+                Extended Member Profile
+              </CardTitle>
+              <CardDescription>Configure additional data points collected for your congregation members.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between p-6 rounded-2xl bg-muted/20 border border-primary/10">
+                <div className="space-y-1">
+                  <Label className="text-base font-bold">Enable Extended Profiles</Label>
+                  <p className="text-sm text-muted-foreground">Activates advanced personal, baptism, and confirmation fields.</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  {!isSuperAdmin && (
+                    <Badge variant="outline" className="text-[10px] bg-white">Paid Subscription Required</Badge>
+                  )}
+                  <Switch 
+                    disabled={!isSuperAdmin} 
+                    checked={settings.extendedProfile.enabled} 
+                    onCheckedChange={(v) => setSettings({
+                      ...settings, 
+                      extendedProfile: { ...settings.extendedProfile, enabled: v }
+                    })} 
+                  />
+                </div>
+              </div>
+
+              {settings.extendedProfile.enabled && (
+                <div className="space-y-6 animate-in slide-in-from-top-2 duration-300">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="p-4 rounded-xl bg-white/50 border border-border flex items-center justify-between">
+                       <div className="space-y-0.5">
+                          <Label className="text-sm">Show in Public Registration</Label>
+                          <p className="text-[10px] text-muted-foreground">Captured when members join via your public link.</p>
+                       </div>
+                       <Switch 
+                         checked={settings.extendedProfile.showInRegistration}
+                         onCheckedChange={(v) => setSettings({
+                           ...settings,
+                           extendedProfile: { ...settings.extendedProfile, showInRegistration: v }
+                         })}
+                       />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Active Field Configuration</Label>
+                    <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+                      {Object.entries(settings.extendedProfile.fields).map(([key, active]) => (
+                        <div key={key} className="flex items-center justify-between p-4 rounded-xl bg-muted/20 border border-border group hover:border-primary/20 transition-all">
+                          <span className="text-xs font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                          <Switch 
+                            className="scale-75"
+                            checked={active as boolean} 
+                            onCheckedChange={(v) => setSettings({
+                              ...settings,
+                              extendedProfile: {
+                                ...settings.extendedProfile,
+                                fields: { ...settings.extendedProfile.fields, [key]: v }
+                              }
+                            })}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!settings.extendedProfile.enabled && !isSuperAdmin && (
+                <Alert className="bg-primary/5 border-primary/10">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  <AlertTitle className="text-xs font-bold uppercase">System Administration Required</AlertTitle>
+                  <AlertDescription className="text-xs leading-relaxed">
+                    This is a premium organizational feature. Please contact platform support at <strong>0248472474</strong> to enable Extended Member Profile Management for your ministry.
+                  </AlertDescription>
+                </Alert>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -400,14 +513,6 @@ export default function SettingsPage() {
                   ))}
                 </div>
               </div>
-
-              <Alert className="bg-primary/5 border-primary/10">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                <AlertTitle className="text-xs font-bold uppercase">Multi-User Access</AlertTitle>
-                <AlertDescription className="text-xs">
-                  Authorized team members must create an account via the "Account Access" tab on the Login page using their authorized email.
-                </AlertDescription>
-              </Alert>
             </CardContent>
           </Card>
         </TabsContent>
@@ -449,24 +554,6 @@ export default function SettingsPage() {
                   Tip: Use the tags above to automatically insert the member's name and your church's display name into the message.
                 </p>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glass border-border shadow-xl">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-primary">
-                <MessageSquare className="w-5 h-5" />
-                SMS Credit Enforcement
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-               <div className="flex items-center justify-between p-4 border-b border-border last:border-0">
-                  <div>
-                    <Label className="font-bold">Low Credit Notifications</Label>
-                    <p className="text-xs text-muted-foreground">Alert administrators when balance falls below 50 credits.</p>
-                  </div>
-                  <Switch checked={settings.lowCreditAlertEnabled} onCheckedChange={(c) => setSettings({...settings, lowCreditAlertEnabled: c})} />
-               </div>
             </CardContent>
           </Card>
         </TabsContent>
