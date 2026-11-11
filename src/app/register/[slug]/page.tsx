@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -37,11 +36,6 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 
-const CATHOLIC_SOCIETIES = [
-  "Knights of Columbus", "Catholic Women Association", "Catholic Youth Organization",
-  "Sacred Heart of Jesus", "St. Vincent de Paul", "Legion of Mary", "Charismatic Renewal", "Christian Mothers"
-];
-
 const DEPARTMENTS = ["Music", "Youth", "Media", "Children", "Welfare", "Ushering", "Evangelism"];
 const MARITAL_STATUS_OPTIONS = ["Single", "Married", "Divorced", "Widowed", "Separated", "Other", "Prefer not to say"];
 const EDUCATION_LEVEL_OPTIONS = [
@@ -70,7 +64,6 @@ export default function PublicRegistrationPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [otherSocietyInput, setOtherSocietyInput] = useState("");
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<any>({

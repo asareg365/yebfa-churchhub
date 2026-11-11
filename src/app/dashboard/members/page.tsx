@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -28,7 +27,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -55,7 +54,6 @@ import {
   AlertDialogHeader, 
   AlertDialogTitle 
 } from "@/components/ui/alert-dialog";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Label } from "@/components/ui/label";
@@ -63,6 +61,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useCollection, useFirestore, useUser } from "@/firebase";
 import { collection, addDoc, serverTimestamp, doc, deleteDoc, query, where, limit, writeBatch, updateDoc } from "firebase/firestore";
@@ -70,18 +69,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useTenant } from "@/context/tenant-context";
 
 const DEPARTMENTS = ["Music", "Youth", "Media", "Children", "Welfare", "Ushering", "Evangelism"];
-const STANDARD_SOCIETIES = [
-  "Knights of Columbus",
-  "Catholic Women Association",
-  "Catholic Youth Organization",
-  "Sacred Heart of Jesus",
-  "St. Vincent de Paul",
-  "Legion of Mary",
-  "Charismatic Renewal",
-  "Christian Mothers",
-  "Men's Fellowship",
-  "Women's Fellowship"
-];
 
 const MARITAL_STATUS_OPTIONS = ["Single", "Married", "Divorced", "Widowed", "Separated", "Other", "Prefer not to say"];
 const EDUCATION_LEVEL_OPTIONS = [
@@ -102,12 +89,8 @@ export default function MembersPage() {
   const [statusTab, setStatusTab] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
-  const [bulkData, setBulkData] = useState("");
-  const [isImporting, setIsImporting] = useState(false);
   const [memberToDelete, setMemberToDelete] = useState<any>(null);
   const [editingMember, setEditingMember] = useState<any>(null);
-  const [customSocietyInput, setCustomSocietyInput] = useState("");
   const [mounted, setMounted] = useState(false);
 
   const addFileInputRef = useRef<HTMLInputElement>(null);
@@ -127,7 +110,6 @@ export default function MembersPage() {
   const membersRef = useMemo(() => currentChurch?.id ? collection(db, "churches", currentChurch.id, "members") : null, [db, currentChurch?.id]);
   const { data: members, loading } = useCollection(membersRef);
 
-  const isCatholic = currentChurch?.denomination === 'Catholic';
   const extendedEnabled = currentChurch?.settings?.extendedProfile?.enabled ?? false;
 
   const [newMember, setNewMember] = useState<any>({
@@ -184,22 +166,6 @@ export default function MembersPage() {
     }
   };
 
-  const toggleSociety = (society: string, isEdit: boolean) => {
-    if (isEdit) {
-      const current = editingMember.societies || [];
-      const updated = current.includes(society) 
-        ? current.filter((s: string) => s !== society) 
-        : [...current, society];
-      setEditingMember({ ...editingMember, societies: updated });
-    } else {
-      const current = newMember.societies || [];
-      const updated = current.includes(society) 
-        ? current.filter((s: string) => s !== society) 
-        : [...current, society];
-      setNewMember({ ...newMember, societies: updated });
-    }
-  };
-
   const calculateProfileStatus = (extended: any) => {
     if (!extendedEnabled) return null;
     if (!extended || !extended.firstName) return "Not Started";
@@ -224,7 +190,6 @@ export default function MembersPage() {
       return;
     }
 
-    // Auto-generate display name if structured fields are used
     let finalName = newMember.name;
     if (extendedEnabled && newMember.extendedProfile.firstName) {
       finalName = `${newMember.extendedProfile.firstName} ${newMember.extendedProfile.otherNames || ''} ${newMember.extendedProfile.lastName}`.replace(/\s+/g, ' ').trim();
@@ -303,7 +268,6 @@ export default function MembersPage() {
               <DialogHeader><DialogTitle>Add New Member</DialogTitle><DialogDescription>Initialize record with core details.</DialogDescription></DialogHeader>
               <ScrollArea className="max-h-[70vh] pr-4">
                 <div className="space-y-8 py-4">
-                  {/* Photo Section */}
                   <div className="flex items-center gap-6">
                     <Avatar className="h-24 w-24 border-2 border-primary/20 shadow-xl">
                       <AvatarImage src={newMember.photo} />
@@ -320,7 +284,6 @@ export default function MembersPage() {
                     </div>
                   </div>
 
-                  {/* Identification Section */}
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 text-primary">
                       <Layers className="w-4 h-4" />
@@ -344,7 +307,6 @@ export default function MembersPage() {
                     </div>
                   </div>
 
-                  {/* Extended Details (Conditional) */}
                   {extendedEnabled && (
                     <>
                       <div className="space-y-4">
@@ -371,7 +333,6 @@ export default function MembersPage() {
                         </div>
                       </div>
 
-                      {/* Baptism Section */}
                       <div className="p-4 rounded-xl bg-muted/20 border space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 font-bold text-sm">
@@ -390,7 +351,6 @@ export default function MembersPage() {
                         )}
                       </div>
 
-                      {/* Confirmation Section */}
                       <div className="p-4 rounded-xl bg-muted/20 border space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 font-bold text-sm">
@@ -417,7 +377,6 @@ export default function MembersPage() {
                     </>
                   )}
 
-                  {/* Department & Status */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Department</Label>
@@ -454,7 +413,7 @@ export default function MembersPage() {
               </TabsTrigger>
             )}
           </TabsList>
-          <div className="relative w-full md:max-sm">
+          <div className="relative w-full md:max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Search name or dept..." className="pl-10 rounded-xl" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
@@ -533,7 +492,6 @@ export default function MembersPage() {
         </div>
       </Tabs>
 
-      {/* Edit Member Dialog (Includes Extended Info) */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="glass max-w-2xl">
           <DialogHeader><DialogTitle>Edit Member Profile</DialogTitle><DialogDescription>Update details for {editingMember?.name}.</DialogDescription></DialogHeader>
