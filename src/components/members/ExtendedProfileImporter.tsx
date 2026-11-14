@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { 
   FileUp, 
   Download, 
@@ -14,7 +14,8 @@ import {
   ClipboardCheck,
   DownloadCloud,
   Layers,
-  Search
+  Search,
+  ChevronDown
 } from "lucide-react";
 import { 
   Dialog, 
@@ -31,7 +32,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore } from "@/firebase";
@@ -78,6 +78,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState<ImportStep>('upload');
   const [importMode, setImportMode] = useState<ImportMode>('update');
+  const [rawRows, setRawRows] = useState<CSVRow[]>([]);
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [importStats, setImportStats] = useState({ total: 0, success: 0, failed: 0, skipped: 0 });
   const [isProcessing, setIsProcessing] = useState(false);
@@ -89,6 +90,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
 
   const resetState = () => {
     setStep('upload');
+    setRawRows([]);
     setValidationResults([]);
     setImportStats({ total: 0, success: 0, failed: 0, skipped: 0 });
     setIsProcessing(false);
@@ -131,23 +133,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
     });
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const parsed = parseCSV(event.target?.result as string);
-      if (parsed.length === 0) {
-        toast({ title: "Invalid File", description: "CSV file is empty or invalid.", variant: "destructive" });
-        return;
-      }
-      validateData(parsed);
-    };
-    reader.readAsText(file);
-  };
-
-  const validateData = (rows: CSVRow[]) => {
+  const validateData = useCallback((rows: CSVRow[]) => {
     const results: ValidationResult[] = rows.map((row, index) => {
       const errors: string[] = [];
       const updates: string[] = [];
@@ -202,7 +188,31 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
     });
 
     setValidationResults(results);
-    setStep('preview');
+  }, [members, importMode]);
+
+  // Re-run validation if mode or members list changes after upload
+  useEffect(() => {
+    if (rawRows.length > 0) {
+      validateData(rawRows);
+    }
+  }, [importMode, members, validateData, rawRows]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const parsed = parseCSV(event.target?.result as string);
+      if (parsed.length === 0) {
+        toast({ title: "Invalid File", description: "CSV file is empty or invalid.", variant: "destructive" });
+        return;
+      }
+      setRawRows(parsed);
+      validateData(parsed);
+      setStep('preview');
+    };
+    reader.readAsText(file);
   };
 
   const executeImport = async () => {
@@ -326,29 +336,31 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar min-h-0">
+        <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 bg-background/50">
           {step === 'upload' && (
-            <div className="min-h-full flex flex-col items-center justify-center space-y-8 animate-in fade-in duration-500 py-8">
-              <Card className="w-full max-w-md p-6 glass border-primary/20 shrink-0">
+            <div className="min-h-full flex flex-col items-center justify-center space-y-8 animate-in fade-in duration-500 py-12 px-6">
+              <Card className="w-full max-w-md p-6 glass border-primary/20 shrink-0 shadow-2xl">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase text-muted-foreground">Selection Mode</Label>
-                    <Select value={importMode} onValueChange={(v: ImportMode) => setImportMode(v)}>
-                      <SelectTrigger className="rounded-xl h-11 bg-white">
-                        <SelectValue placeholder="Select Import Mode" />
-                      </SelectTrigger>
-                      <SelectContent className="glass max-h-[300px]">
-                        <SelectItem value="update">Update Existing Profiles</SelectItem>
-                        <SelectItem value="create">Register New Members</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Selection Mode</Label>
+                    <div className="relative">
+                      <select 
+                        value={importMode} 
+                        onChange={(e) => setImportMode(e.target.value as ImportMode)}
+                        className="w-full h-11 px-4 rounded-xl bg-muted/30 border border-border text-sm font-bold focus:ring-2 focus:ring-primary focus:outline-none appearance-none cursor-pointer hover:bg-muted/50 transition-colors"
+                      >
+                        <option value="create">Bulk Registration — Register New Members</option>
+                        <option value="update">Update Existing Profiles — Update Existing Profiles</option>
+                      </select>
+                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                    </div>
                   </div>
                   <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 space-y-2">
                     <p className="text-xs text-primary font-bold flex items-center gap-2 uppercase tracking-widest">
                       {importMode === 'update' ? <Search className="w-3 h-3" /> : <UserPlus className="w-3 h-3" />}
                       {importMode === 'update' ? "Match & Sync" : "Bulk Registration"}
                     </p>
-                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    <p className="text-[10px] text-muted-foreground leading-relaxed font-medium">
                       {importMode === 'update' 
                         ? "Matching by Member ID or unique Phone Number. Blank CSV cells will not erase existing data." 
                         : "Required fields: First Name, Last Name, Phone. Duplicates will be rejected automatically."}
@@ -364,7 +376,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
                   </div>
                   <h3 className="font-bold text-lg mb-2">Upload Data</h3>
                   <Input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
-                  <Button variant="outline" className="rounded-xl px-8" type="button">Browse CSV</Button>
+                  <Button variant="outline" className="rounded-xl px-8 h-11" type="button">Browse CSV</Button>
                 </div>
 
                 <div className="flex flex-col items-center p-8 rounded-[2rem] bg-accent/5 border border-accent/10 hover:border-accent/30 transition-all">
@@ -372,39 +384,39 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
                     <FileText className="w-8 h-8" />
                   </div>
                   <h3 className="font-bold text-lg mb-2">Get Template</h3>
-                  <Button onClick={downloadTemplate} className="rounded-xl px-8 bg-accent text-white" type="button">Download Template</Button>
+                  <Button onClick={downloadTemplate} className="rounded-xl px-8 h-11 bg-accent text-white" type="button">Download Template</Button>
                 </div>
               </div>
             </div>
           )}
 
           {step === 'preview' && (
-            <div className="h-full flex flex-col space-y-6 animate-in slide-in-from-right-4 duration-300">
-              <div className="flex flex-wrap gap-4 items-center justify-between bg-muted/20 p-4 rounded-2xl border">
-                <div className="flex gap-6">
-                  <div className="text-center"><p className="text-[10px] font-bold text-muted-foreground uppercase">Rows</p><p className="text-lg font-bold">{validationResults.length}</p></div>
-                  <div className="text-center"><p className="text-[10px] font-bold text-accent uppercase">Valid</p><p className="text-lg font-bold text-accent">{validationResults.filter(r => r.status === 'valid').length}</p></div>
-                  <div className="text-center"><p className="text-[10px] font-bold text-destructive uppercase">Issues</p><p className="text-lg font-bold text-destructive">{validationResults.filter(r => r.status !== 'valid').length}</p></div>
+            <div className="h-full flex flex-col space-y-6 animate-in slide-in-from-right-4 duration-300 p-6">
+              <div className="flex flex-wrap gap-4 items-center justify-between bg-muted/20 p-6 rounded-3xl border shadow-sm">
+                <div className="flex gap-8">
+                  <div className="text-center"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Rows</p><p className="text-2xl font-bold">{validationResults.length}</p></div>
+                  <div className="text-center"><p className="text-[10px] font-bold text-accent uppercase tracking-wider mb-1">Valid</p><p className="text-2xl font-bold text-accent">{validationResults.filter(r => r.status === 'valid').length}</p></div>
+                  <div className="text-center"><p className="text-[10px] font-bold text-destructive uppercase tracking-wider mb-1">Issues</p><p className="text-2xl font-bold text-destructive">{validationResults.filter(r => r.status !== 'valid').length}</p></div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                   {validationResults.some(r => r.status !== 'valid') && (
-                    <Button variant="outline" size="sm" onClick={downloadErrorLog} className="rounded-lg h-9 text-destructive border-destructive/20">Download Issues</Button>
+                    <Button variant="outline" size="sm" onClick={downloadErrorLog} className="rounded-xl h-11 px-6 text-destructive border-destructive/20 hover:bg-destructive/5 font-bold">Download Issues</Button>
                   )}
-                  <Button onClick={executeImport} className="rounded-xl h-9 bg-primary" disabled={!validationResults.some(r => r.status === 'valid')}>
+                  <Button onClick={executeImport} className="rounded-xl h-11 px-10 bg-primary font-bold shadow-lg shadow-primary/20" disabled={!validationResults.some(r => r.status === 'valid')}>
                     <ClipboardCheck className="w-4 h-4 mr-2" /> Start Import
                   </Button>
                 </div>
               </div>
 
-              <div className="border rounded-2xl overflow-hidden flex-1 min-h-0">
+              <div className="border rounded-3xl overflow-hidden flex-1 min-h-[300px] shadow-inner bg-card">
                 <ScrollArea className="h-full">
                   <Table>
                     <TableHeader className="bg-muted/30 sticky top-0 z-20">
-                      <TableRow>
-                        <TableHead className="w-[50px] text-[10px] font-bold uppercase">Row</TableHead>
-                        <TableHead className="text-[10px] font-bold uppercase">Identification</TableHead>
-                        <TableHead className="text-[10px] font-bold uppercase">Status</TableHead>
-                        <TableHead className="text-[10px] font-bold uppercase">Errors / Actions</TableHead>
+                      <TableRow className="border-border">
+                        <TableHead className="w-[50px] text-[10px] font-bold uppercase py-4">Row</TableHead>
+                        <TableHead className="text-[10px] font-bold uppercase py-4">Identification</TableHead>
+                        <TableHead className="text-[10px] font-bold uppercase py-4">Status</TableHead>
+                        <TableHead className="text-[10px] font-bold uppercase py-4">Errors / Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -420,14 +432,14 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
                           <TableCell>
                             <Badge variant="outline" className={cn(
                               "text-[9px] font-bold uppercase flex items-center gap-1 w-fit",
-                              res.status === 'valid' ? "border-accent text-accent" : 
-                              res.status === 'duplicate' ? "border-amber-500 text-amber-600" : "border-destructive text-destructive"
+                              res.status === 'valid' ? "border-accent text-accent bg-accent/5" : 
+                              res.status === 'duplicate' ? "border-amber-500 text-amber-600 bg-amber-50" : "border-destructive text-destructive bg-destructive/5"
                             )}>
                               {res.status === 'valid' ? <CheckCircle2 className="w-2.5 h-2.5" /> : <AlertTriangle className="w-2.5 h-2.5" />}
                               {res.status.replace('_', ' ')}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-[10px] max-w-[250px] text-muted-foreground italic leading-relaxed">
+                          <TableCell className="text-[10px] max-w-[250px] text-muted-foreground italic leading-relaxed font-medium">
                             {res.errors.length > 0 ? res.errors[0] : (res.status === 'valid' ? `Syncing: ${res.updates.join(', ')}` : "Skipped.")}
                           </TableCell>
                         </TableRow>
@@ -440,29 +452,29 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
           )}
 
           {step === 'processing' && (
-            <div className="h-full flex flex-col items-center justify-center space-y-6">
+            <div className="h-full flex flex-col items-center justify-center space-y-6 py-20">
               <div className="relative"><div className="w-24 h-24 rounded-full border-4 border-muted border-t-primary animate-spin" /><div className="absolute inset-0 flex items-center justify-center"><Database className="w-8 h-8 text-primary animate-pulse" /></div></div>
               <div className="text-center space-y-2"><h3 className="text-xl font-bold">Synchronizing Tenant Data...</h3><p className="text-sm text-muted-foreground animate-pulse">Batch operations in progress.</p></div>
             </div>
           )}
 
           {step === 'results' && (
-            <div className="h-full flex flex-col items-center justify-center space-y-8 animate-in zoom-in-95 duration-500 py-8">
+            <div className="h-full flex flex-col items-center justify-center space-y-8 animate-in zoom-in-95 duration-500 py-12 px-6">
               <div className="w-20 h-20 rounded-[2rem] bg-accent/10 flex items-center justify-center text-accent shadow-inner"><CheckCircle2 className="w-10 h-10" /></div>
               <div className="text-center space-y-2"><h3 className="text-3xl font-bold">Import Finalized</h3><p className="text-muted-foreground">Directory updated successfully for {churchId}.</p></div>
-              <div className="grid grid-cols-4 gap-6 w-full max-w-2xl bg-muted/10 p-8 rounded-3xl border text-center shrink-0">
-                 <div><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Rows</p><p className="text-2xl font-bold">{importStats.total}</p></div>
-                 <div><p className="text-[10px] font-bold text-accent uppercase mb-1">Success</p><p className="text-2xl font-bold text-accent">{importStats.success}</p></div>
-                 <div><p className="text-[10px] font-bold text-destructive uppercase mb-1">Errors</p><p className="text-2xl font-bold text-destructive">{importStats.failed}</p></div>
-                 <div><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Skipped</p><p className="text-2xl font-bold">{importStats.skipped}</p></div>
+              <div className="grid grid-cols-4 gap-6 w-full max-w-2xl bg-muted/10 p-8 rounded-[2rem] border text-center shrink-0 shadow-sm">
+                 <div><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1 tracking-widest">Rows</p><p className="text-2xl font-bold">{importStats.total}</p></div>
+                 <div><p className="text-[10px] font-bold text-accent uppercase mb-1 tracking-widest">Success</p><p className="text-2xl font-bold text-accent">{importStats.success}</p></div>
+                 <div><p className="text-[10px] font-bold text-destructive uppercase mb-1 tracking-widest">Errors</p><p className="text-2xl font-bold text-destructive">{importStats.failed}</p></div>
+                 <div><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1 tracking-widest">Skipped</p><p className="text-2xl font-bold">{importStats.skipped}</p></div>
               </div>
-              <Button onClick={() => { setIsOpen(false); resetState(); }} className="rounded-xl h-11 px-12 bg-primary">Done</Button>
+              <Button onClick={() => { setIsOpen(false); resetState(); }} className="rounded-xl h-12 px-12 bg-primary font-bold shadow-lg shadow-primary/20">Done</Button>
             </div>
           )}
         </div>
 
         <DialogFooter className="p-4 bg-muted/10 border-t shrink-0">
-          <p className="text-[10px] text-muted-foreground flex items-center gap-2">
+          <p className="text-[10px] text-muted-foreground flex items-center gap-2 font-medium">
             <Layers className="w-3 h-3 text-accent" />
             Security: Tenant isolation enforced. Imports affect only {churchId}.
           </p>
