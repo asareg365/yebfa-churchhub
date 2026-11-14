@@ -53,7 +53,7 @@ interface CSVRow {
   firstName: string;
   otherNames: string;
   lastName: string;
-  dateOfBirth: string;
+  DOB: string;
   placeOfBirth: string;
   maritalStatus: string;
   educationLevel: string;
@@ -74,6 +74,81 @@ interface ValidationResult {
   updates: string[];
 }
 
+/**
+ * Robust date parser supporting DD/MM/YYYY and YYYY-MM-DD.
+ * Rejects impossible dates and normalizes to YYYY-MM-DD.
+ */
+const parseAndValidateDate = (dateStr: string) => {
+  if (!dateStr || !dateStr.trim()) return null;
+  const cleanStr = dateStr.trim();
+  
+  // Try YYYY-MM-DD first
+  let d = parse(cleanStr, 'yyyy-MM-dd', new Date());
+  if (isValid(d) && format(d, 'yyyy-MM-dd') === cleanStr) return d;
+
+  // Try DD/MM/YYYY
+  d = parse(cleanStr, 'dd/MM/yyyy', new Date());
+  if (isValid(d)) {
+    const parts = cleanStr.split('/');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0]);
+      const month = parseInt(parts[1]);
+      const year = parseInt(parts[2]);
+      if (d.getDate() === day && (d.getMonth() + 1) === month && d.getFullYear() === year) {
+        return d;
+      }
+    }
+  }
+  
+  return null;
+};
+
+/**
+ * Split CSV line correctly handling quotes and empty fields
+ */
+const splitCSVLine = (line: string) => {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current);
+  return result.map(v => v.trim().replace(/^"(.*)"$/, '$1'));
+};
+
+const HEADER_MAP: Record<string, string> = {
+  'memberid': 'memberId',
+  'phonenumber': 'phoneNumber',
+  'phonenum': 'phoneNumber',
+  'phone': 'phoneNumber',
+  'firstname': 'firstName',
+  'firstnam': 'firstName',
+  'othernames': 'otherNames',
+  'othernam': 'otherNames',
+  'lastname': 'lastName',
+  'lastnam': 'lastName',
+  'dob': 'DOB',
+  'dateofbirth': 'DOB',
+  'placeofbirth': 'placeOfBirth',
+  'placeofbir': 'placeOfBirth',
+  'maritalstatus': 'maritalStatus',
+  'educationlevel': 'educationLevel',
+  'baptised': 'baptised',
+  'baptismdate': 'baptismDate',
+  'confirmed': 'confirmed',
+  'confirmationplace': 'confirmationPlace',
+  'confirmationdate': 'confirmationDate'
+};
+
 export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileImporterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState<ImportStep>('upload');
@@ -87,35 +162,6 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
   const db = useFirestore();
 
   const normalizePhone = (phone: string) => phone?.replace(/\D/g, "") || "";
-
-  /**
-   * Strictly parses a date string into a Date object.
-   * Supports DD/MM/YYYY and YYYY-MM-DD.
-   * Prevents silent date overflow (e.g., Feb 31st becoming March 3rd).
-   */
-  const parseAndValidateDate = (dateStr: string) => {
-    if (!dateStr || !dateStr.trim()) return null;
-    const cleanStr = dateStr.trim();
-    
-    // Pattern 1: DD/MM/YYYY
-    if (cleanStr.includes('/')) {
-      const d = parse(cleanStr, 'dd/MM/yyyy', new Date());
-      // Strict check: formatting back must match input exactly
-      if (isValid(d) && format(d, 'dd/MM/yyyy') === cleanStr) {
-        return d;
-      }
-    }
-    
-    // Pattern 2: YYYY-MM-DD
-    if (cleanStr.includes('-')) {
-      const d = parse(cleanStr, 'yyyy-MM-dd', new Date());
-      if (isValid(d) && format(d, 'yyyy-MM-dd') === cleanStr) {
-        return d;
-      }
-    }
-    
-    return null;
-  };
 
   const resetState = () => {
     setStep('upload');
@@ -132,7 +178,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
       "firstName", 
       "otherNames", 
       "lastName", 
-      "dateOfBirth (DD/MM/YYYY)", 
+      "DOB (DD/MM/YYYY)", 
       "placeOfBirth", 
       "maritalStatus", 
       "educationLevel", 
@@ -143,10 +189,9 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
       "confirmationDate (DD/MM/YYYY)"
     ];
 
-    // Map long header descriptions back to technical keys for sample row alignment
     const sampleRow = importMode === 'update' 
       ? ["ID_FROM_DASHBOARD", "0240000000", "John", "Kofi", "Doe", "15/05/1990", "Accra", "Married", "Bachelor's Degree", "Yes", "20/12/2010", "Yes", "Grace Sanctuary", "10/11/2015"]
-      : ["", "0240000000", "Sarah", "", "Mensah", "12/03/1995", "Kumasi", "Single", "Diploma", "No", "", "No", "", ""];
+      : ["", "0241234567", "Sarah", "Ama", "Mensah", "12/03/1995", "Kumasi", "Single", "Diploma", "No", "", "No", "", ""];
     
     const csvContent = [headers.join(","), sampleRow.join(",")].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -164,14 +209,17 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
     const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
     if (lines.length < 2) return [];
     
-    // Clean headers to remove format hints like (DD/MM/YYYY) for mapping
-    const headers = lines[0].split(",").map(h => h.trim().split(' ')[0]);
+    // Map headers to canonical internal keys
+    const headers = lines[0].split(",").map(h => {
+      const part = h.trim().split(/[ (]/)[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+      return HEADER_MAP[part] || part;
+    });
     
     return lines.slice(1).map(line => {
-      const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(",");
+      const values = splitCSVLine(line);
       const row: any = {};
       headers.forEach((header, index) => {
-        row[header] = values[index]?.trim().replace(/^"(.*)"$/, '$1') || "";
+        row[header] = values[index] || "";
       });
       return row as CSVRow;
     });
@@ -218,10 +266,10 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
       }
 
       // 3. Data Integrity & Date Validation
-      if (row.dateOfBirth) {
-        const d = parseAndValidateDate(row.dateOfBirth);
+      if (row.DOB) {
+        const d = parseAndValidateDate(row.DOB);
         if (!d) { 
-          errors.push("Invalid DOB. Use DD/MM/YYYY"); 
+          errors.push("Invalid DOB format. Use DD/MM/YYYY"); 
           status = 'invalid'; 
         } else {
           updates.push("DOB");
@@ -271,7 +319,6 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
         return;
       }
       setRawRows(parsed);
-      validateData(parsed);
       setStep('preview');
     };
     reader.readAsText(file);
@@ -307,8 +354,8 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
         if (data.maritalStatus) ext.maritalStatus = data.maritalStatus;
         if (data.educationLevel) ext.educationLevel = data.educationLevel;
         
-        if (data.dateOfBirth) {
-          const d = parseAndValidateDate(data.dateOfBirth);
+        if (data.DOB) {
+          const d = parseAndValidateDate(data.DOB);
           if (d) ext.dateOfBirth = format(d, 'yyyy-MM-dd');
         }
 
@@ -421,17 +468,14 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Import Mode</Label>
-                    <div className="relative">
-                      <select 
-                        value={importMode} 
-                        onChange={(e) => setImportMode(e.target.value as ImportMode)}
-                        className="w-full h-11 px-4 rounded-xl bg-muted/30 border border-border text-sm font-bold focus:ring-2 focus:ring-primary focus:outline-none appearance-none cursor-pointer hover:bg-muted/50 transition-colors"
-                      >
-                        <option value="create">Register New Members</option>
-                        <option value="update">Update Existing Profiles</option>
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                    </div>
+                    <select 
+                      value={importMode} 
+                      onChange={(e) => setImportMode(e.target.value as ImportMode)}
+                      className="w-full h-11 px-4 rounded-xl bg-muted/30 border border-border text-sm font-bold focus:ring-2 focus:ring-primary focus:outline-none appearance-none cursor-pointer hover:bg-muted/50 transition-colors"
+                    >
+                      <option value="create">Register New Members (Registration)</option>
+                      <option value="update">Update Existing Profiles (Maintenance)</option>
+                    </select>
                   </div>
                   <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 space-y-2">
                     <p className="text-xs text-primary font-bold flex items-center gap-2 uppercase tracking-widest">
