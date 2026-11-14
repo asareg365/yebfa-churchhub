@@ -88,6 +88,35 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
 
   const normalizePhone = (phone: string) => phone?.replace(/\D/g, "") || "";
 
+  /**
+   * Strictly parses a date string into a Date object.
+   * Supports DD/MM/YYYY and YYYY-MM-DD.
+   * Prevents silent date overflow (e.g., Feb 31st becoming March 3rd).
+   */
+  const parseAndValidateDate = (dateStr: string) => {
+    if (!dateStr || !dateStr.trim()) return null;
+    const cleanStr = dateStr.trim();
+    
+    // Pattern 1: DD/MM/YYYY
+    if (cleanStr.includes('/')) {
+      const d = parse(cleanStr, 'dd/MM/yyyy', new Date());
+      // Strict check: formatting back must match input exactly
+      if (isValid(d) && format(d, 'dd/MM/yyyy') === cleanStr) {
+        return d;
+      }
+    }
+    
+    // Pattern 2: YYYY-MM-DD
+    if (cleanStr.includes('-')) {
+      const d = parse(cleanStr, 'yyyy-MM-dd', new Date());
+      if (isValid(d) && format(d, 'yyyy-MM-dd') === cleanStr) {
+        return d;
+      }
+    }
+    
+    return null;
+  };
+
   const resetState = () => {
     setStep('upload');
     setRawRows([]);
@@ -98,10 +127,23 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
 
   const downloadTemplate = () => {
     const headers = [
-      "memberId", "phoneNumber", "firstName", "otherNames", "lastName", 
-      "dateOfBirth", "placeOfBirth", "maritalStatus", "educationLevel", 
-      "baptised", "baptismDate", "confirmed", "confirmationPlace", "confirmationDate"
+      "memberId", 
+      "phoneNumber", 
+      "firstName", 
+      "otherNames", 
+      "lastName", 
+      "dateOfBirth (DD/MM/YYYY)", 
+      "placeOfBirth", 
+      "maritalStatus", 
+      "educationLevel", 
+      "baptised (Yes/No)", 
+      "baptismDate (DD/MM/YYYY)", 
+      "confirmed (Yes/No)", 
+      "confirmationPlace", 
+      "confirmationDate (DD/MM/YYYY)"
     ];
+
+    // Map long header descriptions back to technical keys for sample row alignment
     const sampleRow = importMode === 'update' 
       ? ["ID_FROM_DASHBOARD", "0240000000", "John", "Kofi", "Doe", "15/05/1990", "Accra", "Married", "Bachelor's Degree", "Yes", "20/12/2010", "Yes", "Grace Sanctuary", "10/11/2015"]
       : ["", "0240000000", "Sarah", "", "Mensah", "12/03/1995", "Kumasi", "Single", "Diploma", "No", "", "No", "", ""];
@@ -122,7 +164,9 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
     const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
     if (lines.length < 2) return [];
     
-    const headers = lines[0].split(",").map(h => h.trim());
+    // Clean headers to remove format hints like (DD/MM/YYYY) for mapping
+    const headers = lines[0].split(",").map(h => h.trim().split(' ')[0]);
+    
     return lines.slice(1).map(line => {
       const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(",");
       const row: any = {};
@@ -173,16 +217,35 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
         }
       }
 
-      // 3. Data Integrity
+      // 3. Data Integrity & Date Validation
       if (row.dateOfBirth) {
-        const d = parse(row.dateOfBirth, 'dd/MM/yyyy', new Date());
-        if (!isValid(d)) { errors.push("Invalid DOB (DD/MM/YYYY)"); status = 'invalid'; }
-        else updates.push("DOB");
+        const d = parseAndValidateDate(row.dateOfBirth);
+        if (!d) { 
+          errors.push("Invalid DOB. Use DD/MM/YYYY"); 
+          status = 'invalid'; 
+        } else {
+          updates.push("DOB");
+        }
       }
+
+      if (row.baptised?.toLowerCase() === 'yes') {
+        if (row.baptismDate) {
+          const d = parseAndValidateDate(row.baptismDate);
+          if (!d) { errors.push("Invalid Baptism Date"); status = 'invalid'; }
+        }
+        updates.push("Baptism");
+      }
+
+      if (row.confirmed?.toLowerCase() === 'yes') {
+        if (row.confirmationDate) {
+          const d = parseAndValidateDate(row.confirmationDate);
+          if (!d) { errors.push("Invalid Confirmation Date"); status = 'invalid'; }
+        }
+        updates.push("Confirmation");
+      }
+
       if (row.firstName || row.lastName) updates.push("Identity");
       if (row.placeOfBirth || row.maritalStatus) updates.push("Personal");
-      if (row.baptised?.toLowerCase() === 'yes') updates.push("Baptism");
-      if (row.confirmed?.toLowerCase() === 'yes') updates.push("Confirmation");
 
       return { row: index + 1, data: row, matchedMember, status, errors, updates };
     });
@@ -190,7 +253,6 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
     setValidationResults(results);
   }, [members, importMode]);
 
-  // Re-run validation if mode or members list changes after upload
   useEffect(() => {
     if (rawRows.length > 0) {
       validateData(rawRows);
@@ -246,21 +308,26 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
         if (data.educationLevel) ext.educationLevel = data.educationLevel;
         
         if (data.dateOfBirth) {
-          ext.dateOfBirth = format(parse(data.dateOfBirth, 'dd/MM/yyyy', new Date()), 'yyyy-MM-dd');
+          const d = parseAndValidateDate(data.dateOfBirth);
+          if (d) ext.dateOfBirth = format(d, 'yyyy-MM-dd');
         }
 
         if (data.baptised) {
+          const isBaptised = data.baptised.toLowerCase() === 'yes';
+          const d = data.baptismDate ? parseAndValidateDate(data.baptismDate) : null;
           ext.baptism = {
-            baptised: data.baptised.toLowerCase() === 'yes',
-            date: data.baptismDate ? format(parse(data.baptismDate, 'dd/MM/yyyy', new Date()), 'yyyy-MM-dd') : ""
+            baptised: isBaptised,
+            date: d ? format(d, 'yyyy-MM-dd') : (ext.baptism?.date || "")
           };
         }
 
         if (data.confirmed) {
+          const isConfirmed = data.confirmed.toLowerCase() === 'yes';
+          const d = data.confirmationDate ? parseAndValidateDate(data.confirmationDate) : null;
           ext.confirmation = {
-            confirmed: data.confirmed.toLowerCase() === 'yes',
-            place: data.confirmationPlace || "",
-            date: data.confirmationDate ? format(parse(data.confirmationDate, 'dd/MM/yyyy', new Date()), 'yyyy-MM-dd') : ""
+            confirmed: isConfirmed,
+            place: data.confirmationPlace || (ext.confirmation?.place || ""),
+            date: d ? format(d, 'yyyy-MM-dd') : (ext.confirmation?.date || "")
           };
         }
 
@@ -268,11 +335,23 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
         const finalName = `${ext.firstName || ''} ${ext.otherNames || ''} ${ext.lastName || ''}`.replace(/\s+/g, ' ').trim() || res.matchedMember?.name || data.firstName;
 
         if (importMode === 'update') {
-          batch.update(doc(membersRef, res.matchedMember.id), { extendedProfile: ext, name: finalName, profileStatus, updatedAt: serverTimestamp() });
+          batch.update(doc(membersRef, res.matchedMember.id), { 
+            extendedProfile: ext, 
+            name: finalName, 
+            profileStatus, 
+            dateOfBirth: ext.dateOfBirth || res.matchedMember.dateOfBirth || "",
+            updatedAt: serverTimestamp() 
+          });
         } else {
           batch.set(doc(membersRef), { 
-            name: finalName, phone: data.phoneNumber, extendedProfile: ext, profileStatus, 
-            status: "Active", joined: format(new Date(), 'yyyy-MM-dd'), createdAt: serverTimestamp() 
+            name: finalName, 
+            phone: data.phoneNumber, 
+            dateOfBirth: ext.dateOfBirth || "",
+            extendedProfile: ext, 
+            profileStatus, 
+            status: "Active", 
+            joined: format(new Date(), 'yyyy-MM-dd'), 
+            createdAt: serverTimestamp() 
           });
         }
       });
@@ -304,7 +383,6 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
     const link = document.createElement("a");
     link.setAttribute("href", url);
     link.setAttribute("download", `import_errors_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`);
-    link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -326,7 +404,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
                 <Database className="w-5 h-5 text-primary" />
                 Multi-Tenant CSV Importer
               </DialogTitle>
-              <DialogDescription>Bulk register or update members for {churchId}.</DialogDescription>
+              <DialogDescription>Bulk register or update members for this ministry.</DialogDescription>
             </div>
             {step !== 'upload' && !isProcessing && (
               <Button variant="ghost" size="sm" onClick={resetState} className="h-8">
@@ -338,19 +416,19 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
 
         <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 bg-background/50">
           {step === 'upload' && (
-            <div className="min-h-full flex flex-col items-center justify-center space-y-8 animate-in fade-in duration-500 py-12 px-6">
+            <div className="min-h-full flex flex-col items-center py-12 px-6 space-y-8 animate-in fade-in duration-500">
               <Card className="w-full max-w-md p-6 glass border-primary/20 shrink-0 shadow-2xl">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Selection Mode</Label>
+                    <Label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Import Mode</Label>
                     <div className="relative">
                       <select 
                         value={importMode} 
                         onChange={(e) => setImportMode(e.target.value as ImportMode)}
                         className="w-full h-11 px-4 rounded-xl bg-muted/30 border border-border text-sm font-bold focus:ring-2 focus:ring-primary focus:outline-none appearance-none cursor-pointer hover:bg-muted/50 transition-colors"
                       >
-                        <option value="create">Bulk Registration — Register New Members</option>
-                        <option value="update">Update Existing Profiles — Update Existing Profiles</option>
+                        <option value="create">Register New Members</option>
+                        <option value="update">Update Existing Profiles</option>
                       </select>
                       <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                     </div>
@@ -363,7 +441,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
                     <p className="text-[10px] text-muted-foreground leading-relaxed font-medium">
                       {importMode === 'update' 
                         ? "Matching by Member ID or unique Phone Number. Blank CSV cells will not erase existing data." 
-                        : "Required fields: First Name, Last Name, Phone. Duplicates will be rejected automatically."}
+                        : "Required fields: First Name, Last Name, Phone, DOB. Dates must be DD/MM/YYYY."}
                     </p>
                   </div>
                 </div>
@@ -374,41 +452,41 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
                   <div className="h-16 w-16 rounded-3xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform mb-4">
                     <DownloadCloud className="w-8 h-8" />
                   </div>
-                  <h3 className="font-bold text-lg mb-2">Upload Data</h3>
+                  <h3 className="font-bold text-lg mb-2">Upload CSV File</h3>
                   <Input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
-                  <Button variant="outline" className="rounded-xl px-8 h-11" type="button">Browse CSV</Button>
+                  <Button variant="outline" className="rounded-xl px-8 h-11" type="button">Browse Local Files</Button>
                 </div>
 
                 <div className="flex flex-col items-center p-8 rounded-[2rem] bg-accent/5 border border-accent/10 hover:border-accent/30 transition-all">
                   <div className="h-16 w-16 rounded-3xl bg-accent/10 flex items-center justify-center text-accent mb-4">
                     <FileText className="w-8 h-8" />
                   </div>
-                  <h3 className="font-bold text-lg mb-2">Get Template</h3>
-                  <Button onClick={downloadTemplate} className="rounded-xl px-8 h-11 bg-accent text-white" type="button">Download Template</Button>
+                  <h3 className="font-bold text-lg mb-2">Download Template</h3>
+                  <Button onClick={downloadTemplate} className="rounded-xl px-8 h-11 bg-accent text-white" type="button">Get CSV Format</Button>
                 </div>
               </div>
             </div>
           )}
 
           {step === 'preview' && (
-            <div className="h-full flex flex-col space-y-6 animate-in slide-in-from-right-4 duration-300 p-6">
-              <div className="flex flex-wrap gap-4 items-center justify-between bg-muted/20 p-6 rounded-3xl border shadow-sm">
+            <div className="min-h-full flex flex-col p-6 space-y-6 animate-in slide-in-from-right-4 duration-300">
+              <div className="flex flex-wrap gap-4 items-center justify-between bg-muted/20 p-6 rounded-3xl border shadow-sm shrink-0">
                 <div className="flex gap-8">
-                  <div className="text-center"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Rows</p><p className="text-2xl font-bold">{validationResults.length}</p></div>
+                  <div className="text-center"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Total</p><p className="text-2xl font-bold">{validationResults.length}</p></div>
                   <div className="text-center"><p className="text-[10px] font-bold text-accent uppercase tracking-wider mb-1">Valid</p><p className="text-2xl font-bold text-accent">{validationResults.filter(r => r.status === 'valid').length}</p></div>
-                  <div className="text-center"><p className="text-[10px] font-bold text-destructive uppercase tracking-wider mb-1">Issues</p><p className="text-2xl font-bold text-destructive">{validationResults.filter(r => r.status !== 'valid').length}</p></div>
+                  <div className="text-center"><p className="text-[10px] font-bold text-destructive uppercase tracking-wider mb-1">Errors</p><p className="text-2xl font-bold text-destructive">{validationResults.filter(r => r.status !== 'valid').length}</p></div>
                 </div>
                 <div className="flex gap-3">
                   {validationResults.some(r => r.status !== 'valid') && (
-                    <Button variant="outline" size="sm" onClick={downloadErrorLog} className="rounded-xl h-11 px-6 text-destructive border-destructive/20 hover:bg-destructive/5 font-bold">Download Issues</Button>
+                    <Button variant="outline" size="sm" onClick={downloadErrorLog} className="rounded-xl h-11 px-6 text-destructive border-destructive/20 hover:bg-destructive/5 font-bold">Download Error Log</Button>
                   )}
                   <Button onClick={executeImport} className="rounded-xl h-11 px-10 bg-primary font-bold shadow-lg shadow-primary/20" disabled={!validationResults.some(r => r.status === 'valid')}>
-                    <ClipboardCheck className="w-4 h-4 mr-2" /> Start Import
+                    <ClipboardCheck className="w-4 h-4 mr-2" /> Commit Import
                   </Button>
                 </div>
               </div>
 
-              <div className="border rounded-3xl overflow-hidden flex-1 min-h-[300px] shadow-inner bg-card">
+              <div className="border rounded-3xl overflow-hidden flex-1 shadow-inner bg-card min-h-[300px]">
                 <ScrollArea className="h-full">
                   <Table>
                     <TableHeader className="bg-muted/30 sticky top-0 z-20">
@@ -416,7 +494,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
                         <TableHead className="w-[50px] text-[10px] font-bold uppercase py-4">Row</TableHead>
                         <TableHead className="text-[10px] font-bold uppercase py-4">Identification</TableHead>
                         <TableHead className="text-[10px] font-bold uppercase py-4">Status</TableHead>
-                        <TableHead className="text-[10px] font-bold uppercase py-4">Errors / Actions</TableHead>
+                        <TableHead className="text-[10px] font-bold uppercase py-4">Updates / Validation</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -440,7 +518,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
                             </Badge>
                           </TableCell>
                           <TableCell className="text-[10px] max-w-[250px] text-muted-foreground italic leading-relaxed font-medium">
-                            {res.errors.length > 0 ? res.errors[0] : (res.status === 'valid' ? `Syncing: ${res.updates.join(', ')}` : "Skipped.")}
+                            {res.errors.length > 0 ? res.errors[0] : (res.status === 'valid' ? `Ready: ${res.updates.join(', ')}` : "No changes.")}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -452,23 +530,23 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
           )}
 
           {step === 'processing' && (
-            <div className="h-full flex flex-col items-center justify-center space-y-6 py-20">
+            <div className="h-full flex flex-col items-center justify-center py-20 space-y-6">
               <div className="relative"><div className="w-24 h-24 rounded-full border-4 border-muted border-t-primary animate-spin" /><div className="absolute inset-0 flex items-center justify-center"><Database className="w-8 h-8 text-primary animate-pulse" /></div></div>
-              <div className="text-center space-y-2"><h3 className="text-xl font-bold">Synchronizing Tenant Data...</h3><p className="text-sm text-muted-foreground animate-pulse">Batch operations in progress.</p></div>
+              <div className="text-center space-y-2"><h3 className="text-xl font-bold">Synchronizing Data...</h3><p className="text-sm text-muted-foreground animate-pulse">Writing batch operations to Firestore.</p></div>
             </div>
           )}
 
           {step === 'results' && (
-            <div className="h-full flex flex-col items-center justify-center space-y-8 animate-in zoom-in-95 duration-500 py-12 px-6">
+            <div className="min-h-full flex flex-col items-center py-12 px-6 space-y-8 animate-in zoom-in-95 duration-500">
               <div className="w-20 h-20 rounded-[2rem] bg-accent/10 flex items-center justify-center text-accent shadow-inner"><CheckCircle2 className="w-10 h-10" /></div>
-              <div className="text-center space-y-2"><h3 className="text-3xl font-bold">Import Finalized</h3><p className="text-muted-foreground">Directory updated successfully for {churchId}.</p></div>
+              <div className="text-center space-y-2"><h3 className="text-3xl font-bold">Import Finalized</h3><p className="text-muted-foreground">The ministry directory has been successfully updated.</p></div>
               <div className="grid grid-cols-4 gap-6 w-full max-w-2xl bg-muted/10 p-8 rounded-[2rem] border text-center shrink-0 shadow-sm">
                  <div><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1 tracking-widest">Rows</p><p className="text-2xl font-bold">{importStats.total}</p></div>
                  <div><p className="text-[10px] font-bold text-accent uppercase mb-1 tracking-widest">Success</p><p className="text-2xl font-bold text-accent">{importStats.success}</p></div>
                  <div><p className="text-[10px] font-bold text-destructive uppercase mb-1 tracking-widest">Errors</p><p className="text-2xl font-bold text-destructive">{importStats.failed}</p></div>
                  <div><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1 tracking-widest">Skipped</p><p className="text-2xl font-bold">{importStats.skipped}</p></div>
               </div>
-              <Button onClick={() => { setIsOpen(false); resetState(); }} className="rounded-xl h-12 px-12 bg-primary font-bold shadow-lg shadow-primary/20">Done</Button>
+              <Button onClick={() => { setIsOpen(false); resetState(); }} className="rounded-xl h-12 px-12 bg-primary font-bold shadow-lg shadow-primary/20">Return to Directory</Button>
             </div>
           )}
         </div>
@@ -476,7 +554,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
         <DialogFooter className="p-4 bg-muted/10 border-t shrink-0">
           <p className="text-[10px] text-muted-foreground flex items-center gap-2 font-medium">
             <Layers className="w-3 h-3 text-accent" />
-            Security: Tenant isolation enforced. Imports affect only {churchId}.
+            Security Rules Active: Data isolation strictly enforced for church context.
           </p>
         </DialogFooter>
       </DialogContent>
