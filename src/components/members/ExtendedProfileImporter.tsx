@@ -113,6 +113,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const parseCSV = (text: string): CSVRow[] => {
@@ -277,12 +278,27 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
   const downloadErrorLog = () => {
     const errorRows = validationResults.filter(r => r.status !== 'valid');
     const headers = ["Row", "MemberID", "Phone", "Status", "Errors"];
-    const csvContent = [headers.join(","), ...errorRows.map(r => [r.row, r.data.memberId, r.data.phoneNumber, r.status.toUpperCase(), `"${r.errors.join('; ')}"`].join(","))].join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const csvContent = [
+      headers.join(","), 
+      ...errorRows.map(r => [
+        r.row, 
+        r.data.memberId, 
+        r.data.phoneNumber, 
+        r.status.toUpperCase(), 
+        `"${r.errors.join('; ')}"`
+      ].join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
     link.setAttribute("download", `import_errors_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
