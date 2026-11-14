@@ -309,7 +309,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
         </Button>
       </DialogTrigger>
       <DialogContent className="glass max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-        <DialogHeader className="p-6 bg-muted/20 border-b">
+        <DialogHeader className="p-6 bg-muted/20 border-b shrink-0">
           <div className="flex justify-between items-center">
             <div className="space-y-1">
               <DialogTitle className="text-xl font-bold flex items-center gap-2">
@@ -326,10 +326,10 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden p-6">
+        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar min-h-0">
           {step === 'upload' && (
-            <div className="h-full flex flex-col items-center justify-center space-y-8 animate-in fade-in duration-500">
-              <Card className="w-full max-w-md p-6 glass border-primary/20">
+            <div className="min-h-full flex flex-col items-center justify-center space-y-8 animate-in fade-in duration-500 py-8">
+              <Card className="w-full max-w-md p-6 glass border-primary/20 shrink-0">
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase text-muted-foreground">Selection Mode</Label>
@@ -364,7 +364,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
                   </div>
                   <h3 className="font-bold text-lg mb-2">Upload Data</h3>
                   <Input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
-                  <Button variant="outline" className="rounded-xl px-8">Browse CSV</Button>
+                  <Button variant="outline" className="rounded-xl px-8" type="button">Browse CSV</Button>
                 </div>
 
                 <div className="flex flex-col items-center p-8 rounded-[2rem] bg-accent/5 border border-accent/10 hover:border-accent/30 transition-all">
@@ -372,7 +372,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
                     <FileText className="w-8 h-8" />
                   </div>
                   <h3 className="font-bold text-lg mb-2">Get Template</h3>
-                  <Button onClick={downloadTemplate} className="rounded-xl px-8 bg-accent text-white">Download Template</Button>
+                  <Button onClick={downloadTemplate} className="rounded-xl px-8 bg-accent text-white" type="button">Download Template</Button>
                 </div>
               </div>
             </div>
@@ -396,7 +396,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
                 </div>
               </div>
 
-              <div className="border rounded-2xl overflow-hidden flex-1">
+              <div className="border rounded-2xl overflow-hidden flex-1 min-h-0">
                 <ScrollArea className="h-full">
                   <Table>
                     <TableHeader className="bg-muted/30 sticky top-0 z-20">
@@ -447,10 +447,10 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
           )}
 
           {step === 'results' && (
-            <div className="h-full flex flex-col items-center justify-center space-y-8 animate-in zoom-in-95 duration-500">
+            <div className="h-full flex flex-col items-center justify-center space-y-8 animate-in zoom-in-95 duration-500 py-8">
               <div className="w-20 h-20 rounded-[2rem] bg-accent/10 flex items-center justify-center text-accent shadow-inner"><CheckCircle2 className="w-10 h-10" /></div>
               <div className="text-center space-y-2"><h3 className="text-3xl font-bold">Import Finalized</h3><p className="text-muted-foreground">Directory updated successfully for {churchId}.</p></div>
-              <div className="grid grid-cols-4 gap-6 w-full max-w-2xl bg-muted/10 p-8 rounded-3xl border text-center">
+              <div className="grid grid-cols-4 gap-6 w-full max-w-2xl bg-muted/10 p-8 rounded-3xl border text-center shrink-0">
                  <div><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Rows</p><p className="text-2xl font-bold">{importStats.total}</p></div>
                  <div><p className="text-[10px] font-bold text-accent uppercase mb-1">Success</p><p className="text-2xl font-bold text-accent">{importStats.success}</p></div>
                  <div><p className="text-[10px] font-bold text-destructive uppercase mb-1">Errors</p><p className="text-2xl font-bold text-destructive">{importStats.failed}</p></div>
@@ -461,7 +461,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
           )}
         </div>
 
-        <DialogFooter className="p-4 bg-muted/10 border-t">
+        <DialogFooter className="p-4 bg-muted/10 border-t shrink-0">
           <p className="text-[10px] text-muted-foreground flex items-center gap-2">
             <Layers className="w-3 h-3 text-accent" />
             Security: Tenant isolation enforced. Imports affect only {churchId}.
