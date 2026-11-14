@@ -1,20 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { Header } from '@/components/dashboard/Header';
 import { Footer } from '@/components/dashboard/Footer';
-import { useUser, useCollection, useFirestore } from '@/firebase';
-import { collection, query, where, limit } from 'firebase/firestore';
+import { useUser } from '@/firebase';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { SearchProvider } from '@/context/search-context';
-import { TenantProvider } from "@/context/tenant-context";
-
-const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+import { TenantProvider, useTenant } from "@/context/tenant-context";
 
 const CrossIcon = ({ className }: { className?: string }) => (
   <svg 
@@ -33,54 +30,18 @@ const CrossIcon = ({ className }: { className?: string }) => (
 
 /**
  * Dashboard Layout Logic Wrapper
- * Separated to consume context from TenantProvider
+ * Consumes context from TenantProvider
  */
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const { user, loading: userLoading } = useUser();
-  const db = useFirestore();
+  const { currentChurch, loading: churchLoading, isSuperAdmin } = useTenant();
   const router = useRouter();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
-  const [selectedTenantSlug, setSelectedTenantSlug] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    const saved = localStorage.getItem("global_admin_selected_tenant");
-    if (saved) {
-      setSelectedTenantSlug(saved.toLowerCase().trim());
-    }
   }, []);
-
-  const isSuperAdmin = useMemo(() => {
-    return user?.email && SUPER_ADMINS.includes(user.email.toLowerCase().trim());
-  }, [user?.email]);
-
-  const churchQuery = useMemo(() => {
-    if (!user?.email || !db) return null;
-    const normalizedEmail = user.email.toLowerCase().trim();
-
-    /*
-     * SUPER ADMIN Logic (Aligned with TenantProvider)
-     * Never fall back to adminEmails list for Super Admins.
-     */
-    if (isSuperAdmin) {
-      if (!selectedTenantSlug) return null;
-      return query(
-        collection(db, 'churches'),
-        where('slug', '==', selectedTenantSlug),
-        limit(1)
-      );
-    }
-
-    return query(
-      collection(db, 'churches'),
-      where('adminEmails', 'array-contains', normalizedEmail),
-      limit(1)
-    );
-  }, [db, user?.email, isSuperAdmin, selectedTenantSlug]);
-
-  const { data: churches, loading: churchLoading } = useCollection(churchQuery);
-  const currentChurch = churches?.[0];
 
   // Theme Enforcement
   useEffect(() => {

@@ -264,7 +264,7 @@ export default function MembersPage() {
           <p className="text-muted-foreground">Managing directory for {currentChurch?.name || "your ministry"}.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
-          {extendedEnabled && currentChurch?.id && (
+          {currentChurch?.id && (
              <ExtendedProfileImporter churchId={currentChurch.id} members={members || []} />
           )}
 
