@@ -38,6 +38,7 @@ import { useFirestore } from "@/firebase";
 import { doc, writeBatch, serverTimestamp, collection } from "firebase/firestore";
 import { format, parse, isValid } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useTenant } from "@/context/tenant-context";
 
 interface ExtendedProfileImporterProps {
   churchId: string;
@@ -47,16 +48,22 @@ interface ExtendedProfileImporterProps {
 type ImportStep = 'upload' | 'preview' | 'processing' | 'results';
 type ImportMode = 'create' | 'update';
 
+const DEPARTMENTS = ["Music", "Youth", "Media", "Children", "Welfare", "Ushering", "Evangelism"];
+
 interface CSVRow {
   memberId: string;
   phoneNumber: string;
   firstName: string;
   otherNames: string;
   lastName: string;
+  gender: string;
   DOB: string;
   placeOfBirth: string;
   maritalStatus: string;
   educationLevel: string;
+  department: string;
+  membershipStatus: string;
+  dateJoined: string;
   baptised: string;
   baptismDate: string;
   confirmed: string;
@@ -74,19 +81,13 @@ interface ValidationResult {
   updates: string[];
 }
 
-/**
- * Robust date parser supporting DD/MM/YYYY and YYYY-MM-DD.
- * Rejects impossible dates and normalizes to YYYY-MM-DD.
- */
 const parseAndValidateDate = (dateStr: string) => {
   if (!dateStr || !dateStr.trim()) return null;
   const cleanStr = dateStr.trim();
   
-  // Try YYYY-MM-DD first
   let d = parse(cleanStr, 'yyyy-MM-dd', new Date());
   if (isValid(d) && format(d, 'yyyy-MM-dd') === cleanStr) return d;
 
-  // Try DD/MM/YYYY
   d = parse(cleanStr, 'dd/MM/yyyy', new Date());
   if (isValid(d)) {
     const parts = cleanStr.split('/');
@@ -103,9 +104,6 @@ const parseAndValidateDate = (dateStr: string) => {
   return null;
 };
 
-/**
- * Split CSV line correctly handling quotes and empty fields
- */
 const splitCSVLine = (line: string) => {
   const result = [];
   let current = '';
@@ -136,12 +134,22 @@ const HEADER_MAP: Record<string, string> = {
   'othernam': 'otherNames',
   'lastname': 'lastName',
   'lastnam': 'lastName',
+  'gender': 'gender',
+  'sex': 'gender',
   'dob': 'DOB',
   'dateofbirth': 'DOB',
   'placeofbirth': 'placeOfBirth',
   'placeofbir': 'placeOfBirth',
   'maritalstatus': 'maritalStatus',
+  'marital': 'maritalStatus',
   'educationlevel': 'educationLevel',
+  'education': 'educationLevel',
+  'department': 'department',
+  'dept': 'department',
+  'membershipstatus': 'membershipStatus',
+  'status': 'membershipStatus',
+  'datejoined': 'dateJoined',
+  'joined': 'dateJoined',
   'baptised': 'baptised',
   'baptismdate': 'baptismDate',
   'confirmed': 'confirmed',
@@ -178,10 +186,14 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
       "firstName", 
       "otherNames", 
       "lastName", 
+      "gender (Male/Female)",
       "DOB (DD/MM/YYYY)", 
       "placeOfBirth", 
       "maritalStatus", 
       "educationLevel", 
+      "department",
+      "membershipStatus (Active/Inactive)",
+      "dateJoined (DD/MM/YYYY)",
       "baptised (Yes/No)", 
       "baptismDate (DD/MM/YYYY)", 
       "confirmed (Yes/No)", 
@@ -190,15 +202,15 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
     ];
 
     const sampleRow = importMode === 'update' 
-      ? ["ID_FROM_DASHBOARD", "0240000000", "John", "Kofi", "Doe", "15/05/1990", "Accra", "Married", "Bachelor's Degree", "Yes", "20/12/2010", "Yes", "Grace Sanctuary", "10/11/2015"]
-      : ["", "0241234567", "Sarah", "Ama", "Mensah", "12/03/1995", "Kumasi", "Single", "Diploma", "No", "", "No", "", ""];
+      ? ["ID_FROM_DASHBOARD", "0240000000", "John", "Kofi", "Doe", "Male", "15/05/1990", "Accra", "Married", "Bachelor's Degree", "Music", "Active", "01/01/2023", "Yes", "20/12/2010", "Yes", "Grace Sanctuary", "10/11/2015"]
+      : ["", "0241234567", "Sarah", "Ama", "Mensah", "Female", "12/03/1995", "Kumasi", "Single", "Diploma", "Youth", "Active", "15/02/2024", "No", "", "No", "", ""];
     
     const csvContent = [headers.join(","), sampleRow.join(",")].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `churchhub_${importMode}_template.csv`);
+    link.setAttribute("download", `churchhub_master_${importMode}_template.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -209,7 +221,6 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
     const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
     if (lines.length < 2) return [];
     
-    // Map headers to canonical internal keys
     const headers = lines[0].split(",").map(h => {
       const part = h.trim().split(/[ (]/)[0].toLowerCase().replace(/[^a-z0-9]/g, '');
       return HEADER_MAP[part] || part;
@@ -234,7 +245,6 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
 
       const csvPhone = normalizePhone(row.phoneNumber);
 
-      // 1. Matching Logic
       if (row.memberId) {
         matchedMember = members.find(m => m.id === row.memberId);
       }
@@ -248,7 +258,6 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
         }
       }
 
-      // 2. Mode-Specific Validation
       if (importMode === 'update') {
         if (!matchedMember && status !== 'ambiguous') {
           status = 'not_found';
@@ -265,15 +274,30 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
         }
       }
 
-      // 3. Data Integrity & Date Validation
       if (row.DOB) {
         const d = parseAndValidateDate(row.DOB);
-        if (!d) { 
-          errors.push("Invalid DOB format. Use DD/MM/YYYY"); 
-          status = 'invalid'; 
-        } else {
-          updates.push("DOB");
-        }
+        if (!d) { errors.push("Invalid DOB format. Use DD/MM/YYYY"); status = 'invalid'; }
+        else updates.push("DOB");
+      }
+
+      if (row.dateJoined) {
+        const d = parseAndValidateDate(row.dateJoined);
+        if (!d) { errors.push("Invalid Joined Date"); status = 'invalid'; }
+        else updates.push("Joined");
+      }
+
+      if (row.department) {
+        if (!DEPARTMENTS.some(d => d.toLowerCase() === row.department.toLowerCase())) {
+          errors.push(`Invalid Dept: ${row.department}`);
+          status = 'invalid';
+        } else updates.push("Dept");
+      }
+
+      if (row.gender) {
+        if (!['male', 'female'].includes(row.gender.toLowerCase())) {
+          errors.push("Gender must be Male or Female");
+          status = 'invalid';
+        } else updates.push("Gender");
       }
 
       if (row.baptised?.toLowerCase() === 'yes') {
@@ -294,6 +318,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
 
       if (row.firstName || row.lastName) updates.push("Identity");
       if (row.placeOfBirth || row.maritalStatus) updates.push("Personal");
+      if (row.membershipStatus) updates.push("Status");
 
       return { row: index + 1, data: row, matchedMember, status, errors, updates };
     });
@@ -354,9 +379,37 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
         if (data.maritalStatus) ext.maritalStatus = data.maritalStatus;
         if (data.educationLevel) ext.educationLevel = data.educationLevel;
         
+        const updateObj: any = { updatedAt: serverTimestamp() };
+
         if (data.DOB) {
           const d = parseAndValidateDate(data.DOB);
-          if (d) ext.dateOfBirth = format(d, 'yyyy-MM-dd');
+          if (d) {
+            const formatted = format(d, 'yyyy-MM-dd');
+            ext.dateOfBirth = formatted;
+            updateObj.dateOfBirth = formatted;
+            // Calculate birthday key MMDD
+            updateObj.birthdayKey = format(d, 'MMdd');
+          }
+        }
+
+        if (data.dateJoined) {
+          const d = parseAndValidateDate(data.dateJoined);
+          if (d) updateObj.joined = format(d, 'yyyy-MM-dd');
+        }
+
+        if (data.department) {
+          const resolvedDept = DEPARTMENTS.find(d => d.toLowerCase() === data.department.toLowerCase());
+          if (resolvedDept) updateObj.department = resolvedDept;
+        }
+
+        if (data.membershipStatus) {
+          const status = data.membershipStatus.toLowerCase().includes('inactive') ? 'Inactive' : 'Active';
+          updateObj.status = status;
+        }
+
+        if (data.gender) {
+          const gender = data.gender.toLowerCase().startsWith('m') ? 'Male' : 'Female';
+          updateObj.gender = gender;
         }
 
         if (data.baptised) {
@@ -381,25 +434,18 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
         const profileStatus = (['firstName', 'lastName', 'placeOfBirth'].every(f => !!ext[f])) ? "Complete" : "Incomplete";
         const finalName = `${ext.firstName || ''} ${ext.otherNames || ''} ${ext.lastName || ''}`.replace(/\s+/g, ' ').trim() || res.matchedMember?.name || data.firstName;
 
+        updateObj.extendedProfile = ext;
+        updateObj.name = finalName;
+        updateObj.profileStatus = profileStatus;
+
         if (importMode === 'update') {
-          batch.update(doc(membersRef, res.matchedMember.id), { 
-            extendedProfile: ext, 
-            name: finalName, 
-            profileStatus, 
-            dateOfBirth: ext.dateOfBirth || res.matchedMember.dateOfBirth || "",
-            updatedAt: serverTimestamp() 
-          });
+          batch.update(doc(membersRef, res.matchedMember.id), updateObj);
         } else {
-          batch.set(doc(membersRef), { 
-            name: finalName, 
-            phone: data.phoneNumber, 
-            dateOfBirth: ext.dateOfBirth || "",
-            extendedProfile: ext, 
-            profileStatus, 
-            status: "Active", 
-            joined: format(new Date(), 'yyyy-MM-dd'), 
-            createdAt: serverTimestamp() 
-          });
+          updateObj.phone = data.phoneNumber;
+          updateObj.status = updateObj.status || "Active";
+          updateObj.joined = updateObj.joined || format(new Date(), 'yyyy-MM-dd');
+          updateObj.createdAt = serverTimestamp();
+          batch.set(doc(membersRef), updateObj);
         }
       });
 
@@ -440,7 +486,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
     <Dialog open={isOpen} onOpenChange={(v) => { setIsOpen(v); if(!v) resetState(); }}>
       <DialogTrigger asChild>
         <Button variant="outline" className="rounded-xl border-primary/20 text-primary hover:bg-primary/5">
-          <FileUp className="w-4 h-4 mr-2" /> CSV Bulk Import
+          <FileUp className="w-4 h-4 mr-2" /> Master CSV Import
         </Button>
       </DialogTrigger>
       <DialogContent className="glass max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
@@ -449,9 +495,9 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
             <div className="space-y-1">
               <DialogTitle className="text-xl font-bold flex items-center gap-2">
                 <Database className="w-5 h-5 text-primary" />
-                Multi-Tenant CSV Importer
+                Member Master Importer
               </DialogTitle>
-              <DialogDescription>Bulk register or update members for this ministry.</DialogDescription>
+              <DialogDescription>Universal field mapping for registration and updates.</DialogDescription>
             </div>
             {step !== 'upload' && !isProcessing && (
               <Button variant="ghost" size="sm" onClick={resetState} className="h-8">
@@ -461,31 +507,31 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 bg-background/50">
+        <div className="flex-1 overflow-y-auto custom-scrollbar bg-background/50">
           {step === 'upload' && (
-            <div className="min-h-full flex flex-col items-center py-12 px-6 space-y-8 animate-in fade-in duration-500">
-              <Card className="w-full max-w-md p-6 glass border-primary/20 shrink-0 shadow-2xl">
+            <div className="flex flex-col items-center py-12 px-6 space-y-8 animate-in fade-in duration-500">
+              <Card className="w-full max-w-md p-6 glass border-primary/20 shadow-2xl">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Import Mode</Label>
+                    <Label className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Selection Mode</Label>
                     <select 
                       value={importMode} 
                       onChange={(e) => setImportMode(e.target.value as ImportMode)}
-                      className="w-full h-11 px-4 rounded-xl bg-muted/30 border border-border text-sm font-bold focus:ring-2 focus:ring-primary focus:outline-none appearance-none cursor-pointer hover:bg-muted/50 transition-colors"
+                      className="w-full h-11 px-4 rounded-xl bg-muted/30 border border-border text-sm font-bold focus:ring-2 focus:ring-primary focus:outline-none appearance-none cursor-pointer"
                     >
-                      <option value="create">Register New Members (Registration)</option>
+                      <option value="create">Register New Members (Initial Load)</option>
                       <option value="update">Update Existing Profiles (Maintenance)</option>
                     </select>
                   </div>
                   <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 space-y-2">
                     <p className="text-xs text-primary font-bold flex items-center gap-2 uppercase tracking-widest">
                       {importMode === 'update' ? <Search className="w-3 h-3" /> : <UserPlus className="w-3 h-3" />}
-                      {importMode === 'update' ? "Match & Sync" : "Bulk Registration"}
+                      {importMode === 'update' ? "Maintenance Mode" : "Bulk Registration"}
                     </p>
                     <p className="text-[10px] text-muted-foreground leading-relaxed font-medium">
                       {importMode === 'update' 
-                        ? "Matching by Member ID or unique Phone Number. Blank CSV cells will not erase existing data." 
-                        : "Required fields: First Name, Last Name, Phone, DOB. Dates must be DD/MM/YYYY."}
+                        ? "Updates all fields including Dept, Status, and Extended Data. Match by ID or unique Phone." 
+                        : "Creates new records. Full names will be constructed from structured name columns."}
                     </p>
                   </div>
                 </div>
@@ -496,73 +542,71 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
                   <div className="h-16 w-16 rounded-3xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform mb-4">
                     <DownloadCloud className="w-8 h-8" />
                   </div>
-                  <h3 className="font-bold text-lg mb-2">Upload CSV File</h3>
+                  <h3 className="font-bold text-lg mb-2">Upload Master CSV</h3>
                   <Input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
-                  <Button variant="outline" className="rounded-xl px-8 h-11" type="button">Browse Local Files</Button>
+                  <Button variant="outline" className="rounded-xl px-8 h-11">Browse Files</Button>
                 </div>
 
                 <div className="flex flex-col items-center p-8 rounded-[2rem] bg-accent/5 border border-accent/10 hover:border-accent/30 transition-all">
                   <div className="h-16 w-16 rounded-3xl bg-accent/10 flex items-center justify-center text-accent mb-4">
                     <FileText className="w-8 h-8" />
                   </div>
-                  <h3 className="font-bold text-lg mb-2">Download Template</h3>
-                  <Button onClick={downloadTemplate} className="rounded-xl px-8 h-11 bg-accent text-white" type="button">Get CSV Format</Button>
+                  <h3 className="font-bold text-lg mb-2">Get Master Template</h3>
+                  <Button onClick={downloadTemplate} className="rounded-xl px-8 h-11 bg-accent text-white">Full Schema CSV</Button>
                 </div>
               </div>
             </div>
           )}
 
           {step === 'preview' && (
-            <div className="min-h-full flex flex-col p-6 space-y-6 animate-in slide-in-from-right-4 duration-300">
-              <div className="flex flex-wrap gap-4 items-center justify-between bg-muted/20 p-6 rounded-3xl border shadow-sm shrink-0">
+            <div className="flex flex-col p-6 space-y-6 animate-in slide-in-from-right-4 duration-300">
+              <div className="flex flex-wrap gap-4 items-center justify-between bg-muted/20 p-6 rounded-3xl border shadow-sm">
                 <div className="flex gap-8">
-                  <div className="text-center"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Total</p><p className="text-2xl font-bold">{validationResults.length}</p></div>
+                  <div className="text-center"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Rows</p><p className="text-2xl font-bold">{validationResults.length}</p></div>
                   <div className="text-center"><p className="text-[10px] font-bold text-accent uppercase tracking-wider mb-1">Valid</p><p className="text-2xl font-bold text-accent">{validationResults.filter(r => r.status === 'valid').length}</p></div>
                   <div className="text-center"><p className="text-[10px] font-bold text-destructive uppercase tracking-wider mb-1">Errors</p><p className="text-2xl font-bold text-destructive">{validationResults.filter(r => r.status !== 'valid').length}</p></div>
                 </div>
                 <div className="flex gap-3">
                   {validationResults.some(r => r.status !== 'valid') && (
-                    <Button variant="outline" size="sm" onClick={downloadErrorLog} className="rounded-xl h-11 px-6 text-destructive border-destructive/20 hover:bg-destructive/5 font-bold">Download Error Log</Button>
+                    <Button variant="outline" onClick={downloadErrorLog} className="rounded-xl h-11 px-6 text-destructive border-destructive/20 hover:bg-destructive/5 font-bold">Error Report</Button>
                   )}
                   <Button onClick={executeImport} className="rounded-xl h-11 px-10 bg-primary font-bold shadow-lg shadow-primary/20" disabled={!validationResults.some(r => r.status === 'valid')}>
-                    <ClipboardCheck className="w-4 h-4 mr-2" /> Commit Import
+                    <ClipboardCheck className="w-4 h-4 mr-2" /> Commit {importMode === 'create' ? 'Registration' : 'Updates'}
                   </Button>
                 </div>
               </div>
 
-              <div className="border rounded-3xl overflow-hidden flex-1 shadow-inner bg-card min-h-[300px]">
-                <ScrollArea className="h-full">
+              <div className="border rounded-3xl overflow-hidden shadow-inner bg-card">
+                <ScrollArea className="h-[400px]">
                   <Table>
                     <TableHeader className="bg-muted/30 sticky top-0 z-20">
-                      <TableRow className="border-border">
+                      <TableRow>
                         <TableHead className="w-[50px] text-[10px] font-bold uppercase py-4">Row</TableHead>
                         <TableHead className="text-[10px] font-bold uppercase py-4">Identification</TableHead>
                         <TableHead className="text-[10px] font-bold uppercase py-4">Status</TableHead>
-                        <TableHead className="text-[10px] font-bold uppercase py-4">Updates / Validation</TableHead>
+                        <TableHead className="text-[10px] font-bold uppercase py-4">Fields to Map</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {validationResults.map((res) => (
-                        <TableRow key={res.row} className="hover:bg-muted/5 border-border">
+                        <TableRow key={res.row} className="hover:bg-muted/5">
                           <TableCell className="text-xs font-mono font-bold text-muted-foreground">{res.row}</TableCell>
                           <TableCell>
                             <div className="space-y-0.5">
                               <p className="font-bold text-sm">{res.matchedMember?.name || `${res.data.firstName} ${res.data.lastName}`}</p>
-                              <p className="text-[10px] font-mono text-muted-foreground">{res.data.phoneNumber}</p>
+                              <p className="text-[10px] font-mono text-muted-foreground">{res.data.phoneNumber || res.data.memberId}</p>
                             </div>
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline" className={cn(
                               "text-[9px] font-bold uppercase flex items-center gap-1 w-fit",
-                              res.status === 'valid' ? "border-accent text-accent bg-accent/5" : 
-                              res.status === 'duplicate' ? "border-amber-500 text-amber-600 bg-amber-50" : "border-destructive text-destructive bg-destructive/5"
+                              res.status === 'valid' ? "border-accent text-accent bg-accent/5" : "border-destructive text-destructive bg-destructive/5"
                             )}>
-                              {res.status === 'valid' ? <CheckCircle2 className="w-2.5 h-2.5" /> : <AlertTriangle className="w-2.5 h-2.5" />}
                               {res.status.replace('_', ' ')}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-[10px] max-w-[250px] text-muted-foreground italic leading-relaxed font-medium">
-                            {res.errors.length > 0 ? res.errors[0] : (res.status === 'valid' ? `Ready: ${res.updates.join(', ')}` : "No changes.")}
+                          <TableCell className="text-[10px] max-w-[250px] text-muted-foreground italic font-medium">
+                            {res.errors.length > 0 ? res.errors[0] : (res.status === 'valid' ? `Mapping: ${res.updates.join(', ')}` : "No change.")}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -574,23 +618,23 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
           )}
 
           {step === 'processing' && (
-            <div className="h-full flex flex-col items-center justify-center py-20 space-y-6">
+            <div className="flex flex-col items-center justify-center py-24 space-y-6">
               <div className="relative"><div className="w-24 h-24 rounded-full border-4 border-muted border-t-primary animate-spin" /><div className="absolute inset-0 flex items-center justify-center"><Database className="w-8 h-8 text-primary animate-pulse" /></div></div>
-              <div className="text-center space-y-2"><h3 className="text-xl font-bold">Synchronizing Data...</h3><p className="text-sm text-muted-foreground animate-pulse">Writing batch operations to Firestore.</p></div>
+              <div className="text-center space-y-2"><h3 className="text-xl font-bold">Writing Master Records...</h3><p className="text-sm text-muted-foreground animate-pulse">Processing multi-field synchronization.</p></div>
             </div>
           )}
 
           {step === 'results' && (
-            <div className="min-h-full flex flex-col items-center py-12 px-6 space-y-8 animate-in zoom-in-95 duration-500">
+            <div className="flex flex-col items-center py-12 px-6 space-y-8 animate-in zoom-in-95 duration-500">
               <div className="w-20 h-20 rounded-[2rem] bg-accent/10 flex items-center justify-center text-accent shadow-inner"><CheckCircle2 className="w-10 h-10" /></div>
-              <div className="text-center space-y-2"><h3 className="text-3xl font-bold">Import Finalized</h3><p className="text-muted-foreground">The ministry directory has been successfully updated.</p></div>
-              <div className="grid grid-cols-4 gap-6 w-full max-w-2xl bg-muted/10 p-8 rounded-[2rem] border text-center shrink-0 shadow-sm">
-                 <div><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1 tracking-widest">Rows</p><p className="text-2xl font-bold">{importStats.total}</p></div>
-                 <div><p className="text-[10px] font-bold text-accent uppercase mb-1 tracking-widest">Success</p><p className="text-2xl font-bold text-accent">{importStats.success}</p></div>
-                 <div><p className="text-[10px] font-bold text-destructive uppercase mb-1 tracking-widest">Errors</p><p className="text-2xl font-bold text-destructive">{importStats.failed}</p></div>
-                 <div><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1 tracking-widest">Skipped</p><p className="text-2xl font-bold">{importStats.skipped}</p></div>
+              <div className="text-center space-y-2"><h3 className="text-3xl font-bold">Batch Complete</h3><p className="text-muted-foreground">All master fields have been synchronized for this tenant.</p></div>
+              <div className="grid grid-cols-4 gap-6 w-full max-w-2xl bg-muted/10 p-8 rounded-[2rem] border text-center shadow-sm">
+                 <div><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Total</p><p className="text-2xl font-bold">{importStats.total}</p></div>
+                 <div><p className="text-[10px] font-bold text-accent uppercase mb-1">Success</p><p className="text-2xl font-bold text-accent">{importStats.success}</p></div>
+                 <div><p className="text-[10px] font-bold text-destructive uppercase mb-1">Failed</p><p className="text-2xl font-bold text-destructive">{importStats.failed}</p></div>
+                 <div><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Skipped</p><p className="text-2xl font-bold">{importStats.skipped}</p></div>
               </div>
-              <Button onClick={() => { setIsOpen(false); resetState(); }} className="rounded-xl h-12 px-12 bg-primary font-bold shadow-lg shadow-primary/20">Return to Directory</Button>
+              <Button onClick={() => { setIsOpen(false); resetState(); }} className="rounded-xl h-12 px-12 bg-primary font-bold shadow-lg shadow-primary/20">Finish and Close</Button>
             </div>
           )}
         </div>
@@ -598,7 +642,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
         <DialogFooter className="p-4 bg-muted/10 border-t shrink-0">
           <p className="text-[10px] text-muted-foreground flex items-center gap-2 font-medium">
             <Layers className="w-3 h-3 text-accent" />
-            Security Rules Active: Data isolation strictly enforced for church context.
+            Master Template v2.0: Supports Department, Status, and full Extended Profile mapping.
           </p>
         </DialogFooter>
       </DialogContent>
