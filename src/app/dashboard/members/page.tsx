@@ -23,7 +23,8 @@ import {
   UserCheck,
   CheckCircle2,
   AlertCircle,
-  ArrowRight
+  ArrowRight,
+  Database
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,6 +68,7 @@ import { useCollection, useFirestore, useUser } from "@/firebase";
 import { collection, addDoc, serverTimestamp, doc, deleteDoc, query, where, limit, writeBatch, updateDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { useTenant } from "@/context/tenant-context";
+import { ExtendedProfileImporter } from "@/components/members/ExtendedProfileImporter";
 
 const DEPARTMENTS = ["Music", "Youth", "Media", "Children", "Welfare", "Ushering", "Evangelism"];
 
@@ -262,6 +264,10 @@ export default function MembersPage() {
           <p className="text-muted-foreground">Managing directory for {currentChurch?.name || "your ministry"}.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
+          {extendedEnabled && currentChurch?.id && (
+             <ExtendedProfileImporter churchId={currentChurch.id} members={members || []} />
+          )}
+
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild><Button className="flex-1 md:flex-none bg-primary" disabled={!currentChurch}><Plus className="mr-2 h-4 w-4" /> Add Member</Button></DialogTrigger>
             <DialogContent className="glass max-w-2xl">
@@ -468,21 +474,26 @@ export default function MembersPage() {
                       </TableCell>
                     )}
                     <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="glass min-w-48">
-                          <DropdownMenuItem onClick={() => { setEditingMember(member); setIsEditDialogOpen(true); }} className="font-bold">
-                            <Pencil className="mr-2 h-4 w-4" /> Edit Profile
-                          </DropdownMenuItem>
-                          {extendedEnabled && member.profileStatus !== 'Complete' && (
-                            <DropdownMenuItem onClick={() => { setEditingMember(member); setIsEditDialogOpen(true); }} className="text-amber-600 font-bold">
-                              <FileBadge className="mr-2 h-4 w-4" /> Complete Information
+                      <div className="flex justify-end gap-1">
+                         <div className="group-hover:opacity-100 opacity-0 transition-opacity">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => { setEditingMember(member); setIsEditDialogOpen(true); }}><Pencil className="w-4 h-4" /></Button>
+                         </div>
+                         <DropdownMenu>
+                          <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="glass min-w-48">
+                            <DropdownMenuItem onClick={() => { setEditingMember(member); setIsEditDialogOpen(true); }} className="font-bold">
+                              <Pencil className="mr-2 h-4 w-4" /> Edit Profile
                             </DropdownMenuItem>
-                          )}
-                          <DropdownMenuSeparator className="border-white/5" />
-                          <DropdownMenuItem className="text-destructive focus:text-white focus:bg-destructive" onClick={() => setMemberToDelete(member)}><Trash2 className="mr-2 h-4 w-4" /> Delete Record</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                            {extendedEnabled && member.profileStatus !== 'Complete' && (
+                              <DropdownMenuItem onClick={() => { setEditingMember(member); setIsEditDialogOpen(true); }} className="text-amber-600 font-bold">
+                                <FileBadge className="mr-2 h-4 w-4" /> Complete Information
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator className="border-white/5" />
+                            <DropdownMenuItem className="text-destructive focus:text-white focus:bg-destructive" onClick={() => setMemberToDelete(member)}><Trash2 className="mr-2 h-4 w-4" /> Delete Record</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
