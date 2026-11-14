@@ -22,9 +22,11 @@ import { collection, query, limit, orderBy } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { SMSLog } from '@/services/sms-service';
+import { useTenant } from "@/context/tenant-context";
 
-export default function SMSLogsPage({ currentChurch }: { currentChurch: any }) {
+export default function SMSLogsPage() {
   const db = useFirestore();
+  const { currentChurch } = useTenant();
 
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -32,7 +34,7 @@ export default function SMSLogsPage({ currentChurch }: { currentChurch: any }) {
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
-  // Uses inherited church context for stability
+  // Uses central tenant hook for context
   const logsRef = useMemo(() => {
     if (!currentChurch?.id || !db) return null;
     return collection(db, 'churches', currentChurch.id, 'smsLogs');

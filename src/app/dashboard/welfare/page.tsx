@@ -422,7 +422,7 @@ export default function WelfarePage() {
         </Card>
       </div>
 
-      <Tabs value={statusTab} onValueChange={statusTab} className="space-y-6">
+      <Tabs value={statusTab} onValueChange={setStatusTab} className="space-y-6">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="w-full overflow-x-auto hide-scrollbar">
             <TabsList className="glass border-white/10 p-1 rounded-2xl w-fit inline-flex">
