@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -279,7 +279,6 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
     const headers = ["Row", "MemberID", "Phone", "Status", "Errors"];
     const csvContent = [headers.join(","), ...errorRows.map(r => [r.row, r.data.memberId, r.data.phoneNumber, r.status.toUpperCase(), `"${r.errors.join('; ')}"`].join(","))].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
     link.setAttribute("download", `import_errors_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`);
@@ -320,9 +319,9 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
                     <Label className="text-xs font-bold uppercase text-muted-foreground">Selection Mode</Label>
                     <Select value={importMode} onValueChange={(v: ImportMode) => setImportMode(v)}>
                       <SelectTrigger className="rounded-xl h-11 bg-white">
-                        <SelectValue />
+                        <SelectValue placeholder="Select Import Mode" />
                       </SelectTrigger>
-                      <SelectContent className="glass">
+                      <SelectContent className="glass max-h-[300px]">
                         <SelectItem value="update">Update Existing Profiles</SelectItem>
                         <SelectItem value="create">Register New Members</SelectItem>
                       </SelectContent>

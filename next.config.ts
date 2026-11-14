@@ -30,14 +30,6 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  experimental: {
-    allowedDevOrigins: [
-      '9000-firebase-studio-1779100450077.cluster-ikslh4rdsnbqsvu5nw3v4dqjj2.cloudworkstations.dev',
-      'localhost:9002',
-      '0.0.0.0:9002',
-      'yebfachurch.com'
-    ],
-  },
 };
 
 export default nextConfig;
