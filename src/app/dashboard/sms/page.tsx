@@ -311,7 +311,10 @@ export default function SMSCenterHub() {
            </Card>
         </TabsContent>
 
-        <TabsContent value="logs"><SMSLogsPage currentChurch={currentChurch} /></TabsContent>
+        <TabsContent value="logs">
+          <SMSLogsPage />
+        </TabsContent>
+
         <TabsContent value="failed"><FailedMessagesPage /></TabsContent>
         <TabsContent value="templates"><SMSTemplatesPage /></TabsContent>
       </Tabs>
