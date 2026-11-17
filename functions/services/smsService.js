@@ -325,8 +325,14 @@ async function queueSMS(churchId, payload) {
 }
 
 async function creditWallet(churchId, amount, reason, processedBy) {
+  const numericAmount = Number(amount);
+  if (!Number.isSafeInteger(numericAmount) || numericAmount <= 0) {
+    throw new Error("Top-up amount must be a positive whole number of credits.");
+  }
+
   const db = admin.firestore();
   const churchRef = db.collection("churches").doc(churchId);
+  const ledgerRef = db.collection("smsLedger").doc();
 
   const PLAN_LIMITS = {
     Starter: 100,
@@ -342,7 +348,7 @@ async function creditWallet(churchId, amount, reason, processedBy) {
     const churchData = churchSnap.data() || {};
     
     const currentBalance = Number(churchData.sms?.credits || 0);
-    const newBalance = currentBalance + Number(amount);
+    const newBalance = currentBalance + numericAmount;
 
     const limit = PLAN_LIMITS[churchData.plan || "Starter"] || 100;
 
@@ -353,7 +359,7 @@ async function creditWallet(churchId, amount, reason, processedBy) {
     t.set(churchRef, {
       sms: {
         credits: newBalance,
-        totalTopups: admin.firestore.FieldValue.increment(Number(amount)),
+        totalTopups: admin.firestore.FieldValue.increment(numericAmount),
         lastTopupAt: admin.firestore.FieldValue.serverTimestamp(),
         lowBalance: newBalance <= 10,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -362,7 +368,19 @@ async function creditWallet(churchId, amount, reason, processedBy) {
       }
     }, { merge: true });
 
-    return { success: true, newBalance };
+    t.set(ledgerRef, {
+      churchId,
+      type: "CREDIT",
+      amount: numericAmount,
+      reason: reason || "admin_manual",
+      processedBy: processedBy || "system",
+      balanceBefore: currentBalance,
+      balanceAfter: newBalance,
+      status: "COMMITTED",
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { success: true, newBalance, ledgerId: ledgerRef.id };
   });
 }
 
