@@ -320,6 +320,12 @@ exports.hardPurgeMinistry = onCall(
     const churchRef = db.collection("churches").doc(churchId);
 
     try {
+      const churchSnap = await churchRef.get();
+      if (!churchSnap.exists) throw new HttpsError("not-found", "Organization not found.");
+      if (churchSnap.data()?.deletionStatus !== "DELETED") {
+        throw new HttpsError("failed-precondition", "Move the ministry to the Recycle Bin before permanently purging it.");
+      }
+
       // 1. Scrub Global Ledger
       let snap;
       let i = 0;
