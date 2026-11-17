@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Search, Loader2, LogOut, Users, Archive, Pencil, Save } from 'lucide-react';
+import { ShieldCheck, Search, Loader2, LogOut, Users, Archive, Pencil, Save, Zap, Trash2, CreditCard } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +37,11 @@ export default function SystemAdminPortal() {
   
   // Edit State
   const [editingOrg, setEditingOrg] = useState<Church | null>(null);
+  const [topUpOrg, setTopUpOrg] = useState<Church | null>(null);
+  const [topUpAmount, setTopUpAmount] = useState('100');
+  const [deletingOrg, setDeletingOrg] = useState<Church | null>(null);
+  const [purgingOrg, setPurgingOrg] = useState<Church | null>(null);
+  const [purgeConfirmation, setPurgeConfirmation] = useState('');
 
   // SSR-Safe Query Definition
   const churchesQuery = useMemo(() => {
@@ -132,6 +137,70 @@ export default function SystemAdminPortal() {
     }
   };
 
+  const handleTopUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!functions || !topUpOrg) return;
+    const amount = Number(topUpAmount);
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      toast({ title: "Invalid top-up amount", description: "Enter a positive whole number of SMS credits.", variant: "destructive" });
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const topUpFn = httpsCallable(functions, 'adminTopUpWallet');
+      const response = await topUpFn({ churchId: topUpOrg.id, amount });
+      const result = response.data as { newBalance?: number };
+      toast({
+        title: "Wallet topped up",
+        description: `${amount.toLocaleString()} credits added to ${topUpOrg.name}. New balance: ${Number(result.newBalance || 0).toLocaleString()}.`
+      });
+      setTopUpOrg(null);
+      setTopUpAmount('100');
+    } catch (error: any) {
+      console.error("WALLET_TOPUP_FAILURE:", error);
+      toast({ title: "Top-up failed", description: error.message || "Could not credit this organization's wallet.", variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDeleteMinistry = async () => {
+    if (!functions || !deletingOrg) return;
+    setIsProcessing(true);
+    try {
+      const deleteFn = httpsCallable(functions, 'deleteMinistry');
+      await deleteFn({ churchId: deletingOrg.id });
+      toast({ title: "Ministry moved to Recycle Bin", description: deletingOrg.name });
+      setDeletingOrg(null);
+    } catch (error: any) {
+      console.error("MINISTRY_DELETE_FAILURE:", error);
+      toast({ title: "Delete failed", description: error.message || "Could not delete this ministry. Active services must be suspended first.", variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handlePurgeMinistry = async () => {
+    if (!functions || !purgingOrg) return;
+    if (purgeConfirmation.trim() !== purgingOrg.name) {
+      toast({ title: "Confirmation does not match", description: "Type the ministry name exactly to permanently purge it.", variant: "destructive" });
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const purgeFn = httpsCallable(functions, 'hardPurgeMinistry');
+      await purgeFn({ churchId: purgingOrg.id });
+      toast({ title: "Ministry permanently purged", description: purgingOrg.name });
+      setPurgingOrg(null);
+      setPurgeConfirmation('');
+    } catch (error: any) {
+      console.error("MINISTRY_PURGE_FAILURE:", error);
+      toast({ title: "Purge failed", description: error.message || "Could not permanently remove this ministry.", variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleRestore = async (churchId: string) => {
     if (!functions) return;
     setIsProcessing(true);
@@ -209,9 +278,9 @@ export default function SystemAdminPortal() {
                     <OrganizationTable 
                       ministries={activeMinistries}
                       onEdit={(church) => setEditingOrg(church)} 
-                      onTopUp={() => {}}
+                      onTopUp={(churchId) => { const church = activeMinistries.find(item => item.id === churchId); if (church) { setTopUpOrg(church); setTopUpAmount('100'); } }}
                       onUpdateStatus={handleUpdateStatus}
-                      onDelete={() => {}}
+                      onDelete={(church) => setDeletingOrg(church)}
                     />
                   </TabsContent>
                   <TabsContent value="deleted" className="mt-0 animate-in fade-in duration-300">
@@ -219,7 +288,7 @@ export default function SystemAdminPortal() {
                       ministries={deletedMinistries}
                       isProcessing={isProcessing}
                       onRestore={handleRestore}
-                      onPurge={() => {}}
+                      onPurge={(church) => { setPurgingOrg(church); setPurgeConfirmation(''); }}
                     />
                   </TabsContent>
                 </>
@@ -251,6 +320,58 @@ export default function SystemAdminPortal() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={!!topUpOrg} onOpenChange={(open) => !open && !isProcessing && setTopUpOrg(null)}>
+        <DialogContent className="glass">
+          <form onSubmit={handleTopUp}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><CreditCard className="w-5 h-5 text-primary" /> Top-up SMS Wallet</DialogTitle>
+              <DialogDescription>Add SMS credits to {topUpOrg?.name}. The existing server-side wallet limits and authorization checks will still apply.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 py-6">
+              <Label htmlFor="wallet-topup-amount">Credits to add</Label>
+              <Input id="wallet-topup-amount" type="number" min="1" step="1" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} required />
+              <p className="text-xs text-muted-foreground">Current balance: {Number(topUpOrg?.sms?.credits || 0).toLocaleString()} credits</p>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setTopUpOrg(null)} disabled={isProcessing}>Cancel</Button>
+              <Button type="submit" disabled={isProcessing}>{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Zap className="w-4 h-4 mr-2" />} Add Credits</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deletingOrg} onOpenChange={(open) => !open && !isProcessing && setDeletingOrg(null)}>
+        <DialogContent className="glass">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive"><Trash2 className="w-5 h-5" /> Move Ministry to Recycle Bin?</DialogTitle>
+            <DialogDescription>
+              {deletingOrg?.name} will be soft-deleted and can be restored later. Its data will not be permanently erased. Suspend its service first if it is active.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletingOrg(null)} disabled={isProcessing}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteMinistry} disabled={isProcessing}>{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />} Move to Recycle Bin</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!purgingOrg} onOpenChange={(open) => !open && !isProcessing && setPurgingOrg(null)}>
+        <DialogContent className="glass">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Permanently delete ministry?</DialogTitle>
+            <DialogDescription>This action cannot be undone and permanently deletes {purgingOrg?.name} and its subcollection data. Type the ministry name below to confirm.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-4">
+            <Label htmlFor="purge-confirmation">Ministry name</Label>
+            <Input id="purge-confirmation" value={purgeConfirmation} onChange={(e) => setPurgeConfirmation(e.target.value)} placeholder={purgingOrg?.name || "Type ministry name"} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPurgingOrg(null)} disabled={isProcessing}>Cancel</Button>
+            <Button variant="destructive" onClick={handlePurgeMinistry} disabled={isProcessing || purgeConfirmation.trim() !== purgingOrg?.name}>{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />} Permanently Purge</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Organization Dialog */}
       <Dialog open={!!editingOrg} onOpenChange={(open) => !open && setEditingOrg(null)}>
