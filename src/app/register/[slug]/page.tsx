@@ -83,6 +83,7 @@ export default function PublicRegistrationPage() {
   });
 
   const extendedEnabled = church?.settings?.extendedProfile?.enabled && church?.settings?.extendedProfile?.showInRegistration;
+  const departmentOptions = Array.from(new Set([...DEPARTMENTS, ...(church?.settings?.departments || [])]));
 
   useEffect(() => {
     async function fetchChurch() {
@@ -269,7 +270,7 @@ export default function PublicRegistrationPage() {
                 </>
               )}
 
-              <div className="space-y-2"><Label>Church Department</Label><Select value={formData.department} onValueChange={v => setFormData({...formData, department: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>Church Department</Label><Select value={formData.department} onValueChange={v => setFormData({...formData, department: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{departmentOptions.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent></Select></div>
             </CardContent>
             <CardFooter><Button type="submit" className="w-full bg-primary h-12 rounded-xl font-bold" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Heart className="w-5 h-5 mr-2" />} Join Congregation</Button></CardFooter>
           </form>
