@@ -43,6 +43,7 @@ import { useTenant } from "@/context/tenant-context";
 interface ExtendedProfileImporterProps {
   churchId: string;
   members: any[];
+  departments?: string[];
 }
 
 type ImportStep = 'upload' | 'preview' | 'processing' | 'results';
@@ -157,7 +158,8 @@ const HEADER_MAP: Record<string, string> = {
   'confirmationdate': 'confirmationDate'
 };
 
-export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileImporterProps) {
+export function ExtendedProfileImporter({ churchId, members, departments = DEPARTMENTS }: ExtendedProfileImporterProps) {
+  const departmentOptions = Array.from(new Set([...DEPARTMENTS, ...departments]));
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState<ImportStep>('upload');
   const [importMode, setImportMode] = useState<ImportMode>('update');
@@ -287,7 +289,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
       }
 
       if (row.department) {
-        if (!DEPARTMENTS.some(d => d.toLowerCase() === row.department.toLowerCase())) {
+        if (!departmentOptions.some(d => d.toLowerCase() === row.department.toLowerCase())) {
           errors.push(`Invalid Dept: ${row.department}`);
           status = 'invalid';
         } else updates.push("Dept");
@@ -398,7 +400,7 @@ export function ExtendedProfileImporter({ churchId, members }: ExtendedProfileIm
         }
 
         if (data.department) {
-          const resolvedDept = DEPARTMENTS.find(d => d.toLowerCase() === data.department.toLowerCase());
+          const resolvedDept = departmentOptions.find(d => d.toLowerCase() === data.department.toLowerCase());
           if (resolvedDept) updateObj.department = resolvedDept;
         }
 
