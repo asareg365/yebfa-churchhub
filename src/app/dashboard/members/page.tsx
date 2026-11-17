@@ -113,6 +113,7 @@ export default function MembersPage() {
   const { data: members, loading } = useCollection(membersRef);
 
   const extendedEnabled = currentChurch?.settings?.extendedProfile?.enabled ?? false;
+  const departmentOptions = Array.from(new Set([...DEPARTMENTS, ...(currentChurch?.settings?.departments || [])]));
 
   const [newMember, setNewMember] = useState<any>({
     name: "",
@@ -265,7 +266,7 @@ export default function MembersPage() {
         </div>
         <div className="flex gap-2 w-full md:w-auto">
           {currentChurch?.id && (
-             <ExtendedProfileImporter churchId={currentChurch.id} members={members || []} />
+             <ExtendedProfileImporter churchId={currentChurch.id} members={members || []} departments={departmentOptions} />
           )}
 
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -388,7 +389,7 @@ export default function MembersPage() {
                       <Label>Department</Label>
                       <Select value={newMember.department} onValueChange={(v) => setNewMember({...newMember, department: v})}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>{DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+                        <SelectContent>{Array.from(new Set([...departmentOptions, editingMember?.department].filter(Boolean))).map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">

@@ -23,7 +23,9 @@ import {
   Church as ChurchIcon,
   UserCheck,
   FileBadge,
-  Layout
+  Layout,
+  Plus,
+  Building2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -65,6 +67,7 @@ const DENOMINATIONS = [
 ];
 
 const SUPER_ADMINS = ["asareg365@gmail.com", "frankyeb@gmail.com"];
+const DEFAULT_DEPARTMENTS = ["Music", "Youth", "Media", "Children", "Welfare", "Ushering", "Evangelism"];
 
 export default function SettingsPage() {
   const { user } = useUser();
@@ -79,6 +82,7 @@ export default function SettingsPage() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [activeTab, setActiveTab] = useState(isForced ? "security" : "general");
   const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newDepartment, setNewDepartment] = useState("");
 
   const [settings, setSettings] = useState({
     name: "",
@@ -91,7 +95,8 @@ export default function SettingsPage() {
     dailyReportsEnabled: false,
     senderId: "YEBFA",
     displayName: "",
-    theme: "dark" as "light" | "dark" | "system",
+    departments: DEFAULT_DEPARTMENTS,
+    theme: "dark" as "light" | "dark" | "system", 
     extendedProfile: {
       enabled: false,
       showInRegistration: true,
@@ -123,6 +128,7 @@ export default function SettingsPage() {
         dailyReportsEnabled: currentChurch.settings?.dailyReportsEnabled ?? false,
         senderId: currentChurch.sms?.senderId || "YEBFA",
         displayName: currentChurch.sms?.displayName || currentChurch.name || "",
+        departments: Array.from(new Set([...DEFAULT_DEPARTMENTS, ...(currentChurch.settings?.departments || [])])),
         theme: (currentChurch.settings?.theme as any) || "dark",
         extendedProfile: {
           enabled: currentChurch.settings?.extendedProfile?.enabled ?? false,
@@ -167,6 +173,7 @@ export default function SettingsPage() {
         lowCreditAlertEnabled: settings.lowCreditAlertEnabled,
         dailyReportsEnabled: settings.dailyReportsEnabled,
         theme: settings.theme,
+        departments: settings.departments,
         extendedProfile: settings.extendedProfile
       },
       sms: {
@@ -192,6 +199,24 @@ export default function SettingsPage() {
         errorEmitter.emit('permission-error', permissionError);
       })
       .finally(() => setIsSaving(false));
+  };
+
+  const canManageDepartments = !!isSuperAdmin || (currentChurch?.adminEmail || "").toLowerCase() === (user?.email || "").toLowerCase();
+
+  const handleAddDepartment = () => {
+    const name = newDepartment.trim().replace(/\\s+/g, " ");
+    if (!canManageDepartments) {
+      toast({ title: "Permission denied", description: "Only the Super Admin or church owner can add departments.", variant: "destructive" });
+      return;
+    }
+    if (!name) return;
+    if (settings.departments.some((item: string) => item.toLowerCase() === name.toLowerCase())) {
+      toast({ title: "Department already exists", variant: "destructive" });
+      return;
+    }
+    setSettings((current) => ({ ...current, departments: [...current.departments, name] }));
+    setNewDepartment("");
+    toast({ title: "Department added", description: "Select Apply Changes to save it for this church." });
   };
 
   const handleAddAdminEmail = async () => {
@@ -285,11 +310,45 @@ export default function SettingsPage() {
         <TabsList className="glass border-white/10 p-1 rounded-2xl w-full md:w-auto">
           <TabsTrigger value="general" className="rounded-xl px-6" disabled={isForced}>General</TabsTrigger>
           <TabsTrigger value="team" className="rounded-xl px-6" disabled={isForced}>Team</TabsTrigger>
+          <TabsTrigger value="departments" className="rounded-xl px-6" disabled={isForced}>Departments</TabsTrigger>
           <TabsTrigger value="extended-profile" className="rounded-xl px-6" disabled={isForced}>Extended Profile</TabsTrigger>
           <TabsTrigger value="automation" className="rounded-xl px-6" disabled={isForced}>Automation</TabsTrigger>
           <TabsTrigger value="display" className="rounded-xl px-6" disabled={isForced}>Display</TabsTrigger>
           <TabsTrigger value="security" className="rounded-xl px-6">Security</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="departments" className="animate-in fade-in-50 duration-500 space-y-6">
+          <Card className="glass border-border shadow-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Building2 className="w-5 h-5 text-primary" /> Department Management</CardTitle>
+              <CardDescription>Manage the departments available to members of {currentChurch?.name || "this church"}. Each church has its own department list.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {canManageDepartments ? (
+                <>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="flex-1 space-y-2">
+                      <Label htmlFor="new-department">New department name</Label>
+                      <Input id="new-department" value={newDepartment} onChange={(e) => setNewDepartment(e.target.value)} placeholder="e.g. Prayer Ministry" maxLength={60} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddDepartment(); } }} />
+                    </div>
+                    <Button type="button" className="sm:mt-8" onClick={handleAddDepartment} disabled={!newDepartment.trim()}><Plus className="w-4 h-4 mr-2" /> Add Department</Button>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Available departments ({settings.departments.length})</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {settings.departments.map((department: string) => (
+                        <Badge key={department} variant="secondary" className="px-3 py-1">{department}</Badge>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Built-in departments are retained. New departments are added to this church only and become available in member records, public registration and CSV imports after you select Apply Changes. Existing member department values are preserved.</p>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Only the Super Admin or the owner of this church can manage departments.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="general" className="animate-in fade-in-50 duration-500 space-y-6">
           <Card className="glass border-border shadow-xl">
